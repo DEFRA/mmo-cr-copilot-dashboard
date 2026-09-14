@@ -1,0 +1,23 @@
+{% extends 'layouts/page.njk' %}
+
+{% block content %}
+  {# Runtime configuration is passed as data attributes: an inline <script>
+     would need 'unsafe-inline' in the Content-Security-Policy. #}
+  <div
+    id="root"
+    data-poll-interval-ms="{{ pollIntervalMs }}"
+    data-service-name="{{ serviceName }}"
+  ></div>
+  <noscript>
+    <p>
+      The Copilot analytics dashboard needs JavaScript to render its charts.
+      Enable JavaScript in your browser to view it.
+    </p>
+  </noscript>
+{% endblock %}
+
+{% block bodyEnd %}
+  {% for src in scripts %}
+    <script type="module" src="{{ src }}"></script>
+  {% endfor %}
+{% endblock %}

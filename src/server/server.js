@@ -13,6 +13,7 @@ import { sessionCache } from './plugins/session-cache.js'
 import { getCacheEngine } from './common/helpers/session-cache/cache-engine.js'
 import { secureContext } from '@defra/hapi-secure-context'
 import { contentSecurityPolicy } from './plugins/content-security-policy.js'
+import { securityHeaders } from './plugins/security-headers.js'
 import { metrics } from '@defra/cdp-metrics'
 
 export async function createServer() {
@@ -47,10 +48,7 @@ export async function createServer() {
         name: config.get('session.cache.name'),
         engine: getCacheEngine(config.get('session.cache.engine'))
       }
-    ],
-    state: {
-      strictHeader: false
-    }
+    ]
   })
   await server.register([
     requestLogger,
@@ -66,6 +64,10 @@ export async function createServer() {
   ])
 
   server.ext('onPreResponse', catchAll)
+
+  // Registered after catchAll, which swaps a Boom error for a freshly built
+  // view — headers applied before that point would be discarded with it.
+  await server.register(securityHeaders)
 
   return server
 }

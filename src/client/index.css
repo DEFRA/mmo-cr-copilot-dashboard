@@ -1,0 +1,697 @@
+@import 'tailwindcss';
+
+/* ============================================================
+   Design Tokens — Copilot Analytics Dashboard
+   Token-first: never hardcode hex/spacing in components.
+   ============================================================ */
+@theme {
+  /* --- Surfaces & structure (LIGHT default, soft pastel tint) --- */
+  --color-bg: oklch(0.98 0.012 330);
+  --color-bg-elev: oklch(0.99 0.008 330);
+  --color-surface: oklch(1 0 0);
+  --color-surface-2: oklch(0.975 0.014 325);
+  --color-border: oklch(0.91 0.017 325);
+  --color-border-strong: oklch(0.82 0.03 325);
+
+  /* --- Text (warm charcoal) --- */
+  --color-text: oklch(0.26 0.03 320);
+  --color-text-muted: oklch(0.48 0.03 320);
+  --color-text-faint: oklch(0.62 0.025 320);
+
+  /* --- Brand / primary (orchid violet) --- */
+  --color-primary: oklch(0.55 0.2 300);
+  --color-primary-strong: oklch(0.48 0.22 300);
+  --color-accent: oklch(0.58 0.2 12); /* coral rose */
+
+  /* --- Semantic status (deep enough for AA text on light) --- */
+  --color-success: oklch(0.57 0.14 155);
+  --color-warning: oklch(0.64 0.15 70);
+  --color-danger: oklch(0.57 0.22 22);
+  --color-info: oklch(0.55 0.19 272); /* periwinkle indigo */
+
+  /* --- Copilot vs Manual (core semantic pair) --- */
+  --color-copilot: oklch(0.55 0.22 300); /* orchid */
+  --color-manual: oklch(0.56 0.06 300); /* soft lavender-grey */
+
+  /* --- Wide categorical chart palette (colorful pastel hues) --- */
+  --chart-1: oklch(0.7 0.16 300); /* lavender */
+  --chart-2: oklch(0.74 0.15 350); /* rose */
+  --chart-3: oklch(0.78 0.13 32); /* peach */
+  --chart-4: oklch(0.85 0.13 96); /* butter */
+  --chart-5: oklch(0.8 0.13 152); /* mint */
+  --chart-6: oklch(0.78 0.11 210); /* sky */
+  --chart-7: oklch(0.72 0.14 266); /* periwinkle */
+  --chart-8: oklch(0.72 0.16 326); /* orchid */
+  --chart-9: oklch(0.8 0.14 60); /* apricot */
+  --chart-10: oklch(0.76 0.12 186); /* aqua-mint */
+
+  /* --- Sequential scale (heatmap light → deep orchid) --- */
+  --seq-1: oklch(0.95 0.035 330);
+  --seq-2: oklch(0.85 0.1 335);
+  --seq-3: oklch(0.75 0.15 330);
+  --seq-4: oklch(0.63 0.19 324);
+  --seq-5: oklch(0.5 0.21 318);
+
+  /* --- Diverging scale (negative → neutral → positive) --- */
+  --div-neg: oklch(0.62 0.2 20);
+  --div-mid: oklch(0.9 0.02 330);
+  --div-pos: oklch(0.68 0.14 155);
+
+  /* --- Heat scale (pale blue → green · adoption heatmap: low → high) --- */
+  --heat-1: oklch(0.93 0.035 235);
+  --heat-2: oklch(0.85 0.07 210);
+  --heat-3: oklch(0.77 0.1 185);
+  --heat-4: oklch(0.68 0.13 168);
+  --heat-5: oklch(0.6 0.15 155);
+  /* Dark ink for labels on heat cells (legible across the whole scale, both themes). */
+  --heat-ink: oklch(0.28 0.05 210);
+
+  /* Gauge needle — dark pastel on light theme (overridden lighter in dark). */
+  --gauge-needle: oklch(0.45 0.13 300);
+
+  /* Delivery status bars: in-progress fast (yellow) → slow (orange); completed uses --color-success. */
+  --status-fast: oklch(0.86 0.15 96);
+  --status-slow: oklch(0.7 0.19 48);
+
+  /* --- Radius --- */
+  --radius-card: 1rem;
+  --radius-panel: 1.25rem;
+  --radius-pill: 999px;
+
+  /* --- Shadow (soft, warm) --- */
+  --shadow-sm: 0 1px 2px oklch(0.55 0.05 325 / 0.12);
+  --shadow-md: 0 6px 20px oklch(0.55 0.06 325 / 0.14);
+  --shadow-lg: 0 16px 42px oklch(0.5 0.08 320 / 0.2);
+
+  /* --- Typography --- */
+  --font-sans:
+    'Inter', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', sans-serif;
+  --font-mono: ui-monospace, 'SFMono-Regular', 'Menlo', monospace;
+}
+
+/* Dark theme overrides */
+[data-theme='dark'] {
+  --color-bg: oklch(0.19 0.022 305);
+  --color-bg-elev: oklch(0.23 0.026 305);
+  --color-surface: oklch(0.26 0.03 305);
+  --color-surface-2: oklch(0.3 0.034 305);
+  --color-border: oklch(0.37 0.032 305);
+  --color-border-strong: oklch(0.47 0.042 305);
+
+  --color-text: oklch(0.97 0.012 320);
+  --color-text-muted: oklch(0.78 0.022 320);
+  --color-text-faint: oklch(0.62 0.022 320);
+
+  --color-primary: oklch(0.75 0.15 300);
+  --color-primary-strong: oklch(0.67 0.18 300);
+  --color-accent: oklch(0.76 0.15 15);
+
+  --color-success: oklch(0.78 0.15 155);
+  --color-warning: oklch(0.84 0.15 88);
+  --color-danger: oklch(0.71 0.18 25);
+  --color-info: oklch(0.75 0.14 272);
+
+  --color-copilot: oklch(0.76 0.16 300);
+  --color-manual: oklch(0.72 0.06 300);
+
+  --chart-1: oklch(0.76 0.15 300);
+  --chart-2: oklch(0.78 0.14 350);
+  --chart-3: oklch(0.82 0.13 34);
+  --chart-4: oklch(0.88 0.13 96);
+  --chart-5: oklch(0.83 0.14 152);
+  --chart-6: oklch(0.8 0.12 212);
+  --chart-7: oklch(0.77 0.14 266);
+  --chart-8: oklch(0.77 0.16 326);
+  --chart-9: oklch(0.83 0.14 62);
+  --chart-10: oklch(0.8 0.12 186);
+
+  --seq-1: oklch(0.3 0.05 315);
+  --seq-2: oklch(0.42 0.11 320);
+  --seq-3: oklch(0.55 0.16 322);
+  --seq-4: oklch(0.68 0.18 324);
+  --seq-5: oklch(0.82 0.15 328);
+
+  --div-neg: oklch(0.71 0.18 25);
+  --div-mid: oklch(0.46 0.03 305);
+  --div-pos: oklch(0.78 0.15 155);
+
+  /* Gauge needle — light pastel on dark theme. */
+  --gauge-needle: oklch(0.86 0.07 300);
+
+  --shadow-sm: 0 1px 2px oklch(0.1 0.02 305 / 0.4);
+  --shadow-md: 0 4px 14px oklch(0.1 0.02 305 / 0.45);
+  --shadow-lg: 0 12px 34px oklch(0.08 0.02 305 / 0.55);
+}
+
+/* ============================================================
+   Base
+   ============================================================ */
+* {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+}
+
+body {
+  margin: 0;
+  font-family: var(--font-sans);
+  background: var(--color-bg);
+  color: var(--color-text);
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+h1,
+h2,
+h3,
+h4 {
+  margin: 0;
+  font-weight: 650;
+  letter-spacing: -0.01em;
+}
+
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+/* ============================================================
+   Reusable component classes
+   ============================================================ */
+.app-shell {
+  min-height: 100%;
+  background:
+    radial-gradient(
+      1100px 580px at 8% -12%,
+      oklch(0.74 0.15 350 / 0.16),
+      transparent 60%
+    ),
+    radial-gradient(
+      1000px 560px at 100% -8%,
+      oklch(0.8 0.13 96 / 0.14),
+      transparent 58%
+    ),
+    radial-gradient(
+      950px 540px at 92% 108%,
+      oklch(0.8 0.13 152 / 0.12),
+      transparent 60%
+    ),
+    radial-gradient(
+      900px 520px at 12% 112%,
+      oklch(0.7 0.16 300 / 0.12),
+      transparent 60%
+    ),
+    var(--color-bg);
+}
+
+.panel {
+  display: flex;
+  flex-direction: column;
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-panel);
+  box-shadow: var(--shadow-md);
+  overflow: hidden;
+}
+
+.panel__head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 0.75rem;
+  padding: 1rem 1.25rem 0.5rem;
+}
+
+.panel__body {
+  flex: 1;
+  min-height: 0;
+  padding: 0.5rem 1rem 1rem;
+}
+
+.kpi-card {
+  --kpi-accent: var(--color-primary);
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  padding: 1.15rem 1.25rem;
+  background: linear-gradient(
+    160deg,
+    color-mix(in srgb, var(--kpi-accent) 14%, var(--color-surface)),
+    color-mix(in srgb, var(--kpi-accent) 5%, var(--color-surface-2))
+  );
+  border: 1px solid
+    color-mix(in srgb, var(--kpi-accent) 22%, var(--color-border));
+  border-radius: var(--radius-card);
+  box-shadow: var(--shadow-md);
+  overflow: hidden;
+  transition:
+    opacity 0.2s ease,
+    filter 0.2s ease,
+    transform 0.15s ease,
+    box-shadow 0.15s ease,
+    border-color 0.15s ease;
+}
+
+/* When another card's breakdown is open, non-active cards recede. */
+.kpi-card--dimmed {
+  opacity: 0.42;
+  filter: saturate(0.65);
+  pointer-events: none;
+}
+
+.kpi-card__accent {
+  position: absolute;
+  inset: 0 auto 0 0;
+  width: 4px;
+  border-radius: var(--radius-pill);
+}
+
+.kpi-card--button {
+  cursor: pointer;
+  text-align: left;
+  font: inherit;
+  transition:
+    transform 0.15s ease,
+    box-shadow 0.15s ease,
+    border-color 0.15s ease;
+}
+
+.kpi-card--button:hover {
+  transform: translateY(-2px);
+  box-shadow: var(--shadow-lg, var(--shadow-md));
+  border-color: var(--color-border-strong);
+}
+
+/* Wraps a KpiCard tile plus its sibling info trigger. The trigger is a
+   sibling (not a descendant) of the tile so a button-tag tile never nests
+   another interactive control inside it. `display: grid` makes the single
+   in-flow child (the tile) fill the slot so cards in a row share height. */
+.kpi-card-slot {
+  position: relative;
+  display: grid;
+}
+
+.kpi-card--has-info {
+  padding-right: 2.35rem;
+}
+
+.kpi-info {
+  position: absolute;
+  top: 0.6rem;
+  right: 0.6rem;
+  z-index: 1;
+}
+
+.kpi-info__trigger {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.3rem;
+  height: 1.3rem;
+  border-radius: 999px;
+  border: 1px solid color-mix(in srgb, var(--color-text-muted) 45%, transparent);
+  background: color-mix(in srgb, var(--color-surface) 70%, transparent);
+  color: var(--color-text-muted);
+  font: 700 0.68rem/1 var(--font-sans, inherit);
+  cursor: help;
+  transition:
+    color 0.15s ease,
+    border-color 0.15s ease,
+    background 0.15s ease;
+}
+
+.kpi-info__trigger:hover,
+.kpi-info__trigger:focus-visible {
+  color: var(--color-text);
+  border-color: var(--color-text-muted);
+  background: var(--color-surface);
+}
+
+.kpi-info__tooltip {
+  position: absolute;
+  top: calc(100% + 0.4rem);
+  right: 0;
+  width: max-content;
+  max-width: 16rem;
+  padding: 0.55rem 0.7rem;
+  border-radius: 0.5rem;
+  background: var(--color-text);
+  color: var(--color-surface);
+  font-size: 0.72rem;
+  line-height: 1.35;
+  font-weight: 400;
+  text-transform: none;
+  box-shadow: var(--shadow-lg, var(--shadow-md));
+  opacity: 0;
+  visibility: hidden;
+  transform: translateY(-2px);
+  transition:
+    opacity 0.15s ease,
+    transform 0.15s ease,
+    visibility 0.15s ease;
+  pointer-events: none;
+  z-index: 20;
+}
+
+.kpi-info:hover .kpi-info__tooltip,
+.kpi-info:focus-within .kpi-info__tooltip {
+  opacity: 1;
+  visibility: visible;
+  transform: translateY(0);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .kpi-info__tooltip {
+    transition: none;
+  }
+}
+
+.accordion-panel {
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-card);
+  background: var(--color-surface);
+  box-shadow: var(--shadow-md);
+  overflow: hidden;
+  animation: accordion-in 0.22s ease;
+}
+
+@keyframes accordion-in {
+  from {
+    opacity: 0;
+    transform: translateY(-6px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* Selected-window banner shown when a custom (non-live) range is active. */
+.window-banner {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem 0.75rem;
+  padding: 0.6rem 0.9rem;
+  border-radius: var(--radius-card);
+  border: 1px solid
+    color-mix(in srgb, var(--color-warning) 45%, var(--color-border));
+  background: color-mix(
+    in srgb,
+    var(--color-warning) 12%,
+    var(--color-surface)
+  );
+  color: var(--color-text);
+  box-shadow: var(--shadow-sm);
+}
+
+/* Date-time filter popover. */
+.filter-popover {
+  position: absolute;
+  right: 0;
+  top: calc(100% + 0.5rem);
+  z-index: 40;
+  width: min(22rem, calc(100vw - 2rem));
+  padding: 1rem;
+  border-radius: var(--radius-panel);
+  border: 1px solid var(--color-border);
+  background: var(--color-surface);
+  box-shadow: var(--shadow-lg);
+}
+
+.filter-input {
+  width: 100%;
+  padding: 0.4rem 0.55rem;
+  font: inherit;
+  font-size: 0.85rem;
+  color: var(--color-text);
+  background: var(--color-surface-2);
+  border: 1px solid var(--color-border-strong);
+  border-radius: 0.6rem;
+}
+
+.filter-input:focus-visible {
+  outline: 2px solid var(--color-primary);
+  outline-offset: 1px;
+}
+
+.pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  padding: 0.15rem 0.6rem;
+  font-size: 0.72rem;
+  font-weight: 600;
+  border-radius: var(--radius-pill);
+  border: 1px solid var(--color-border-strong);
+  color: var(--color-text-muted);
+  background: var(--color-surface-2);
+}
+
+.drill-row {
+  cursor: pointer;
+  transition:
+    background 0.15s ease,
+    transform 0.15s ease;
+}
+
+.drill-row:hover,
+.drill-row:focus-visible {
+  background: var(--color-surface-2);
+}
+
+/* Header live/custom status indicator. */
+.live-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.2rem 0.7rem;
+  font-size: 0.74rem;
+  font-weight: 650;
+  border-radius: var(--radius-pill);
+  border: 1px solid currentColor;
+  background: color-mix(in srgb, currentColor 10%, var(--color-surface));
+}
+
+button.live-pill {
+  cursor: pointer;
+  font-family: inherit;
+}
+
+.live-dot {
+  width: 0.55rem;
+  height: 0.55rem;
+  border-radius: 999px;
+  background: currentColor;
+}
+
+.live-dot--pulse {
+  animation: live-pulse 1.8s ease-in-out infinite;
+}
+
+@keyframes live-pulse {
+  0%,
+  100% {
+    box-shadow: 0 0 0 0 color-mix(in srgb, currentColor 55%, transparent);
+  }
+  70% {
+    box-shadow: 0 0 0 0.32rem color-mix(in srgb, currentColor 0%, transparent);
+  }
+}
+
+.focus-ring:focus-visible {
+  outline: 2px solid var(--color-primary);
+  outline-offset: 2px;
+  border-radius: var(--radius-card);
+}
+
+/* WCAG 2.2 SC 2.4.1 — lets keyboard and screen-reader users jump the header
+   and time filter to reach the charts. Off-screen until focused. */
+.skip-link {
+  position: absolute;
+  left: 0.5rem;
+  top: -100%;
+  z-index: 100;
+  padding: 0.6rem 1rem;
+  border-radius: var(--radius-card);
+  background: var(--color-surface);
+  border: 1px solid var(--color-primary);
+  color: var(--color-text);
+  font-size: 0.875rem;
+  font-weight: 600;
+  text-decoration: none;
+}
+
+.skip-link:focus-visible {
+  top: 0.5rem;
+  outline: 2px solid var(--color-primary);
+  outline-offset: 2px;
+}
+
+/* Header light/dark switch — a sliding track+thumb, deliberately distinct in
+   shape from the icon-only settings button beside it so the two are never
+   confused for one another. */
+.theme-toggle {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 3.2rem;
+  height: 1.8rem;
+  padding: 0 0.3rem;
+  border-radius: var(--radius-pill);
+  border: 1px solid var(--color-border);
+  background: var(--color-surface);
+  cursor: pointer;
+  transition: border-color 0.15s ease;
+}
+
+.theme-toggle:hover {
+  border-color: var(--color-primary);
+}
+
+.theme-toggle__icon {
+  font-size: 0.8rem;
+  line-height: 1;
+  /* Sits on the plain track, so it needs the theme's full-strength (not
+     muted) text colour for contrast — dark text on a light track, light
+     text on a dark one. */
+  color: var(--color-text);
+  z-index: 1;
+  transition:
+    opacity 0.15s ease,
+    color 0.15s ease;
+}
+
+.theme-toggle[data-theme='dark'] .theme-toggle__icon:first-child,
+.theme-toggle[data-theme='light'] .theme-toggle__icon:last-child {
+  opacity: 0.35;
+}
+
+/* The icon the thumb currently sits under needs a colour that contrasts with
+   the coloured (accent) thumb, not the track — white, matching every other
+   control in the app that puts text on a `--color-primary` background. */
+.theme-toggle[data-theme='light'] .theme-toggle__icon:first-child,
+.theme-toggle[data-theme='dark'] .theme-toggle__icon:last-child {
+  color: white;
+}
+
+.theme-toggle__thumb {
+  position: absolute;
+  top: 0.2rem;
+  left: 0.2rem;
+  width: 1.4rem;
+  height: 1.4rem;
+  border-radius: 999px;
+  background: var(--color-primary);
+  transition: transform 0.2s ease;
+}
+
+.theme-toggle[data-theme='dark'] .theme-toggle__thumb {
+  transform: translateX(1.4rem);
+}
+
+.theme-toggle.focus-ring:focus-visible {
+  border-radius: var(--radius-pill);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  * {
+    animation-duration: 0.001ms !important;
+    transition-duration: 0.001ms !important;
+  }
+}
+
+/* ============================================================
+   SonarCloud code-quality panels
+   Status/rating colour is driven by --sonar-color (set inline);
+   meaning is ALSO carried by text + letter, never colour alone.
+   ============================================================ */
+.sonar-gate {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.3rem 0.7rem;
+  font-size: 0.8rem;
+  font-weight: 700;
+  letter-spacing: 0.01em;
+  border-radius: var(--radius-pill);
+  color: var(--sonar-color, var(--color-text-muted));
+  border: 1px solid
+    color-mix(
+      in srgb,
+      var(--sonar-color, var(--color-border-strong)) 45%,
+      var(--color-border)
+    );
+  background: color-mix(
+    in srgb,
+    var(--sonar-color, var(--color-surface-2)) 14%,
+    var(--color-surface)
+  );
+}
+
+.sonar-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.6rem;
+  height: 1.6rem;
+  font-size: 0.85rem;
+  font-weight: 700;
+  border-radius: 0.45rem;
+  color: var(--sonar-color, var(--color-text));
+  border: 1px solid
+    color-mix(
+      in srgb,
+      var(--sonar-color, var(--color-border-strong)) 50%,
+      var(--color-border)
+    );
+  background: color-mix(
+    in srgb,
+    var(--sonar-color, var(--color-surface-2)) 16%,
+    var(--color-surface)
+  );
+}
+
+.sonar-rating {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.sonar-metric {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+  padding: 0.6rem 0.75rem;
+  border-radius: var(--radius-card);
+  border: 1px solid var(--color-border);
+  background: var(--color-surface-2);
+}
+
+.sonar-metric__value {
+  font-size: 1.35rem;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  color: var(--color-text);
+}
+
+.sonar-metric__label {
+  font-size: 0.72rem;
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
+  color: var(--color-text-muted);
+}

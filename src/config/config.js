@@ -9,6 +9,10 @@ const dirname = path.dirname(fileURLToPath(import.meta.url))
 const fourHoursMs = 14400000
 const oneWeekMs = 604800000
 
+// Placeholder so local development runs without secrets. Rejected outside local.
+const DEFAULT_COOKIE_PASSWORD =
+  'the-password-must-be-at-least-32-characters-long'
+
 const isProduction = process.env.NODE_ENV === 'production'
 const isTest = process.env.NODE_ENV === 'test'
 const isDevelopment = process.env.NODE_ENV === 'development'
@@ -45,6 +49,21 @@ export const config = convict({
     doc: 'Applications Service Name',
     format: String,
     default: 'mmo-cr-copilot-dashboard'
+  },
+  cdpEnvironment: {
+    doc: 'The CDP environment the app is running in. With the addition of "local" for local development',
+    format: [
+      'local',
+      'infra-dev',
+      'management',
+      'dev',
+      'test',
+      'perf-test',
+      'ext-test',
+      'prod'
+    ],
+    default: 'local',
+    env: 'ENVIRONMENT'
   },
   root: {
     doc: 'Project root',
@@ -95,7 +114,12 @@ export const config = convict({
       doc: 'Log paths to redact',
       format: Array,
       default: isProduction
-        ? ['req.headers.authorization', 'req.headers.cookie', 'res.headers']
+        ? [
+            'req.headers.authorization',
+            'req.headers.cookie',
+            'req.headers["x-ingest-token"]',
+            'res.headers'
+          ]
         : [],
       env: 'LOG_REDACT'
     }
@@ -142,9 +166,9 @@ export const config = convict({
         env: 'SESSION_COOKIE_TTL'
       },
       password: {
-        doc: 'session cookie password',
+        doc: 'session cookie password. Required outside local development.',
         format: String,
-        default: 'the-password-must-be-at-least-32-characters-long',
+        default: DEFAULT_COOKIE_PASSWORD,
         env: 'SESSION_COOKIE_PASSWORD',
         sensitive: true
       },
@@ -214,7 +238,71 @@ export const config = convict({
       default: 'x-cdp-request-id',
       env: 'TRACING_HEADER'
     }
+  },
+  backend: {
+    apiUrl: {
+      doc: 'Base URL of mmo-cr-copilot-backend. Resolved through CDP service discovery in deployed environments.',
+      format: String,
+      default: 'http://localhost:3001',
+      env: 'COPILOT_BACKEND_API_URL'
+    },
+    requestTimeoutMs: {
+      doc: 'Timeout applied to each request forwarded to the backend',
+      format: Number,
+      default: 10000,
+      env: 'BACKEND_REQUEST_TIMEOUT_MS'
+    }
+  },
+  ingest: {
+    token: {
+      doc: 'Shared secret presented by the GitHub Actions workflow on POST /api/ingest, and forwarded to the backend. Required outside local development.',
+      format: String,
+      default: '',
+      sensitive: true,
+      env: 'INGEST_TOKEN'
+    },
+    maxPayloadBytes: {
+      doc: 'Maximum accepted size of an ingest request body. Must match INGEST_MAX_PAYLOAD_BYTES in the backend, which this route forwards to.',
+      format: Number,
+      default: 2097152,
+      env: 'INGEST_MAX_PAYLOAD_BYTES'
+    }
+  },
+  dashboard: {
+    pollIntervalMs: {
+      doc: 'How often the dashboard polls the backend for new analytics payloads',
+      format: Number,
+      default: 15000,
+      env: 'DASHBOARD_POLL_INTERVAL_MS'
+    }
   }
 })
 
 config.validate({ allowed: 'strict' })
+
+/**
+ * Secrets must fail closed. Defaulting them keeps local development
+ * frictionless, but a deployed environment that lost its SSM injection would
+ * otherwise sign cookies with a value published in this repository, or accept
+ * unauthenticated ingest and only log a warning.
+ */
+if (config.get('cdpEnvironment') !== 'local') {
+  const required = [
+    ['ingest.token', 'INGEST_TOKEN'],
+    ['session.cookie.password', 'SESSION_COOKIE_PASSWORD']
+  ]
+
+  const missing = required
+    .filter(([key]) => !config.get(key).trim())
+    .map(([, env]) => env)
+
+  if (config.get('session.cookie.password') === DEFAULT_COOKIE_PASSWORD) {
+    missing.push('SESSION_COOKIE_PASSWORD (still set to the shipped default)')
+  }
+
+  if (missing.length) {
+    throw new Error(
+      `Missing required configuration in the '${config.get('cdpEnvironment')}' environment: ${missing.join(', ')}`
+    )
+  }
+}

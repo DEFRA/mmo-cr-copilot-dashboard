@@ -1,13 +1,9 @@
 {% extends 'layouts/page.njk' %}
 
 {% block content %}
-  {{ appHeading({
-    text: heading
-  }) }}
-
-  <div class="govuk-grid-row">
-    <div class="govuk-grid-column-two-thirds">
-      <p>{{ message }}</p>
-    </div>
-  </div>
+  <main class="error-page">
+    <h1>{{ heading }}</h1>
+    <p>{{ message }}</p>
+    <p><a href="/">Go to the dashboard</a></p>
+  </main>
 {% endblock %}

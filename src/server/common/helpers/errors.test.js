@@ -33,12 +33,18 @@ describe('#catchAll', () => {
   const mockErrorLogger = vi.fn()
   const mockStack = 'Mock error stack'
   const errorPage = 'error/index'
-  const mockRequest = (statusCode) => ({
+  const mockRequest = (statusCode, path = '/some-page') => ({
+    path,
     response: {
       isBoom: true,
       stack: mockStack,
       output: {
-        statusCode
+        statusCode,
+        payload: {
+          statusCode,
+          error: 'Error',
+          message: 'An upstream failure'
+        }
       }
     },
     logger: { error: mockErrorLogger }
@@ -122,5 +128,38 @@ describe('#catchAll', () => {
     expect(mockToolkitCode).toHaveBeenCalledWith(
       statusCodes.internalServerError
     )
+  })
+
+  describe('API routes', () => {
+    const mockResponse = vi.fn()
+    const jsonToolkit = {
+      view: vi.fn().mockReturnThis(),
+      response: mockResponse.mockReturnThis(),
+      code: vi.fn().mockReturnThis()
+    }
+
+    test('Should return the Boom JSON payload rather than the HTML page', () => {
+      const request = mockRequest(statusCodes.badGateway, '/api/payloads')
+
+      catchAll(request, jsonToolkit)
+
+      expect(jsonToolkit.view).not.toHaveBeenCalled()
+      expect(mockResponse).toHaveBeenCalledWith({
+        statusCode: statusCodes.badGateway,
+        error: 'Error',
+        message: 'An upstream failure'
+      })
+      expect(jsonToolkit.code).toHaveBeenCalledWith(statusCodes.badGateway)
+    })
+
+    test('Should still render the HTML page for a non-API path', () => {
+      catchAll(mockRequest(statusCodes.notFound, '/apiary'), mockToolkit)
+
+      expect(mockToolkitView).toHaveBeenCalledWith(errorPage, {
+        pageTitle: 'Page not found',
+        heading: statusCodes.notFound,
+        message: 'Page not found'
+      })
+    })
   })
 })

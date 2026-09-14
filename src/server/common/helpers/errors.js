@@ -23,11 +23,18 @@ export function catchAll(request, h) {
   }
 
   const statusCode = response.output.statusCode
-  const errorMessage = statusCodeMessage(statusCode)
 
   if (statusCode >= statusCodes.internalServerError) {
     request.logger.error(response?.stack)
   }
+
+  // The browser calls /api/* with fetch and parses JSON; an HTML error page
+  // there surfaces as "malformed response" and hides the real status.
+  if (request.path.startsWith('/api/')) {
+    return h.response(response.output.payload).code(statusCode)
+  }
+
+  const errorMessage = statusCodeMessage(statusCode)
 
   return h
     .view('error/index', {

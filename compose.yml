@@ -38,7 +38,7 @@ services:
 
   ################################################################################
 
-  your-frontend:
+  mmo-cr-copilot-dashboard:
     build: ./
     ports:
       - '3000:3000'
@@ -60,29 +60,33 @@ services:
       SESSION_COOKIE_SECURE: false
       USE_SINGLE_INSTANCE_CACHE: true
       REDIS_TLS: false
+      COPILOT_BACKEND_API_URL: http://mmo-cr-copilot-backend:3001
+      # Must match INGEST_TOKEN on the backend and in the GitHub Actions workflow.
+      INGEST_TOKEN: local-development-ingest-token
     networks:
       - cdp-tenant
 
-  # your-backend:
-  #   image: defradigital/your-backend:${YOUR_BACKEND_VERSION:-latest}
-  #   ports:
-  #     - '3555:3555'
-  #   links:
-  #     - 'foci:floci'
-  #     - 'mongodb:mongodb'
-  #   depends_on:
-  #     floci:
-  #       condition: service_healthy
-  #     mongodb:
-  #       condition: service_started
-  #   env_file:
-  #     - 'compose/aws.env'
-  #   environment:
-  #     PORT: 3001
-  #     NODE_ENV: development
-  #     MONGO_URI: mongodb://mongodb:27017/
-  #   networks:
-  #     - cdp-tenant
+  mmo-cr-copilot-backend:
+    image: defradigital/mmo-cr-copilot-backend:${MMO_CR_COPILOT_BACKEND_VERSION:-latest}
+    ports:
+      - '3001:3001'
+    links:
+      - 'floci:floci'
+      - 'mongodb:mongodb'
+    depends_on:
+      floci:
+        condition: service_healthy
+      mongodb:
+        condition: service_started
+    env_file:
+      - 'compose/aws.env'
+    environment:
+      PORT: 3001
+      NODE_ENV: development
+      MONGO_URI: mongodb://mongodb:27017/
+      INGEST_TOKEN: local-development-ingest-token
+    networks:
+      - cdp-tenant
 
 ################################################################################
 

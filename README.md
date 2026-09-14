@@ -4,10 +4,40 @@
 [![Quality Gate Status](https://sonarcloud.io/api/project_badges/measure?project=DEFRA_mmo-cr-copilot-dashboard&metric=alert_status)](https://sonarcloud.io/summary/new_code?id=DEFRA_mmo-cr-copilot-dashboard)
 [![Coverage](https://sonarcloud.io/api/project_badges/measure?project=DEFRA_mmo-cr-copilot-dashboard&metric=coverage)](https://sonarcloud.io/summary/new_code?id=DEFRA_mmo-cr-copilot-dashboard)
 
-Core delivery platform Node.js Frontend Template.
+Copilot analytics dashboard — a React single page app served by a Hapi backend-for-frontend.
+
+It visualises how adopting GitHub Copilot has changed delivery: adoption and assist rates, cycle
+time, rework, contributor and repository breakdowns, and SonarCloud code quality — with drill-downs
+from the portfolio overview down to an individual commit.
+
+## Architecture
+
+```text
+GitHub Actions --POST /api/ingest--> mmo-cr-copilot-dashboard --POST--> mmo-cr-copilot-backend
+                                              |                                |
+        browser <--GET /api/payloads (poll)---+                             MongoDB
+                                              +--GET /api/sonar/*--> backend --> SonarCloud
+```
+
+This service is the only publicly reachable part of the system:
+
+- **Ingest.** The analytics workflow posts one payload per pull request build to `POST /api/ingest`,
+  authenticated with a shared secret in the `x-ingest-token` header. The payload is forwarded to the
+  backend, which validates and persists it — validation lives in one place only.
+- **Backend-for-frontend.** `GET /api/*` is proxied to the backend over the platform's internal
+  network. Each route builds its own upstream path from validated parameters, so the browser cannot
+  steer a request at an arbitrary host or path. The backend stays internal: no CORS, no public
+  backend URL, and no credentials in the bundle.
+- **Shell.** `GET /` renders a Nunjucks shell that the React app mounts into. Runtime configuration
+  is passed as `data-` attributes rather than an inline `<script>`, so the Content-Security-Policy
+  forbids inline script in every environment.
+- **Updates.** The dashboard polls `GET /api/payloads` on an interval, backing off exponentially when
+  the backend is unavailable and keeping the last known data on screen.
 
 - [Requirements](#requirements)
   - [Node.js](#nodejs)
+- [Configuration](#configuration)
+- [Ingest API](#ingest-api)
 - [Server-side Caching](#server-side-caching)
 - [Redis](#redis)
 - [Local Development](#local-development)
@@ -26,6 +56,39 @@ Core delivery platform Node.js Frontend Template.
   - [SonarCloud](#sonarcloud)
 - [Licence](#licence)
   - [About the licence](#about-the-licence)
+
+## Configuration
+
+All configuration is read from environment variables via convict (`src/config/config.js`). In CDP
+environments these are injected from AWS Secrets Manager and Parameter Store through the CDP Portal —
+never commit secrets.
+
+| Variable                     | Required | Description                                                                                                                                                                                                                          |
+| :--------------------------- | :------- | :----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `COPILOT_BACKEND_API_URL`    | Yes      | Base URL of mmo-cr-copilot-backend, resolved through CDP service discovery                                                                                                                                                           |
+| `INGEST_TOKEN`               | Yes      | Shared secret presented by the GitHub Actions workflow and forwarded to the backend. The same value is set in the workflow, here, and on the backend. When empty the check is skipped, which is intended for local development only. |
+| `DASHBOARD_POLL_INTERVAL_MS` | No       | How often the browser polls for new payloads, default 15000                                                                                                                                                                          |
+| `BACKEND_REQUEST_TIMEOUT_MS` | No       | Timeout applied to each request forwarded to the backend, default 10000                                                                                                                                                              |
+| `INGEST_MAX_PAYLOAD_BYTES`   | No       | Maximum accepted ingest body size, default 2 MiB                                                                                                                                                                                     |
+| `SESSION_COOKIE_PASSWORD`    | Yes      | Session cookie secret, at least 32 characters                                                                                                                                                                                        |
+| `REDIS_HOST`                 | Yes      | Redis host backing the server-side session cache                                                                                                                                                                                     |
+
+## Ingest API
+
+```http
+POST /api/ingest
+Content-Type: application/json
+x-ingest-token: <shared secret>
+```
+
+The body is the analytics payload for one pull request build: `prNumber`, `repository`,
+`targetBranch`, `buildId`, `calculatedAt`, `summary`, `contributorBreakdown`, and `commitBreakdown`.
+The backend's response is relayed unchanged — `201` when stored, `400` when the payload fails
+validation, `401` when the token is missing or wrong, and `502` when the backend cannot be reached.
+
+Payloads are appended rather than replaced, so each pull request keeps its full history.
+`sourceBranch` may be omitted on the final merged message; the backend backfills it from the previous
+message for that pull request.
 
 ## Requirements
 
