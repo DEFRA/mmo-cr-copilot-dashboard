@@ -1,5 +1,6 @@
 import { useMemo } from 'react'
 import { Panel } from '../Panel'
+import { CommitLog } from '../CommitLog'
 import { KpiCard } from '../charts/KpiCard'
 import { DistributionDonut } from '../charts/DistributionDonut'
 import { StackedBar } from '../charts/StackedBar'
@@ -7,8 +8,8 @@ import { HotspotScatter } from '../charts/HotspotScatter'
 import { CategoryBar } from '../charts/CategoryBar'
 import { SonarQualityPanel } from '../charts/SonarQuality'
 import {
-  shortRepoName,
   isPlottableCommit,
+  isMergedPayload,
   computePrMetrics,
   effectiveClassification
 } from '../../lib/selectors'
@@ -18,7 +19,13 @@ import {
  * commit hotspot scatter, contributor split, and composition donuts. Commits
  * are the leaf level of the drill-down.
  */
-export function PRView({ payloads, repository, prNumber, onOpenContributor }) {
+export function PRView({
+  payloads,
+  repository,
+  prNumber,
+  onOpenContributor,
+  onChangeClassification
+}) {
   const pr = useMemo(
     () =>
       payloads.find(
@@ -67,6 +74,8 @@ export function PRView({ payloads, repository, prNumber, onOpenContributor }) {
   if (!pr || !m) {
     return <Panel title="Pull Request" state="empty" />
   }
+
+  const isMerged = isMergedPayload(pr)
 
   const contributorRows = Array.from(m.byContributor.values()).filter(
     (c) => c.totalCommits > 0
@@ -196,92 +205,13 @@ export function PRView({ payloads, repository, prNumber, onOpenContributor }) {
         </Panel>
       </div>
 
-      <Panel
-        title="Commit Log"
-        subtitle={`${shortRepoName(repository)} · PR #${prNumber}`}
-      >
-        <div className="overflow-x-auto">
-          <table className="w-full border-collapse text-left text-sm">
-            <thead>
-              <tr className="text-[var(--color-text-muted)]">
-                <th scope="col" className="px-3 py-2 font-medium">
-                  Commit
-                </th>
-                <th scope="col" className="px-3 py-2 font-medium">
-                  Author
-                </th>
-                <th scope="col" className="px-3 py-2 font-medium">
-                  Subject
-                </th>
-                <th scope="col" className="px-3 py-2 font-medium">
-                  Class
-                </th>
-                <th scope="col" className="px-3 py-2 text-right font-medium">
-                  +Added
-                </th>
-                <th scope="col" className="px-3 py-2 text-right font-medium">
-                  −Deleted
-                </th>
-                <th scope="col" className="px-3 py-2 text-right font-medium">
-                  Net
-                </th>
-              </tr>
-            </thead>
-            <tbody>
-              {commits.map((c) => {
-                const kind = effectiveClassification(c)
-                const isCopilot = kind === 'Copilot-assisted'
-                const isRebase = kind === 'Rebase'
-                const pillColor = isRebase
-                  ? 'var(--color-text-muted)'
-                  : isCopilot
-                    ? 'var(--color-copilot)'
-                    : 'var(--color-manual)'
-                return (
-                  <tr
-                    key={c.commit}
-                    className="border-t border-[var(--color-border)]"
-                  >
-                    <td className="px-3 py-2 font-mono text-xs text-[var(--color-text-muted)]">
-                      {c.commit}
-                    </td>
-                    <td className="px-3 py-2 text-[var(--color-text)]">
-                      {c.author ?? '—'}
-                    </td>
-                    <td className="px-3 py-2 text-[var(--color-text)]">
-                      {c.subject}
-                    </td>
-                    <td className="px-3 py-2">
-                      <span
-                        className="pill"
-                        style={{ color: pillColor, borderColor: pillColor }}
-                      >
-                        <span aria-hidden="true">
-                          {isRebase ? '⮑' : isCopilot ? '✦' : '✎'}
-                        </span>
-                        {isRebase
-                          ? 'Rebase'
-                          : isCopilot
-                            ? 'Copilot'
-                            : 'Human-authored'}
-                      </span>
-                    </td>
-                    <td className="px-3 py-2 text-right tabular-nums text-[var(--color-success)]">
-                      +{c.linesAdded}
-                    </td>
-                    <td className="px-3 py-2 text-right tabular-nums text-[var(--color-danger)]">
-                      −{c.linesDeleted}
-                    </td>
-                    <td className="px-3 py-2 text-right tabular-nums text-[var(--color-text)]">
-                      {c.netLines}
-                    </td>
-                  </tr>
-                )
-              })}
-            </tbody>
-          </table>
-        </div>
-      </Panel>
+      <CommitLog
+        repository={repository}
+        prNumber={prNumber}
+        commits={commits}
+        editable={isMerged}
+        onChangeClassification={onChangeClassification}
+      />
     </div>
   )
 }

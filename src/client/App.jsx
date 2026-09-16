@@ -6,6 +6,7 @@ import { ErrorBoundary } from './components/ErrorBoundary'
 import { useTheme } from './hooks/useTheme'
 import { useLiveFeed } from './hooks/useLiveFeed'
 import { usePersonaMappings } from './hooks/usePersonaMappings'
+import { useCommitClassification } from './hooks/useCommitClassification'
 import {
   shortRepoName,
   filterPayloadsByWindow,
@@ -100,8 +101,9 @@ function ViewSkeleton() {
 export default function App() {
   const { theme, toggleTheme } = useTheme()
   const [nav, setNav] = useState(ROOT_NAV)
-  const { payloads, status, lastMessageAt } = useLiveFeed()
+  const { payloads, status, lastMessageAt, applyPayload } = useLiveFeed()
   const personaMappings = usePersonaMappings()
+  const changeCommitClassification = useCommitClassification(applyPayload)
   const mappingsByHandle = useMemo(
     () => buildContributorPersonaMap(personaMappings.mappings),
     [personaMappings.mappings]
@@ -340,6 +342,7 @@ export default function App() {
             repository={nav.repository}
             prNumber={nav.prNumber}
             onOpenContributor={openContributor}
+            onChangeClassification={changeCommitClassification}
           />
         )
       case 'contributor':
@@ -376,6 +379,7 @@ export default function App() {
     personaMappings.error,
     handleSaveMapping,
     handleRemoveMapping,
+    changeCommitClassification,
     openRepo,
     openRepoCycle,
     openPR,

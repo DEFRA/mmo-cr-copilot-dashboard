@@ -179,4 +179,35 @@ describe('#useLiveFeed', () => {
 
     expect(fetchMock.mock.calls.length).toBe(callsAfterUnmount)
   })
+
+  describe('#applyPayload', () => {
+    test('Should replace the PR it belongs to without touching the others', async () => {
+      respondWith([buildPayload(), buildPayload({ prNumber: 43 })])
+
+      const { result } = renderHook(() => useLiveFeed(options))
+      await waitFor(() => expect(result.current.payloads).toHaveLength(2))
+
+      act(() => {
+        result.current.applyPayload(buildPayload({ buildId: 'corrected' }))
+      })
+
+      expect(result.current.payloads).toHaveLength(2)
+      expect(
+        result.current.payloads.find((p) => p.prNumber === 42).buildId
+      ).toBe('corrected')
+    })
+
+    test('Should ignore a malformed payload', async () => {
+      respondWith([buildPayload()])
+
+      const { result } = renderHook(() => useLiveFeed(options))
+      await waitFor(() => expect(result.current.payloads).toHaveLength(1))
+
+      act(() => {
+        result.current.applyPayload({ nonsense: true })
+      })
+
+      expect(result.current.payloads).toHaveLength(1)
+    })
+  })
 })

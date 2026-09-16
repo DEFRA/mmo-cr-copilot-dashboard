@@ -31,6 +31,29 @@ const personaMappingPayload = Joi.object({
   persona: Joi.string().valid('developer', 'devops', 'qa').required()
 })
 
+const commitClassificationParams = Joi.object({
+  repository: Joi.string().min(1).max(512).required(),
+  prNumber: Joi.number().integer().min(1).required(),
+  commit: Joi.string()
+    .pattern(/^[\da-f]{7,64}$/i)
+    .required()
+})
+
+const commitClassificationPayload = Joi.object({
+  classification: Joi.string()
+    .valid('Copilot-assisted', 'Human-authored', 'Rebase', 'Dependabot')
+    .required()
+})
+
+const MAX_AUDIT_PAGE_SIZE = 200
+
+const auditLogQuery = Joi.object({
+  from: Joi.date().iso().optional(),
+  to: Joi.date().iso().greater(Joi.ref('from')).optional(),
+  page: Joi.number().integer().min(1).optional(),
+  pageSize: Joi.number().integer().min(1).max(MAX_AUDIT_PAGE_SIZE).optional()
+})
+
 export const apiProxyRoutes = [
   {
     method: 'GET',
@@ -53,6 +76,43 @@ export const apiProxyRoutes = [
 
       return forward(request, h, {
         path: `/api/payloads/${encodeURIComponent(repository)}/${prNumber}`
+      })
+    }
+  },
+  {
+    method: 'PATCH',
+    path: '/api/payloads/{repository}/{prNumber}/commits/{commit}',
+    options: {
+      validate: {
+        params: commitClassificationParams,
+        payload: commitClassificationPayload
+      }
+    },
+    handler: (request, h) => {
+      const { repository, prNumber, commit } = request.params
+
+      return forward(request, h, {
+        path: `/api/payloads/${encodeURIComponent(repository)}/${prNumber}/commits/${encodeURIComponent(commit)}`,
+        method: 'PATCH',
+        body: { classification: request.payload.classification }
+      })
+    }
+  },
+  {
+    method: 'GET',
+    path: '/api/audit-logs',
+    options: { validate: { query: auditLogQuery } },
+    handler: (request, h) => {
+      const { from, to, page, pageSize } = request.query
+
+      return forward(request, h, {
+        path: '/api/audit-logs',
+        query: {
+          from: from?.toISOString(),
+          to: to?.toISOString(),
+          page,
+          pageSize
+        }
       })
     }
   },

@@ -18,6 +18,8 @@
  *   payloads      — current array of latest-per-PR analytics payloads
  *   status        — 'connecting' | 'open' | 'reconnecting' | 'error'
  *   lastMessageAt — Date of the last successful poll, or null
+ *   applyPayload  — replaces one PR's payload locally, so a change made from
+ *                   the dashboard shows without waiting for the next poll
  */
 
 import { useCallback, useEffect, useRef, useState } from 'react'
@@ -145,5 +147,19 @@ export function useLiveFeed({ pollIntervalMs } = readRuntimeConfig()) {
     }
   }, [poll])
 
-  return { payloads, status, lastMessageAt }
+  const applyPayload = useCallback((payload) => {
+    if (!isValidPayload(payload)) {
+      return
+    }
+
+    setPayloads((current) => [
+      ...current.filter(
+        (p) =>
+          p.repository !== payload.repository || p.prNumber !== payload.prNumber
+      ),
+      payload
+    ])
+  }, [])
+
+  return { payloads, status, lastMessageAt, applyPayload }
 }

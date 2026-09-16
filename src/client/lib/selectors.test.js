@@ -5,6 +5,7 @@ import {
   filterPayloadsByWindow,
   isPlottableCommit,
   isPlottablePayload,
+  isMergedPayload,
   effectiveClassification,
   computePrMetrics,
   selectGlobalSummary,
@@ -105,7 +106,7 @@ describe('#isPlottableCommit', () => {
     ['a missing sha', commit({ commit: '' })],
     ['an invalid date', commit({ committedAt: 'not-a-date' })],
     ['a missing date', commit({ committedAt: undefined })],
-    ['an unknown classification', commit({ classification: 'Rebase' })],
+    ['an unknown classification', commit({ classification: 'Telepathy' })],
     ['a non-numeric linesTouched', commit({ linesTouched: null })]
   ])('Should reject a commit with %s', (_label, value) => {
     expect(isPlottableCommit(value)).toBe(false)
@@ -124,6 +125,21 @@ describe('#isPlottablePayload', () => {
     ['a non-array commitBreakdown', buildPayload({ commitBreakdown: null })]
   ])('Should reject a payload with %s', (_label, value) => {
     expect(isPlottablePayload(value)).toBe(false)
+  })
+})
+
+describe('#isMergedPayload', () => {
+  test('Should accept a payload with a merge time', () => {
+    expect(isMergedPayload(buildPayload())).toBe(true)
+  })
+
+  test.each([
+    ['null', null],
+    ['no merge time', buildPayload({ prMergedAt: undefined })],
+    ['an empty merge time', buildPayload({ prMergedAt: '' })],
+    ['an unparseable merge time', buildPayload({ prMergedAt: 'soon' })]
+  ])('Should reject a payload with %s', (_label, value) => {
+    expect(isMergedPayload(value)).toBe(false)
   })
 })
 
@@ -192,6 +208,50 @@ describe('#computePrMetrics', () => {
     expect(metrics.rebaseLines).toBe(5000)
     expect(metrics.totalLinesTouched).toBe(120)
     expect(metrics.copilotAssistedRate).toBe(100)
+  })
+
+  test('Should honour an upstream Rebase classification whatever the subject', () => {
+    const metrics = computePrMetrics(
+      payloadWith([
+        commit({ commit: 'a' }),
+        commit({
+          commit: 'b',
+          subject: 'Merge duplicate species records into one',
+          classification: 'Rebase',
+          linesTouched: 400,
+          linesAdded: 400,
+          linesDeleted: 0
+        })
+      ])
+    )
+
+    expect(metrics.totalCommits).toBe(1)
+    expect(metrics.rebaseCommits).toBe(1)
+    expect(metrics.rebaseLines).toBe(400)
+  })
+
+  test('Should exclude Dependabot commits from every total', () => {
+    const metrics = computePrMetrics(
+      payloadWith([
+        commit({ commit: 'a' }),
+        commit({
+          commit: 'b',
+          author: 'dependabot[bot]',
+          subject: 'chore(deps): bump govuk-frontend from 5.7.0 to 5.8.0',
+          classification: 'Dependabot',
+          linesTouched: 900,
+          linesAdded: 800,
+          linesDeleted: 100
+        })
+      ])
+    )
+
+    expect(metrics.totalCommits).toBe(1)
+    expect(metrics.dependabotCommits).toBe(1)
+    expect(metrics.dependabotLines).toBe(900)
+    expect(metrics.rebaseCommits).toBe(0)
+    expect(metrics.totalLinesTouched).toBe(120)
+    expect(metrics.byContributor.has('dependabot[bot]')).toBe(false)
   })
 
   test('Should not register an author seen only on rebase commits', () => {

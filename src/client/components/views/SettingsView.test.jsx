@@ -9,6 +9,19 @@ const MAPPINGS = [
 ]
 
 describe('#SettingsView', () => {
+  // The page also renders the audit log, which fetches on mount.
+  beforeEach(() => {
+    fetchMock.mockResponse(
+      JSON.stringify({
+        entries: [],
+        page: 1,
+        pageSize: 25,
+        total: 0,
+        totalPages: 1
+      })
+    )
+  })
+
   const renderSettings = (props = {}) =>
     render(
       <SettingsView
@@ -53,7 +66,7 @@ describe('#SettingsView', () => {
       screen.getByPlaceholderText('e.g. octocat'),
       'randhir-patel'
     )
-    await userEvent.selectOptions(screen.getByRole('combobox'), 'qa')
+    await userEvent.selectOptions(screen.getByLabelText('Role'), 'qa')
     await userEvent.click(screen.getByRole('button', { name: 'Save mapping' }))
 
     await waitFor(() =>

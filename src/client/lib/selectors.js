@@ -3,7 +3,11 @@
  * shapes each dashboard view needs. Kept framework-free so they are trivially
  * testable and reusable when the real feed replaces the mock data.
  */
-import { REBASE_MERGE_REGEX } from './classification'
+import {
+  REBASE_MERGE_REGEX,
+  EXCLUDED_CLASSIFICATIONS,
+  isExcludedClassification
+} from './classification'
 import { PERSONAS, personaForContributor } from './personas'
 
 const round = (n, dp = 2) => {
@@ -52,8 +56,16 @@ const isValidDateStr = (s) =>
   typeof s === 'string' && !Number.isNaN(Date.parse(s))
 /** Coerce to a finite number, else 0 — for defensive summing. */
 const num = (n) => (isFiniteNum(n) ? n : 0)
-/** Classifications the charts understand. */
-const KNOWN_CLASSIFICATIONS = new Set(['Copilot-assisted', 'Human-authored'])
+/**
+ * Classifications the charts understand. Excluded kinds are listed so they
+ * survive this filter and can be reported as set aside; dropping them here
+ * would leave them uncounted in either direction.
+ */
+const KNOWN_CLASSIFICATIONS = new Set([
+  'Copilot-assisted',
+  'Human-authored',
+  ...EXCLUDED_CLASSIFICATIONS
+])
 
 /** True when a commit has every field the charts rely on. */
 export function isPlottableCommit(c) {
@@ -67,6 +79,16 @@ export function isPlottableCommit(c) {
     isFiniteNum(c.linesDeleted) &&
     isFiniteNum(c.linesTouched)
   )
+}
+
+/**
+ * True when a pull request has been merged. Gates the commit-log
+ * classification editor: an open PR is re-analysed on every push, so a manual
+ * correction there would be overwritten and would describe a commit set that
+ * is still changing.
+ */
+export function isMergedPayload(p) {
+  return isValidDateStr(p?.prMergedAt)
 }
 
 /** True when a PR payload has the summary + breakdown shape the charts need. */
@@ -94,13 +116,17 @@ const clamp01 = (n) => Math.max(0, Math.min(1, n))
 
 /**
  * The classification actually used for every calculation on this dashboard.
- * Overlays a `'Rebase'` verdict on top of the upstream classification
- * whenever the commit subject matches a merge/rebase pattern (upstream
- * tooling has no way to detect a sync-merge commit and defaults it to
- * Human-authored — see bug FI0-11445). `'Rebase'` commits are excluded from
- * every rate, rework, leverage, and net-lines calculation below.
+ *
+ * The producer classifies merge/rebase and Dependabot commits upstream, so
+ * that verdict is taken as authoritative. Payloads stored before it did carry
+ * sync merges as `Human-authored`, so a subject-pattern fallback still
+ * re-classifies those as `'Rebase'` (see bug FI0-11445). Both excluded kinds
+ * are left out of every rate, rework, leverage and net-lines calculation.
  */
 export function effectiveClassification(commit) {
+  if (isExcludedClassification(commit.classification)) {
+    return commit.classification
+  }
   if (REBASE_MERGE_REGEX.test((commit.subject ?? '').trim())) return 'Rebase'
   return classificationLabel(commit.classification)
 }
@@ -123,10 +149,12 @@ export function computePrMetrics(payload) {
     copilotAssistedCommits: 0,
     humanAuthoredCommits: 0,
     rebaseCommits: 0,
+    dependabotCommits: 0,
     totalLinesTouched: 0,
     copilotAssistedLines: 0,
     humanAuthoredLines: 0,
     rebaseLines: 0,
+    dependabotLines: 0,
     linesAdded: 0,
     linesDeleted: 0,
     copilotLinesAdded: 0,
@@ -140,13 +168,19 @@ export function computePrMetrics(payload) {
     const author = c.author ?? 'Unknown'
     const kind = effectiveClassification(c)
 
-    // Rebase/merge commits are excluded from every metric. Critically, an
-    // author who ONLY appears on Rebase commits is never registered as a
-    // contributor, so rebase-derived names cannot leak into any contributor
-    // count, adoption denominator, heatmap cell, or persona insight anywhere.
-    if (kind === 'Rebase') {
-      m.rebaseCommits += 1
-      m.rebaseLines += num(c.linesTouched)
+    // Rebase/merge and Dependabot commits are excluded from every metric.
+    // Critically, an author who ONLY appears on excluded commits is never
+    // registered as a contributor, so neither rebase-derived names nor bots
+    // can leak into any contributor count, adoption denominator, heatmap
+    // cell, or persona insight anywhere.
+    if (isExcludedClassification(kind)) {
+      if (kind === 'Dependabot') {
+        m.dependabotCommits += 1
+        m.dependabotLines += num(c.linesTouched)
+      } else {
+        m.rebaseCommits += 1
+        m.rebaseLines += num(c.linesTouched)
+      }
       const prior = byContributor.get(author)
       if (prior) prior.rebase += 1
       continue
@@ -367,7 +401,7 @@ export function selectContributorSummaries(payloads) {
 }
 
 /**
- * Every non-Rebase commit across all payloads, tagged with repo + PR context
+ * Every counted commit across all payloads, tagged with repo + PR context
  * and its effective classification.
  */
 export function selectAllCommits(payloads) {
@@ -375,7 +409,7 @@ export function selectAllCommits(payloads) {
     (Array.isArray(p.commitBreakdown) ? p.commitBreakdown : [])
       .filter(isPlottableCommit)
       .map((c) => ({ ...c, classification: effectiveClassification(c) }))
-      .filter((c) => c.classification !== 'Rebase')
+      .filter((c) => !isExcludedClassification(c.classification))
       .map((c) => ({
         ...c,
         repository: p.repository,
@@ -402,7 +436,7 @@ export function selectContributorPRs(payloads, contributor) {
         .filter(isPlottableCommit)
         .filter((c) => c.author === contributor)
         .map((c) => ({ ...c, classification: effectiveClassification(c) }))
-        .filter((c) => c.classification !== 'Rebase')
+        .filter((c) => !isExcludedClassification(c.classification))
       return {
         repository: p.repository,
         repoName: shortRepoName(p.repository),
@@ -850,7 +884,7 @@ export function selectCommitTimeline(payloads) {
       // Skip any commit missing the fields the stream/scatter rely on.
       if (!isPlottableCommit(c)) continue
       const classification = effectiveClassification(c)
-      if (classification === 'Rebase') continue
+      if (isExcludedClassification(classification)) continue
       rows.push({
         ...c,
         classification,

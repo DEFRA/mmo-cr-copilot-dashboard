@@ -209,4 +209,104 @@ describe('#api proxy routes', () => {
       expect(upstreamUrl()).toBe(`${BACKEND}/api/persona-mappings/octocat`)
     })
   })
+
+  describe('PATCH /api/payloads/{repository}/{prNumber}/commits/{commit}', () => {
+    const patch = (url, payload) =>
+      server.inject({ method: 'PATCH', url, payload })
+
+    test('Should forward the classification to the backend', async () => {
+      fetchMock.mockResponse(JSON.stringify({ status: 'updated' }))
+
+      const { statusCode } = await patch(
+        '/api/payloads/DEFRA%2Frepo-one/42/commits/abc1234',
+        { classification: 'Human-authored' }
+      )
+
+      expect(statusCode).toBe(statusCodes.ok)
+      expect(upstreamUrl()).toBe(
+        `${BACKEND}/api/payloads/DEFRA%2Frepo-one/42/commits/abc1234`
+      )
+
+      const [, options] = fetchMock.mock.calls[0]
+      expect(options.method).toBe('PATCH')
+      expect(JSON.parse(options.body)).toEqual({
+        classification: 'Human-authored'
+      })
+    })
+
+    test('Should pass the backend refusal straight through', async () => {
+      fetchMock.mockResponse(JSON.stringify({ message: 'is not merged' }), {
+        status: 409
+      })
+
+      const { statusCode, result } = await patch(
+        '/api/payloads/DEFRA%2Frepo-one/42/commits/abc1234',
+        { classification: 'Human-authored' }
+      )
+
+      expect(statusCode).toBe(409)
+      expect(result.message).toBe('is not merged')
+    })
+
+    test('Should reject an unknown classification without calling the backend', async () => {
+      const { statusCode } = await patch(
+        '/api/payloads/DEFRA%2Frepo-one/42/commits/abc1234',
+        { classification: 'Vibes' }
+      )
+
+      expect(statusCode).toBe(statusCodes.badRequest)
+      expect(fetchMock).not.toHaveBeenCalled()
+    })
+
+    test('Should reject a commit that is not a SHA', async () => {
+      const { statusCode } = await patch(
+        '/api/payloads/DEFRA%2Frepo-one/42/commits/..%2Fsecrets',
+        { classification: 'Rebase' }
+      )
+
+      expect(statusCode).toBe(statusCodes.badRequest)
+      expect(fetchMock).not.toHaveBeenCalled()
+    })
+  })
+
+  describe('GET /api/audit-logs', () => {
+    test('Should forward the window and paging to the backend', async () => {
+      fetchMock.mockResponse(JSON.stringify({ entries: [], total: 0 }))
+
+      const { statusCode } = await server.inject(
+        '/api/audit-logs?from=2026-01-01T00:00:00.000Z&to=2026-02-01T00:00:00.000Z&page=2&pageSize=50'
+      )
+
+      expect(statusCode).toBe(statusCodes.ok)
+      expect(upstreamUrl()).toBe(
+        `${BACKEND}/api/audit-logs?from=2026-01-01T00%3A00%3A00.000Z&to=2026-02-01T00%3A00%3A00.000Z&page=2&pageSize=50`
+      )
+    })
+
+    test('Should forward an unfiltered request without empty parameters', async () => {
+      fetchMock.mockResponse(JSON.stringify({ entries: [], total: 0 }))
+
+      await server.inject('/api/audit-logs')
+
+      expect(upstreamUrl()).toBe(`${BACKEND}/api/audit-logs`)
+    })
+
+    test('Should reject a window that ends before it starts', async () => {
+      const { statusCode } = await server.inject(
+        '/api/audit-logs?from=2026-02-01T00:00:00.000Z&to=2026-01-01T00:00:00.000Z'
+      )
+
+      expect(statusCode).toBe(statusCodes.badRequest)
+      expect(fetchMock).not.toHaveBeenCalled()
+    })
+
+    test('Should reject a page size beyond the cap', async () => {
+      const { statusCode } = await server.inject(
+        '/api/audit-logs?pageSize=5000'
+      )
+
+      expect(statusCode).toBe(statusCodes.badRequest)
+      expect(fetchMock).not.toHaveBeenCalled()
+    })
+  })
 })

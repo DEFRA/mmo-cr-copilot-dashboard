@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { Panel } from '../Panel'
+import { AuditLogPanel } from '../AuditLogPanel'
 import { PERSONAS, personaMeta } from '../../lib/personas'
 
 // Mirrors GitHub's own username rules: alphanumeric, single hyphens, no
@@ -8,9 +9,10 @@ const GITHUB_HANDLE_PATTERN = /^[a-zA-Z\d](?:[a-zA-Z\d]|-(?=[a-zA-Z\d])){0,38}$/
 
 /**
  * Settings — configure which delivery persona (Developer/DevOps/QA) each
- * GitHub handle is attributed to. The mapping is stored in the backend
- * (MongoDB) via `usePersonaMappings`, rather than hardcoded, so the roster
- * can change without a code deploy.
+ * GitHub handle is attributed to, and review the audit trail of every change
+ * made from the dashboard. The mapping is stored in the backend (MongoDB) via
+ * `usePersonaMappings`, rather than hardcoded, so the roster can change
+ * without a code deploy.
  */
 export function SettingsView({ mappings, status, error, onSave, onRemove }) {
   const [handle, setHandle] = useState('')
@@ -162,6 +164,8 @@ export function SettingsView({ mappings, status, error, onSave, onRemove }) {
           </table>
         )}
       </Panel>
+
+      <AuditLogPanel />
     </div>
   )
 }
