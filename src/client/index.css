@@ -447,6 +447,167 @@ h4 {
   outline-offset: 1px;
 }
 
+/* `.filter-input` is full-width; inside a table cell that stretches the
+   column, so the inline editor takes a fixed, content-sized width instead. */
+.filter-input--inline {
+  width: 10rem;
+  padding-block: 0.3rem;
+}
+
+/* Icon-only control. 1.75rem clears the 24px minimum of WCAG SC 2.5.8. */
+.icon-button {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  width: 1.75rem;
+  height: 1.75rem;
+  font: inherit;
+  font-size: 0.85rem;
+  line-height: 1;
+  cursor: pointer;
+  color: var(--color-text-muted);
+  background: var(--color-surface-2);
+  border: 1px solid var(--color-border);
+  border-radius: 0.6rem;
+  transition:
+    color 0.15s ease,
+    background 0.15s ease,
+    border-color 0.15s ease;
+}
+
+.icon-button:hover:not(:disabled) {
+  color: var(--color-text);
+  border-color: var(--color-primary);
+}
+
+.icon-button:active:not(:disabled) {
+  transform: translateY(1px);
+  background: color-mix(
+    in srgb,
+    var(--color-primary) 12%,
+    var(--color-surface)
+  );
+}
+
+.icon-button:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
+/* Restrained at rest so the pencil does not compete with the pill, gaining its
+   frame once the row is engaged. Only colour and chrome change — the control is
+   never removed from the tab order or the accessibility tree. */
+.icon-button--ghost {
+  color: var(--color-text-muted);
+  background: transparent;
+  border-color: transparent;
+}
+
+.commit-row:hover .icon-button--ghost,
+.commit-row:focus-within .icon-button--ghost,
+.icon-button--ghost:hover:not(:disabled),
+.icon-button--ghost:focus-visible {
+  color: var(--color-text);
+  background: var(--color-surface-2);
+  border-color: var(--color-border-strong);
+}
+
+/* Ring rather than a tinted glyph, so the save button reads as working rather
+   than merely unavailable while `aria-busy` carries the same news non-visually. */
+.icon-button__spinner {
+  width: 0.85rem;
+  height: 0.85rem;
+  border: 2px solid color-mix(in srgb, currentColor 25%, transparent);
+  border-top-color: currentColor;
+  border-radius: var(--radius-pill);
+  animation: icon-spin 0.7s linear infinite;
+}
+
+@keyframes icon-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+/* Blending the status hue toward the body text darkens it on the light theme
+   and lightens it on dark, so the glyph clears 4.5:1 against the surface in
+   both. Colour is reinforcement only — the accessible name carries meaning. */
+.icon-button--confirm {
+  color: color-mix(in srgb, var(--color-success) 70%, var(--color-text));
+  border-color: color-mix(
+    in srgb,
+    var(--color-success) 50%,
+    var(--color-border)
+  );
+}
+
+.icon-button--confirm:hover:not(:disabled) {
+  color: color-mix(in srgb, var(--color-success) 70%, var(--color-text));
+  border-color: var(--color-success);
+  background: color-mix(
+    in srgb,
+    var(--color-success) 14%,
+    var(--color-surface)
+  );
+}
+
+.icon-button--cancel {
+  color: color-mix(in srgb, var(--color-danger) 70%, var(--color-text));
+  border-color: color-mix(
+    in srgb,
+    var(--color-danger) 50%,
+    var(--color-border)
+  );
+}
+
+.icon-button--cancel:hover:not(:disabled) {
+  color: color-mix(in srgb, var(--color-danger) 70%, var(--color-text));
+  border-color: var(--color-danger);
+  background: color-mix(in srgb, var(--color-danger) 14%, var(--color-surface));
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .icon-button {
+    transition: none;
+  }
+
+  .icon-button:active:not(:disabled) {
+    transform: none;
+  }
+
+  /* The static ring plus the disabled controls still read as in-flight. */
+  .icon-button__spinner {
+    animation: none;
+  }
+}
+
+/* Reserves room for the widest state (select + confirm + cancel) so toggling
+   a row between pill and edit view does not resize the table. `width` alone is
+   only a hint under auto table layout and collapses in a narrow pane, so the
+   floor has to be a `min-width`; the wrapper scrolls instead. */
+.commit-class-col {
+  width: 16rem;
+  min-width: 16rem;
+}
+
+.commit-class-cell {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+.commit-class-error {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.3rem;
+  margin-top: 0.35rem;
+  font-size: 0.72rem;
+  font-weight: 500;
+  line-height: 1.35;
+  color: var(--color-danger);
+}
+
 .pill {
   display: inline-flex;
   align-items: center;

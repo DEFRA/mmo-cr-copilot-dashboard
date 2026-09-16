@@ -52,32 +52,71 @@ describe('#CommitLog', () => {
     renderLog()
 
     expect(screen.queryAllByRole('combobox')).toHaveLength(0)
+    expect(
+      screen.queryByRole('button', { name: /^Edit classification/ })
+    ).not.toBeInTheDocument()
     expect(screen.getByText('Copilot')).toBeInTheDocument()
     expect(
       screen.getByText(/editable once the PR is merged/)
     ).toBeInTheDocument()
   })
 
-  test('Should offer a classification selector per commit once merged', () => {
+  test('Should offer an edit button per commit once merged, but no selector until it is pressed', () => {
     renderLog({ editable: true })
 
     expect(
-      screen.getByRole('combobox', {
-        name: 'Classification for commit a1b2c3d'
-      })
-    ).toHaveValue('Copilot-assisted')
-    expect(screen.getAllByRole('combobox')).toHaveLength(2)
+      screen.getAllByRole('button', { name: /^Edit classification/ })
+    ).toHaveLength(2)
+    expect(screen.getByText('Copilot')).toBeInTheDocument()
+    expect(screen.queryAllByRole('combobox')).toHaveLength(0)
   })
 
-  test('Should submit the chosen classification for the right commit', async () => {
+  test('Should reveal the selector with confirm and cancel for the chosen row only', async () => {
+    renderLog({ editable: true })
+
+    await userEvent.click(
+      screen.getByRole('button', {
+        name: 'Edit classification for commit a1b2c3d'
+      })
+    )
+
+    const select = screen.getByRole('combobox', {
+      name: 'Classification for commit a1b2c3d'
+    })
+    expect(select).toHaveValue('Copilot-assisted')
+    expect(select).toHaveFocus()
+    expect(screen.getAllByRole('combobox')).toHaveLength(1)
+    expect(
+      screen.getByRole('button', {
+        name: 'Save classification for commit a1b2c3d'
+      })
+    ).toBeInTheDocument()
+    expect(
+      screen.getByRole('button', {
+        name: 'Cancel editing classification for commit a1b2c3d'
+      })
+    ).toBeInTheDocument()
+  })
+
+  test('Should submit the chosen classification for the right commit on confirm', async () => {
     const onChangeClassification = vi.fn().mockResolvedValue({})
     renderLog({ editable: true, onChangeClassification })
 
+    await userEvent.click(
+      screen.getByRole('button', {
+        name: 'Edit classification for commit d4e5f6a'
+      })
+    )
     await userEvent.selectOptions(
       screen.getByRole('combobox', {
         name: 'Classification for commit d4e5f6a'
       }),
       'Rebase'
+    )
+    await userEvent.click(
+      screen.getByRole('button', {
+        name: 'Save classification for commit d4e5f6a'
+      })
     )
 
     await waitFor(() =>
@@ -88,22 +127,128 @@ describe('#CommitLog', () => {
         classification: 'Rebase'
       })
     )
+
+    const editButton = await screen.findByRole('button', {
+      name: 'Edit classification for commit d4e5f6a'
+    })
+    expect(editButton).toHaveFocus()
+    expect(screen.queryAllByRole('combobox')).toHaveLength(0)
   })
 
-  test('Should surface a rejected change without losing the table', async () => {
-    const onChangeClassification = vi
-      .fn()
-      .mockRejectedValue(new Error('is not merged'))
+  test('Should discard the drafted classification on cancel', async () => {
+    const onChangeClassification = vi.fn().mockResolvedValue({})
     renderLog({ editable: true, onChangeClassification })
 
+    await userEvent.click(
+      screen.getByRole('button', {
+        name: 'Edit classification for commit a1b2c3d'
+      })
+    )
     await userEvent.selectOptions(
       screen.getByRole('combobox', {
         name: 'Classification for commit a1b2c3d'
       }),
       'Dependabot'
     )
+    await userEvent.click(
+      screen.getByRole('button', {
+        name: 'Cancel editing classification for commit a1b2c3d'
+      })
+    )
+
+    expect(onChangeClassification).not.toHaveBeenCalled()
+    expect(screen.queryAllByRole('combobox')).toHaveLength(0)
+    expect(screen.getByText('Copilot')).toBeInTheDocument()
+    expect(
+      screen.getByRole('button', {
+        name: 'Edit classification for commit a1b2c3d'
+      })
+    ).toHaveFocus()
+  })
+
+  test('Should not record an unchanged classification', async () => {
+    const onChangeClassification = vi.fn().mockResolvedValue({})
+    renderLog({ editable: true, onChangeClassification })
+
+    await userEvent.click(
+      screen.getByRole('button', {
+        name: 'Edit classification for commit a1b2c3d'
+      })
+    )
+    await userEvent.click(
+      screen.getByRole('button', {
+        name: 'Save classification for commit a1b2c3d'
+      })
+    )
+
+    expect(onChangeClassification).not.toHaveBeenCalled()
+    expect(screen.queryAllByRole('combobox')).toHaveLength(0)
+  })
+
+  test('Should close an open row when another row is opened', async () => {
+    const onChangeClassification = vi.fn().mockResolvedValue({})
+    renderLog({ editable: true, onChangeClassification })
+
+    await userEvent.click(
+      screen.getByRole('button', {
+        name: 'Edit classification for commit a1b2c3d'
+      })
+    )
+    await userEvent.selectOptions(
+      screen.getByRole('combobox', {
+        name: 'Classification for commit a1b2c3d'
+      }),
+      'Rebase'
+    )
+    await userEvent.click(
+      screen.getByRole('button', {
+        name: 'Edit classification for commit d4e5f6a'
+      })
+    )
+
+    expect(onChangeClassification).not.toHaveBeenCalled()
+    expect(screen.getAllByRole('combobox')).toHaveLength(1)
+    expect(
+      screen.getByRole('combobox', {
+        name: 'Classification for commit d4e5f6a'
+      })
+    ).toBeInTheDocument()
+    expect(
+      screen.getByRole('button', {
+        name: 'Edit classification for commit a1b2c3d'
+      })
+    ).toBeInTheDocument()
+  })
+
+  test('Should surface a rejected change and keep the row in edit mode', async () => {
+    const onChangeClassification = vi
+      .fn()
+      .mockRejectedValue(new Error('is not merged'))
+    renderLog({ editable: true, onChangeClassification })
+
+    await userEvent.click(
+      screen.getByRole('button', {
+        name: 'Edit classification for commit a1b2c3d'
+      })
+    )
+    await userEvent.selectOptions(
+      screen.getByRole('combobox', {
+        name: 'Classification for commit a1b2c3d'
+      }),
+      'Dependabot'
+    )
+    await userEvent.click(
+      screen.getByRole('button', {
+        name: 'Save classification for commit a1b2c3d'
+      })
+    )
 
     expect(await screen.findByRole('alert')).toHaveTextContent('is not merged')
     expect(screen.getByRole('table')).toBeInTheDocument()
+    expect(
+      screen.getByRole('combobox', {
+        name: 'Classification for commit a1b2c3d'
+      })
+    ).toHaveValue('Dependabot')
   })
 })
