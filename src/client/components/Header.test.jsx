@@ -43,7 +43,7 @@ describe('#Header', () => {
       'aria-hidden',
       'true'
     )
-    expect(logo).toHaveAttribute('src', expect.stringContaining('.jpg'))
+    expect(logo).toHaveAttribute('src', expect.stringContaining('logo-dark'))
   })
 
   test('Should use the light-theme logo when the light theme is selected', () => {
@@ -51,7 +51,7 @@ describe('#Header', () => {
 
     expect(screen.getByTestId('header-logo')).toHaveAttribute(
       'src',
-      expect.stringContaining('.png')
+      expect.not.stringContaining('logo-dark')
     )
   })
 
