@@ -34,6 +34,27 @@ describe('#Header', () => {
     ).toBeInTheDocument()
   })
 
+  test('Should keep the decorative analytics logo out of the accessible name', () => {
+    renderHeader()
+
+    const logo = screen.getByTestId('header-logo')
+
+    expect(logo).toHaveAttribute(
+      'aria-hidden',
+      'true'
+    )
+    expect(logo).toHaveAttribute('src', expect.stringContaining('.jpg'))
+  })
+
+  test('Should use the light-theme logo when the light theme is selected', () => {
+    renderHeader({ theme: 'light' })
+
+    expect(screen.getByTestId('header-logo')).toHaveAttribute(
+      'src',
+      expect.stringContaining('.png')
+    )
+  })
+
   test('Should convey the live status with text, not colour alone', () => {
     renderHeader({ connection: 'live' })
 

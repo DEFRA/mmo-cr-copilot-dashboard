@@ -1,4 +1,6 @@
 import { DateRangeFilter } from './DateRangeFilter'
+import copilotAnalyticsLogo from '../assets/copilot-analytics-logo.png'
+import copilotAnalyticsDarkLogo from '../assets/copilot-analtyics-logo-dark.png'
 
 /**
  * Live/custom status indicator. In live mode it is a non-interactive green
@@ -69,17 +71,15 @@ export function Header({
   return (
     <header className="relative z-50 flex flex-wrap items-center justify-between gap-3 border-b border-[var(--color-border)] bg-[var(--color-bg-elev)]/80 px-4 py-3 backdrop-blur md:px-6">
       <div className="flex items-center gap-3">
-        <span
+        <img
+          data-testid="header-logo"
+          src={
+            theme === 'dark' ? copilotAnalyticsDarkLogo : copilotAnalyticsLogo
+          }
+          alt=""
           aria-hidden="true"
-          className="grid h-9 w-9 place-items-center rounded-[var(--radius-card)] text-lg"
-          style={{
-            background:
-              'linear-gradient(150deg, var(--color-copilot), var(--color-accent))',
-            color: 'white'
-          }}
-        >
-          ✦
-        </span>
+          className="h-14 w-14 shrink-0 object-contain"
+        />
         <div>
           <h1 className="text-base font-semibold leading-tight text-[var(--color-text)]">
             MMO Catch Recording Code Delivery Insights
