@@ -35,6 +35,7 @@ describe('#CommitLog', () => {
         repository="DEFRA/mmo-cr-copilot-dashboard"
         prNumber={42}
         commits={COMMITS}
+        canReclassify
         onChangeClassification={vi.fn()}
         {...props}
       />
@@ -55,9 +56,9 @@ describe('#CommitLog', () => {
     expect(
       screen.queryByRole('button', { name: /^Edit classification/ })
     ).not.toBeInTheDocument()
-    expect(screen.getByText('Copilot')).toBeInTheDocument()
+    expect(screen.getByText('Copilot-assisted')).toBeInTheDocument()
     expect(
-      screen.getByText(/editable once the PR is merged/)
+      screen.getByText(/classification can be corrected once merged/)
     ).toBeInTheDocument()
   })
 
@@ -67,7 +68,7 @@ describe('#CommitLog', () => {
     expect(
       screen.getAllByRole('button', { name: /^Edit classification/ })
     ).toHaveLength(2)
-    expect(screen.getByText('Copilot')).toBeInTheDocument()
+    expect(screen.getByText('Copilot-assisted')).toBeInTheDocument()
     expect(screen.queryAllByRole('combobox')).toHaveLength(0)
   })
 
@@ -158,7 +159,7 @@ describe('#CommitLog', () => {
 
     expect(onChangeClassification).not.toHaveBeenCalled()
     expect(screen.queryAllByRole('combobox')).toHaveLength(0)
-    expect(screen.getByText('Copilot')).toBeInTheDocument()
+    expect(screen.getByText('Copilot-assisted')).toBeInTheDocument()
     expect(
       screen.getByRole('button', {
         name: 'Edit classification for commit a1b2c3d'
@@ -250,5 +251,79 @@ describe('#CommitLog', () => {
         name: 'Classification for commit a1b2c3d'
       })
     ).toHaveValue('Dependabot')
+  })
+
+  test('Should render the classification actions column when canReclassify', () => {
+    renderLog({ editable: true })
+
+    expect(
+      screen.getByRole('columnheader', { name: /Classification actions/ })
+    ).toBeInTheDocument()
+  })
+
+  test('Should show only the badge when the user cannot reclassify', () => {
+    renderLog({ editable: true, canReclassify: false })
+
+    expect(
+      screen.queryByRole('columnheader', { name: /Classification actions/ })
+    ).not.toBeInTheDocument()
+    expect(screen.queryByText('Admin only')).not.toBeInTheDocument()
+    expect(screen.queryAllByRole('button')).toHaveLength(0)
+    expect(screen.queryAllByRole('combobox')).toHaveLength(0)
+    expect(screen.getByText('Human-authored')).toBeInTheDocument()
+    expect(screen.queryByText(/admins/)).not.toBeInTheDocument()
+  })
+
+  test('Should hide every admin control by default', () => {
+    render(
+      <CommitLog
+        repository="DEFRA/mmo-cr-copilot-dashboard"
+        prNumber={42}
+        commits={COMMITS}
+        editable
+      />
+    )
+
+    expect(screen.queryByRole('button', { name: /Edit/ })).toBeNull()
+    expect(
+      screen.queryByRole('columnheader', { name: /Classification actions/ })
+    ).toBeNull()
+    expect(screen.queryByText(/admins|can be corrected/)).toBeNull()
+  })
+
+  test('Should badge excluded commits as excluded', () => {
+    renderLog({
+      commits: [
+        { ...COMMITS[0], classification: 'Rebase' },
+        { ...COMMITS[1], classification: 'Dependabot' }
+      ]
+    })
+
+    expect(screen.getByText('Excluded: rebase')).toBeInTheDocument()
+    expect(screen.getByText('Excluded: Dependabot')).toBeInTheDocument()
+  })
+
+  test('Should fall back to a generic message when a change fails without one', async () => {
+    const onChangeClassification = vi.fn().mockRejectedValue(new Error(''))
+    renderLog({ editable: true, onChangeClassification })
+
+    await userEvent.click(
+      screen.getByRole('button', {
+        name: 'Edit classification for commit a1b2c3d'
+      })
+    )
+    await userEvent.selectOptions(
+      screen.getByRole('combobox', {
+        name: 'Classification for commit a1b2c3d'
+      }),
+      'Human-authored'
+    )
+    await userEvent.keyboard('{Enter}')
+
+    expect(await screen.findByRole('alert')).toHaveTextContent(
+      'Failed to update the classification.'
+    )
+    await userEvent.keyboard('{Escape}')
+    expect(screen.queryAllByRole('combobox')).toHaveLength(0)
   })
 })

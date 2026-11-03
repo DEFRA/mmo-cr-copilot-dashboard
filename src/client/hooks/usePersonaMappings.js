@@ -1,11 +1,12 @@
 /**
- * usePersonaMappings — fetches and mutates the GitHub handle → persona role
- * mapping via the backend proxy (`/api/persona-mappings`). Backs the Settings
- * page, and feeds `buildContributorPersonaMap` for persona attribution
- * elsewhere in the dashboard.
+ * usePersonaMappings — fetches and mutates one project's GitHub handle →
+ * persona role mapping via the backend proxy. Backs the Settings page, and
+ * feeds `buildContributorPersonaMap` for persona attribution elsewhere.
  *
  * Returns:
- *   mappings — array of { githubHandle, persona, updatedAt }
+ *   mappings — array of { githubHandle, persona, updatedAt, scope }, where
+ *              scope 'default' marks a read-only mapping from before
+ *              mappings were scoped to a project
  *   status   — 'idle' | 'loading' | 'success' | 'error'
  *   error    — Error message string, or null
  *   upsert(githubHandle, persona) — creates or replaces a mapping
@@ -13,9 +14,10 @@
  *   refresh()                     — re-fetches the list
  */
 import { useCallback, useEffect, useState } from 'react'
-import { apiUrl } from '../lib/api'
+import { apiFetch, apiUrl, jsonWrite } from '../lib/api'
 
-const ENDPOINT = '/api/persona-mappings'
+const endpointFor = (slug) =>
+  `/api/projects/${encodeURIComponent(slug)}/persona-mappings`
 
 async function parseJson(response) {
   const text = await response.text()
@@ -26,7 +28,7 @@ function byHandle(a, b) {
   return a.githubHandle.localeCompare(b.githubHandle)
 }
 
-export function usePersonaMappings() {
+export function usePersonaMappings(projectSlug) {
   const [state, setState] = useState({
     mappings: [],
     status: 'idle',
@@ -35,10 +37,14 @@ export function usePersonaMappings() {
   const [reloadToken, setReloadToken] = useState(0)
 
   useEffect(() => {
+    if (!projectSlug) {
+      setState({ mappings: [], status: 'idle', error: null })
+      return undefined
+    }
     const controller = new AbortController()
-    setState((s) => ({ ...s, status: 'loading', error: null }))
+    setState({ mappings: [], status: 'loading', error: null })
 
-    fetch(apiUrl(ENDPOINT), {
+    apiFetch(apiUrl(endpointFor(projectSlug)), {
       signal: controller.signal,
       headers: { Accept: 'application/json' }
     })
@@ -64,58 +70,58 @@ export function usePersonaMappings() {
       })
 
     return () => controller.abort()
-  }, [reloadToken])
+  }, [projectSlug, reloadToken])
 
   const refresh = useCallback(() => setReloadToken((t) => t + 1), [])
 
-  const upsert = useCallback(async (githubHandle, persona) => {
-    const res = await fetch(
-      apiUrl(`${ENDPOINT}/${encodeURIComponent(githubHandle)}`),
-      {
-        method: 'PUT',
-        headers: {
-          'Content-Type': 'application/json',
-          Accept: 'application/json'
-        },
-        body: JSON.stringify({ persona })
-      }
-    )
-
-    const body = await parseJson(res)
-    if (!res.ok) {
-      throw new Error(body?.message || `Request failed (${res.status})`)
-    }
-
-    setState((s) => ({
-      ...s,
-      mappings: [
-        ...s.mappings.filter(
-          (m) => m.githubHandle.toLowerCase() !== githubHandle.toLowerCase()
-        ),
-        body
-      ].sort(byHandle)
-    }))
-
-    return body
-  }, [])
-
-  const remove = useCallback(async (githubHandle) => {
-    const res = await fetch(
-      apiUrl(`${ENDPOINT}/${encodeURIComponent(githubHandle)}`),
-      { method: 'DELETE' }
-    )
-
-    if (!res.ok && res.status !== 404) {
-      throw new Error(`Request failed (${res.status})`)
-    }
-
-    setState((s) => ({
-      ...s,
-      mappings: s.mappings.filter(
-        (m) => m.githubHandle.toLowerCase() !== githubHandle.toLowerCase()
+  const upsert = useCallback(
+    async (githubHandle, persona) => {
+      const res = await jsonWrite(
+        `${endpointFor(projectSlug)}/${encodeURIComponent(githubHandle)}`,
+        'PUT',
+        { persona }
       )
-    }))
-  }, [])
+
+      const body = await parseJson(res)
+      if (!res.ok) {
+        throw new Error(body?.message || `Request failed (${res.status})`)
+      }
+
+      setState((s) => ({
+        ...s,
+        mappings: [
+          ...s.mappings.filter(
+            (m) => m.githubHandle.toLowerCase() !== githubHandle.toLowerCase()
+          ),
+          body
+        ].sort(byHandle)
+      }))
+
+      return body
+    },
+    [projectSlug]
+  )
+
+  const remove = useCallback(
+    async (githubHandle) => {
+      const res = await jsonWrite(
+        `${endpointFor(projectSlug)}/${encodeURIComponent(githubHandle)}`,
+        'DELETE'
+      )
+
+      if (!res.ok && res.status !== 404) {
+        throw new Error(`Request failed (${res.status})`)
+      }
+
+      setState((s) => ({
+        ...s,
+        mappings: s.mappings.filter(
+          (m) => m.githubHandle.toLowerCase() !== githubHandle.toLowerCase()
+        )
+      }))
+    },
+    [projectSlug]
+  )
 
   return { ...state, upsert, remove, refresh }
 }

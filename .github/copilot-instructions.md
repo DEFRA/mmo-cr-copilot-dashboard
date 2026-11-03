@@ -29,8 +29,9 @@ When guidance conflicts, follow this order:
 > Any deviation from a DEFRA standard MUST be raised as a formal exception through DEFRA's
 > architectural governance (Delivery Architecture team: `delivery.architecture@defra.gov.uk`).
 
-This service is an internal analytics tool, **not** a public GOV.UK transactional service, so the
-GOV.UK Design System does not apply to its UI. Everything above it in the precedence list still does.
+This service is an internal analytics tool, **not** a public GOV.UK transactional service. Its UI is
+built with GOV.UK Frontend and MOJ Frontend under non-GOV.UK branding (Arial, no crown) — see
+[ADR 0001](docs/adr/0001-adopt-govuk-frontend.md).
 
 ## 2. Mandatory DEFRA constraints (apply to all work)
 
@@ -167,8 +168,10 @@ lean registry in `src/client/lib/echarts.js`.
 **Both** — vitest (two projects: `server` under Node, `client` under jsdom), neostandard, prettier.
 Do not fight the formatter.
 
-This is **not** a GOV.UK Design System service. There is no `govuk-frontend`, no GDS SCSS, and no
-Nunjucks page templates beyond the shell the React app mounts into.
+The UI uses **GOV.UK Frontend + MOJ Frontend** (Sass via Vite) with non-GOV.UK branding (Arial, no
+crown); [docs/design-system.md](docs/design-system.md) governs look-and-feel. Tailwind is legacy,
+being removed by E1-S12 — write no new Tailwind. There are no Nunjucks page templates beyond the
+shell the React app mounts into.
 
 ## 6. Build & test commands
 
@@ -183,6 +186,9 @@ Nunjucks page templates beyond the shell the React app mounts into.
 - Full pre-commit gate: `npm run git:pre-commit-hook`
 
 ## 7. Rule sources — read before editing
+
+Before architecture-affecting work, read the [ADRs](docs/adr/README.md) and the
+[metric definitions](docs/metrics.md).
 
 Read the instruction files whose `applyTo` matches the files you are touching:
 
@@ -201,6 +207,8 @@ Client:
 - [dashboard-charts](.github/instructions/dashboard-charts.instructions.md) — charting library, chart
   patterns, colour, animation, layout.
 - [accessibility](.github/instructions/accessibility.instructions.md) — WCAG 2.2 AA.
+- [design system](docs/design-system.md) — **mandatory for all UI work**; the source of truth for
+  visual design.
 
 Both:
 
@@ -251,6 +259,13 @@ Agents:
 - **Validate every payload from the feed** before rendering it; drop malformed entries.
 - **Config through convict** (`src/config/config.js` is the only place `process.env` is read);
   logging through the injected logger; joi on every route that accepts input.
+- **Title Case for every title and heading, dashboard-wide.** Page titles, scope headers,
+  subsections, panels, chart figures, KPI labels, drill panels and cards all use Title Case — this is
+  not a rule for one chart or section. Joining words (a, an, and, as, at, by, for, in, of, on, or,
+  per, the, to, vs) stay lower case unless first; acronyms (PR, DORA) and identifiers (repository
+  names, handles, Jira keys) stay as written. Write new source strings in Title Case; the shared
+  heading components also apply `headingCase()`. Body text, buttons, links and messages stay in
+  sentence case. Full rule: [design system §10](docs/design-system.md#10-content-rules).
 - **Comment only what the code cannot say itself** — a library constraint, a contract quirk, a
   non-obvious ordering requirement. Never narrate the next line.
 - **JavaScript style:** ES modules, `neostandard` (Standard-style, no semicolons); descriptive names;

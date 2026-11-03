@@ -1,87 +1,63 @@
 import { useMemo } from 'react'
 import { Chart } from './Chart'
-import { getPalette } from '../../lib/palette'
+import { getAppPalette } from '../../lib/palette'
+import { textStyle } from '../../lib/chart-style'
 
 /**
- * Radial gauge for a 0–100 rate with threshold bands. Status is conveyed by the
- * numeric readout + band label, not colour alone.
+ * Radial gauge for a 0–100 rate. Status is conveyed by the numeric readout,
+ * not colour alone. Design rules allow gauges only as decorative KPI minis.
  */
-export function StatusGauge({ value, title, theme, height = 260 }) {
+export function StatusGauge({ value, title, height = 260 }) {
   const option = useMemo(() => {
-    const p = getPalette()
+    const p = getAppPalette()
     return {
       series: [
         {
           type: 'gauge',
-          startAngle: 210,
-          endAngle: -30,
+          startAngle: 180,
+          endAngle: 0,
           min: 0,
           max: 100,
-          radius: '92%',
-          center: ['50%', '58%'],
+          radius: '96%',
+          center: ['50%', '62%'],
           progress: {
             show: true,
-            width: 18,
+            width: 16,
             roundCap: true,
-            itemStyle: {
-              color: {
-                type: 'linear',
-                x: 0,
-                y: 0,
-                x2: 1,
-                y2: 0,
-                colorStops: [
-                  { offset: 0, color: p.copilot },
-                  { offset: 1, color: p.accent }
-                ]
-              }
-            }
+            itemStyle: { color: p.copilot }
           },
-          // Light, neutral track behind the progress arc (empty → 100%).
           axisLine: {
             roundCap: true,
-            lineStyle: { width: 18, color: [[1, p.border]] }
+            lineStyle: { width: 16, color: [[1, p.neutral]] }
           },
-          // Needle: theme-aware pastel, pivoted at the centre. Sweeps from 0 to
-          // the value on mount via the wrapper's series animation.
           pointer: {
             show: true,
-            length: '60%',
-            width: 6,
-            itemStyle: {
-              color: p.gaugeNeedle,
-              shadowBlur: 6,
-              shadowColor: 'rgba(0,0,0,0.18)'
-            }
+            length: '62%',
+            width: 4,
+            itemStyle: { color: p.text }
           },
           anchor: {
             show: true,
             showAbove: true,
-            size: 16,
-            itemStyle: {
-              color: p.gaugeNeedle,
-              borderColor: p.surface,
-              borderWidth: 3
-            }
+            size: 10,
+            itemStyle: { color: p.text }
           },
           axisTick: { show: false },
           splitLine: { show: false },
           axisLabel: { show: false },
-          title: { offsetCenter: [0, '82%'], color: p.textMuted, fontSize: 12 },
-          detail: {
+          title: textStyle(p, { offsetCenter: [0, '50%'], color: p.muted }),
+          detail: textStyle(p, {
             valueAnimation: true,
-            offsetCenter: [0, '40%'],
+            offsetCenter: [0, '24%'],
             formatter: (v) => `${v.toFixed(1)}%`,
-            color: p.text,
             fontSize: 26,
-            fontWeight: 700
-          },
+            fontWeight: 'bold'
+          }),
           data: [{ value, name: title }]
         }
       ]
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [value, title, theme])
+  }, [value, title])
 
   return (
     <Chart

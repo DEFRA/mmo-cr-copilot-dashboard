@@ -1,66 +1,56 @@
 import { useMemo } from 'react'
 import { Chart } from './Chart'
-import { getPalette } from '../../lib/palette'
+import { getAppPalette } from '../../lib/palette'
+import { escapeHtml, textStyle, tooltip } from '../../lib/chart-style'
 
 /**
  * Treemap of hierarchical composition — repo → PR → lines touched. Area encodes
- * volume; colour intensity encodes Copilot assist rate. Clicking a repo tile
- * can drive drill-down via `onSelect`.
+ * volume; a three-step assist scale encodes Copilot assist rate, which is also
+ * written on every tile. Clicking a repo tile can drive drill-down via `onSelect`.
  */
-export function BreakdownTreemap({
-  nodes,
-  title,
-  theme,
-  height = 360,
-  onSelect
-}) {
+export function BreakdownTreemap({ nodes, title, height = 360, onSelect }) {
   // nodes: [{ name, value, rate, key, children? }]
   const option = useMemo(() => {
-    const p = getPalette()
-    const colorForRate = (r) => {
-      if (r >= 80) return p.sequential[4]
-      if (r >= 65) return p.sequential[3]
-      if (r >= 50) return p.sequential[2]
-      if (r >= 30) return p.sequential[1]
-      return p.sequential[0]
+    const p = getAppPalette()
+    const assist = p.family.assist
+    const styleForRate = (r) => {
+      if (r >= 65) return { fill: assist.ink, ink: p.white }
+      if (r >= 30) return { fill: assist.band, ink: p.text }
+      return { fill: assist.tint, ink: p.text }
     }
 
     const decorate = (list) =>
-      list.map((n) => ({
-        name: n.name,
-        value: n.value,
-        key: n.key,
-        itemStyle: {
-          color: colorForRate(n.rate),
-          borderColor: p.surface,
-          borderWidth: 2
-        },
-        label: { formatter: `${n.name}\n${n.rate}%` },
-        children: n.children ? decorate(n.children) : undefined
-      }))
+      list.map((n) => {
+        const { fill, ink } = styleForRate(n.rate)
+        return {
+          name: n.name,
+          value: n.value,
+          key: n.key,
+          rate: n.rate,
+          itemStyle: { color: fill, borderColor: p.white, borderWidth: 2 },
+          label: { color: ink, formatter: `{b}\n${n.rate ?? '—'}%` },
+          children: n.children ? decorate(n.children) : undefined
+        }
+      })
 
     return {
-      tooltip: {
-        backgroundColor: p.surface2,
-        borderColor: p.border,
-        textStyle: { color: p.text },
+      tooltip: tooltip(p, {
         formatter: (info) =>
-          `<b>${info.name}</b><br/>Lines touched: ${info.value}<br/>Assist rate: ${
-            info.data.label?.formatter?.split('\n')[1] ?? ''
-          }`
-      },
+          `<b>${escapeHtml(info.name)}</b><br/>Lines touched: ${info.value}<br/>Assist rate: ${info.data.rate ?? '—'}%`
+      }),
       series: [
         {
           type: 'treemap',
           roam: false,
           nodeClick: false,
           breadcrumb: { show: false },
-          label: {
-            color: p.text,
-            fontSize: 12,
-            fontWeight: 600,
+          width: '100%',
+          height: '100%',
+          label: textStyle(p, {
+            fontWeight: 'bold',
+            lineHeight: 18,
             overflow: 'truncate'
-          },
+          }),
           upperLabel: { show: false },
           itemStyle: { gapWidth: 2 },
           levels: [{ itemStyle: { gapWidth: 3 } }],
@@ -68,8 +58,7 @@ export function BreakdownTreemap({
         }
       ]
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [nodes, theme])
+  }, [nodes])
 
   const handleEvents = useMemo(
     () =>

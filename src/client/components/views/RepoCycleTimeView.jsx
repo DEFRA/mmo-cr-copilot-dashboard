@@ -1,161 +1,171 @@
-import { useMemo } from 'react'
-import { Panel } from '../Panel'
-import { KpiCard } from '../charts/KpiCard'
+import { useId, useMemo } from 'react'
+
+import { ChartFigure, KpiCard, Panel, PanelState } from '../dashboard'
 import { CategoryBar } from '../charts/CategoryBar'
 import { CycleTimeScatter } from '../charts/CycleTimeScatter'
 import {
-  selectRepoPRs,
-  selectDeliveryMetrics,
-  computePrMetrics,
   formatDuration,
+  selectCycleTimeStats,
+  selectRepoCyclePoints,
   shortRepoName
 } from '../../lib/selectors'
+import { METRICS_DOC, PERIOD_CHIP, ScopeHeader, plural } from './scope.jsx'
 
-const median = (nums) => {
-  if (!nums.length) return 0
-  const s = [...nums].sort((a, b) => a - b)
-  const mid = Math.floor(s.length / 2)
-  return s.length % 2 ? s[mid] : (s[mid - 1] + s[mid]) / 2
-}
+const shortDate = (ms) =>
+  new Date(ms).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })
 
 /**
- * Dedicated per-repository cycle-time page. Plots every pull request against
- * its cycle time (scatter over merge date), with a ranked bar as a secondary
- * view. Hovering a point reveals all delivery metrics plus the contributors.
+ * PR coding cycle time for one repository: summary cards, every pull request
+ * by merge date, and a slowest-first ranking. Each chart opens a pull request.
  */
 export function RepoCycleTimeView({ payloads, repository, onOpenPR }) {
-  const prs = useMemo(
-    () => selectRepoPRs(payloads, repository),
+  const scopeId = useId()
+  const name = shortRepoName(repository)
+  const points = useMemo(
+    () => selectRepoCyclePoints(payloads, repository),
     [payloads, repository]
   )
-  const delivery = useMemo(
-    () =>
-      selectDeliveryMetrics(payloads).filter(
-        (m) => m.repository === repository
-      ),
-    [payloads, repository]
-  )
-
-  // One scatter point per PR, joining delivery metrics with contributor names.
-  // PRs without a usable timestamp are skipped rather than plotted at an
-  // invalid position.
-  const points = useMemo(() => {
-    const byPr = new Map(delivery.map((m) => [m.prNumber, m]))
-    return prs
-      .map((pr) => {
-        const m = byPr.get(pr.prNumber) ?? {}
-        const prm = computePrMetrics(pr)
-        const stamp = pr.prMergedAt ?? pr.lastCommitAt ?? pr.calculatedAt
-        const mergedAt = new Date(stamp).getTime()
-        if (!Number.isFinite(mergedAt)) return null
-        const contributors = Array.from(prm.byContributor.entries())
-          .filter(([, c]) => c.totalCommits > 0)
-          .map(([author]) => author)
-        return {
-          prNumber: pr.prNumber,
-          mergedAt,
-          cycleHours: m.cycleHours ?? 0,
-          timeToMergeHours: m.timeToMergeHours ?? 0,
-          batchSize: m.avgCommitSize ?? 0,
-          assistRate: prm.copilotAssistedRate,
-          linesAdded: m.linesAdded ?? 0,
-          linesDeleted: m.linesDeleted ?? 0,
-          contributors
-        }
-      })
-      .filter(Boolean)
-  }, [prs, delivery])
-
-  const stats = useMemo(() => {
-    const cycles = points.map((p) => p.cycleHours).filter((h) => h > 0)
-    return {
-      avg: cycles.length
-        ? cycles.reduce((a, b) => a + b, 0) / cycles.length
-        : 0,
-      med: median(cycles),
-      fastest: cycles.length ? Math.min(...cycles) : 0,
-      slowest: cycles.length ? Math.max(...cycles) : 0,
-      prCount: points.length
-    }
-  }, [points])
-
-  // Bar view ordered by cycle time (slowest first) for quick ranking.
+  const stats = useMemo(() => selectCycleTimeStats(points), [points])
   const ranked = useMemo(
     () => [...points].sort((a, b) => b.cycleHours - a.cycleHours),
     [points]
   )
 
-  if (prs.length === 0) {
+  const header = (
+    <ScopeHeader
+      id={scopeId}
+      level="Speed"
+      icon="clock"
+      title="PR coding cycle time"
+      meta={`${name} · ${plural(stats.prCount, 'pull request')}`}
+    />
+  )
+
+  if (points.length === 0) {
     return (
-      <Panel
-        title="Cycle time"
-        state="empty"
-        subtitle="No pull requests in the selected window."
-      />
+      <section className="app-scope" aria-labelledby={scopeId}>
+        {header}
+        <Panel title="PR coding cycle time" family="speed" icon="clock">
+          <PanelState
+            state="empty"
+            title="PR coding cycle time"
+            icon="clock"
+            emptyMessage="No pull requests for this repository in the selected period."
+          />
+        </Panel>
+      </section>
     )
   }
 
+  const cards = [
+    {
+      label: 'PR coding cycle time',
+      value: formatDuration(stats.avg),
+      sub: `Average across ${plural(stats.measured, 'pull request')}`
+    },
+    {
+      label: 'Median PR coding cycle time',
+      value: formatDuration(stats.median),
+      sub: 'Half of pull requests were faster'
+    },
+    {
+      label: 'Fastest PR coding cycle time',
+      value: formatDuration(stats.fastest),
+      sub: 'Shortest first commit to last commit'
+    },
+    {
+      label: 'Slowest PR coding cycle time',
+      value: formatDuration(stats.slowest),
+      sub: 'Longest first commit to last commit'
+    }
+  ]
+
+  const columns = [
+    { id: 'pr', label: 'Pull request' },
+    { id: 'date', label: 'Merged or last commit' },
+    { id: 'cycle', label: 'PR coding cycle time (hours)', numeric: true },
+    { id: 'merge', label: 'Time to merge (hours)', numeric: true },
+    { id: 'batch', label: 'Average batch size (lines)', numeric: true },
+    { id: 'assist', label: 'Commit assist rate (%)', numeric: true },
+    { id: 'who', label: 'Contributors' }
+  ]
+  const tableRows = (list) =>
+    list.map((p) => [
+      `#${p.prNumber}`,
+      shortDate(p.mergedAt),
+      p.cycleHours,
+      p.merged ? p.timeToMergeHours : 'Not merged',
+      p.batchSize,
+      p.assistRate,
+      p.contributors.join(', ')
+    ])
+
   return (
-    <div className="flex flex-col gap-4">
-      <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
-        <KpiCard
-          label="Avg Cycle Time"
-          value={formatDuration(stats.avg)}
-          accent="var(--color-primary)"
-          icon="⏱"
-          footnote={`Across ${stats.prCount} pull requests`}
-          info="Average hours between a PR's first and last commit for this repository."
-        />
-        <KpiCard
-          label="Median Cycle Time"
-          value={formatDuration(stats.med)}
-          accent="var(--color-info)"
-          icon="≈"
-          footnote="Typical PR duration"
-          info="The middle cycle time — half of PRs finished faster, half slower. Less skewed by a few very long PRs than the average."
-        />
-        <KpiCard
-          label="Fastest"
-          value={formatDuration(stats.fastest)}
-          accent="var(--color-success)"
-          icon="⚡"
-          footnote="Shortest cycle time"
-          info="The single shortest first-commit-to-last-commit duration among this repository's PRs."
-        />
-        <KpiCard
-          label="Slowest"
-          value={formatDuration(stats.slowest)}
-          accent="var(--color-danger)"
-          icon="🐢"
-          footnote="Longest cycle time"
-          info="The single longest first-commit-to-last-commit duration among this repository's PRs."
-        />
+    <section className="app-scope" aria-labelledby={scopeId}>
+      {header}
+
+      <div className="app-kpi-grid">
+        {cards.map((card, index) => (
+          <KpiCard
+            key={card.label}
+            {...card}
+            family="speed"
+            icon="clock"
+            index={index}
+          />
+        ))}
       </div>
+      <p className="govuk-body-s govuk-!-margin-top-3">
+        <a
+          className="govuk-link"
+          href={`${METRICS_DOC}#metric-pr-coding-cycle-time`}
+        >
+          PR coding cycle time definition
+        </a>
+      </p>
 
-      <Panel
-        title={`Cycle time by pull request — ${shortRepoName(repository)}`}
-        subtitle="Each bubble is a PR · x = merge date · y = cycle time · size = batch · colour = assist rate · click to open the PR"
-      >
-        <CycleTimeScatter
-          title={`Cycle time by pull request for ${shortRepoName(repository)}`}
-          points={points}
-          onSelect={(prNumber) => onOpenPR(repository, prNumber)}
-        />
-      </Panel>
+      <div className="app-grid govuk-!-margin-top-5">
+        <ChartFigure
+          number={1}
+          title="Coding Cycle Time by Merge Date"
+          subtitle={`PR coding cycle time per pull request against merge date (or last commit when open), hours, ${name}, selected period. Bubble size is average batch size; colour is commit assist rate.`}
+          description={`The average is ${formatDuration(stats.avg)} and the median ${formatDuration(stats.median)}. Pull request #${ranked[0].prNumber} was slowest at ${formatDuration(stats.slowest)}.`}
+          family="speed"
+          icon="scatter"
+          chip={PERIOD_CHIP}
+          className="app-span-12"
+          columns={columns}
+          rows={tableRows(points)}
+        >
+          <CycleTimeScatter
+            title="PR coding cycle time by merge date"
+            points={points}
+            onSelect={(prNumber) => onOpenPR(repository, prNumber)}
+          />
+        </ChartFigure>
 
-      <Panel
-        title="Cycle time ranking"
-        subtitle="Pull requests ordered slowest → fastest · click a bar to open the PR"
-      >
-        <CategoryBar
-          title="Cycle time by pull request"
-          categories={ranked.map((p) => `#${p.prNumber}`)}
-          values={ranked.map((p) => p.cycleHours)}
-          seriesName="cycle time"
-          unit=" h"
-          onSelect={(i) => onOpenPR(repository, ranked[i].prNumber)}
-        />
-      </Panel>
-    </div>
+        <ChartFigure
+          number={2}
+          title="Coding Cycle Time by PR"
+          subtitle={`PR coding cycle time per pull request, slowest first, hours, ${name}, selected period`}
+          description={`Pull request #${ranked[0].prNumber} was slowest at ${formatDuration(stats.slowest)} and #${ranked.at(-1).prNumber} fastest.`}
+          family="speed"
+          icon="bars"
+          chip={PERIOD_CHIP}
+          className="app-span-12"
+          columns={columns}
+          rows={tableRows(ranked)}
+        >
+          <CategoryBar
+            title="PR coding cycle time by pull request"
+            categories={ranked.map((p) => `#${p.prNumber}`)}
+            values={ranked.map((p) => p.cycleHours)}
+            seriesName="PR coding cycle time"
+            unit=" h"
+            onSelect={(i) => onOpenPR(repository, ranked[i].prNumber)}
+          />
+        </ChartFigure>
+      </div>
+    </section>
   )
 }

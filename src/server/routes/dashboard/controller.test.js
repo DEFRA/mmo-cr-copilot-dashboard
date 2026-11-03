@@ -70,6 +70,46 @@ describe('#dashboard route', () => {
     expect($('noscript').text()).toContain('needs JavaScript')
   })
 
+  test('Should use the GOV.UK template classes without a theme attribute', async () => {
+    const { $ } = await render()
+
+    expect($('html').hasClass('govuk-template')).toBe(true)
+    expect($('html').attr('data-theme')).toBeUndefined()
+    expect($('body').hasClass('govuk-template__body')).toBe(true)
+    expect($('meta[name="theme-color"]').attr('content')).toBe('#008531')
+  })
+
+  test('Should link the Defra favicons', async () => {
+    const { $ } = await render()
+
+    expect($('link[rel="icon"][type="image/svg+xml"]').attr('href')).toBe(
+      '/public/images/favicon.svg'
+    )
+    expect($('link[rel="icon"][sizes="48x48"]').attr('href')).toBe(
+      '/public/images/favicon.ico'
+    )
+    expect($('link[rel="apple-touch-icon"]').attr('href')).toBe(
+      '/public/images/apple-touch-icon.png'
+    )
+  })
+
+  test('Should hand the session cookie details to the client', async () => {
+    const { $ } = await render()
+
+    expect($('#root').attr('data-session-cookie-name')).toBe('session')
+    expect($('#root').attr('data-session-cookie-ttl-hours')).toBe('8')
+  })
+
+  test('Should render the skip link as the first focusable element', async () => {
+    const { $ } = await render()
+
+    const first = $('body').find('a, button, input, select, textarea').first()
+
+    expect(first.hasClass('govuk-skip-link')).toBe(true)
+    expect(first.attr('href')).toBe('#main-content')
+    expect(first.text()).toBe('Skip to main content')
+  })
+
   test('Should send a content security policy that forbids inline script', async () => {
     const { response } = await render()
     const csp = response.headers['content-security-policy']

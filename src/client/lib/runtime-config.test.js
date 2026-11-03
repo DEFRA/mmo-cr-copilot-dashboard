@@ -43,7 +43,19 @@ describe('#readRuntimeConfig', () => {
 
     expect(readRuntimeConfig()).toEqual({
       pollIntervalMs: 15000,
-      serviceName: 'Copilot Analytics Dashboard'
+      serviceName: 'Copilot Analytics Dashboard',
+      sessionCookieName: 'session',
+      sessionCookieTtlHours: 8
+    })
+  })
+
+  test('Should read the session cookie details for the cookies page', () => {
+    document.body.innerHTML =
+      '<div id="root" data-session-cookie-name="dash" data-session-cookie-ttl-hours="8"></div>'
+
+    expect(readRuntimeConfig()).toMatchObject({
+      sessionCookieName: 'dash',
+      sessionCookieTtlHours: 8
     })
   })
 })

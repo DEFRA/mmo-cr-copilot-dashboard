@@ -1,5 +1,4 @@
 import { createServer } from '#/server/server.js'
-import { statusCodes } from '#/server/common/constants/status-codes.js'
 
 describe('#serveStaticFiles', () => {
   let server
@@ -16,13 +15,14 @@ describe('#serveStaticFiles', () => {
       await server.stop({ timeout: 0 })
     })
 
-    test('Should serve favicon as expected', async () => {
-      const { statusCode } = await server.inject({
+    test('Should redirect the favicon to the Defra favicon', async () => {
+      const { statusCode, headers } = await server.inject({
         method: 'GET',
         url: '/favicon.ico'
       })
 
-      expect(statusCode).toBe(statusCodes.noContent)
+      expect(statusCode).toBe(301)
+      expect(headers.location).toBe('/public/images/favicon.ico')
     })
   })
 })

@@ -1,7 +1,13 @@
 import { useMemo } from 'react'
 import { Chart } from './Chart'
-import { getPalette } from '../../lib/palette'
+import { getAppPalette } from '../../lib/palette'
 import { formatDuration } from '../../lib/selectors'
+import {
+  escapeHtml,
+  textStyle,
+  tooltip,
+  valueAxis
+} from '../../lib/chart-style'
 
 /**
  * Cycle-time scatter for a single repository. Each point is a pull request:
@@ -11,22 +17,20 @@ import { formatDuration } from '../../lib/selectors'
  */
 export function CycleTimeScatter({ points, title, height = 400, onSelect }) {
   const option = useMemo(() => {
-    const p = getPalette()
+    const p = getAppPalette()
+    const assist = p.family.assist
     const maxSize = Math.max(1, ...points.map((pt) => pt.batchSize))
     const assistVals = points.map((pt) => pt.assistRate)
     const minA = Math.min(0, ...assistVals)
     const maxA = Math.max(100, ...assistVals)
 
     return {
-      grid: { left: 60, right: 28, top: 58, bottom: 48 },
-      tooltip: {
-        backgroundColor: p.surface2,
-        borderColor: p.border,
-        textStyle: { color: p.text },
+      grid: { left: 8, right: 24, top: 56, bottom: 8, containLabel: true },
+      tooltip: tooltip(p, {
         formatter: (params) => {
           const d = params.data.meta
           const contributors = d.contributors.length
-            ? d.contributors.join(', ')
+            ? d.contributors.map(escapeHtml).join(', ')
             : '—'
           const merged = new Date(d.mergedAt).toLocaleString(undefined, {
             dateStyle: 'medium',
@@ -43,41 +47,33 @@ export function CycleTimeScatter({ points, title, height = 400, onSelect }) {
             `Contributors: ${contributors}`
           ].join('<br/>')
         }
-      },
+      }),
       visualMap: {
         type: 'continuous',
         min: minA,
         max: maxA,
         dimension: 3,
-        calculable: true,
+        calculable: false,
         orient: 'horizontal',
-        left: 'center',
-        top: 6,
-        itemWidth: 14,
-        itemHeight: 140,
+        right: 0,
+        top: 0,
+        itemWidth: 12,
+        itemHeight: 120,
         text: ['High assist', 'Low'],
-        textStyle: { color: p.textMuted, fontSize: 11 },
-        inRange: { color: p.sequential }
+        textStyle: textStyle(p, { color: p.muted }),
+        inRange: { color: [assist.tint, assist.band, assist.ink] }
       },
-      xAxis: {
+      xAxis: valueAxis(p, '', {
         type: 'time',
-        axisLabel: { color: p.textMuted, fontSize: 11, hideOverlap: true },
-        axisLine: { lineStyle: { color: p.borderStrong } },
-        splitLine: { lineStyle: { color: p.border, opacity: 0.6 } }
-      },
-      yAxis: {
-        type: 'value',
-        name: 'Cycle time (h)',
-        nameTextStyle: { color: p.textMuted, fontSize: 11, align: 'left' },
-        axisLabel: { color: p.textMuted, fontSize: 11 },
-        axisLine: { lineStyle: { color: p.borderStrong } },
-        splitLine: { lineStyle: { color: p.border, opacity: 0.6 } }
-      },
+        axisLine: { lineStyle: { color: p.grid } },
+        axisLabel: textStyle(p, { color: p.muted, hideOverlap: true })
+      }),
+      yAxis: valueAxis(p, 'Cycle time (h)'),
       series: [
         {
           type: 'scatter',
           symbolSize: (val) => 12 + (val[2] / maxSize) * 40,
-          itemStyle: { borderColor: p.surface, borderWidth: 1, opacity: 0.88 },
+          itemStyle: { borderColor: assist.ink, borderWidth: 1, opacity: 0.9 },
           emphasis: {
             itemStyle: { opacity: 1, borderWidth: 2, borderColor: p.text }
           },

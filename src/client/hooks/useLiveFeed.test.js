@@ -3,7 +3,7 @@ import { renderHook, waitFor, act } from '@testing-library/react'
 import { buildPayload } from '#/test-helpers/payload-fixture.js'
 import { useLiveFeed, isValidPayload, collectPayloads } from './useLiveFeed.js'
 
-const options = { pollIntervalMs: 50 }
+const options = { projectSlug: 'abc', pollIntervalMs: 50 }
 
 const respondWith = (payloads) =>
   fetchMock.mockResponse(JSON.stringify({ payloads }))
@@ -93,13 +93,50 @@ describe('#useLiveFeed', () => {
     expect(result.current.lastMessageAt).toBeInstanceOf(Date)
   })
 
-  test('Should poll the proxied backend endpoint', async () => {
+  test('Should not poll, and stay connecting, until there is a project', async () => {
     respondWith([])
 
-    const { result } = renderHook(() => useLiveFeed(options))
+    const { result } = renderHook(() => useLiveFeed({ pollIntervalMs: 50 }))
+
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 120))
+    })
+
+    expect(fetchMock).not.toHaveBeenCalled()
+    expect(result.current.status).toBe('connecting')
+  })
+
+  test('Should poll the project-scoped endpoint when projectSlug is provided', async () => {
+    respondWith([])
+
+    const { result } = renderHook(() =>
+      useLiveFeed({ projectSlug: 'abc', ...options })
+    )
 
     await waitFor(() => expect(result.current.status).toBe('open'))
-    expect(fetchMock.mock.calls[0][0]).toBe('/api/payloads')
+    expect(fetchMock.mock.calls[0][0]).toBe('/api/projects/abc/payloads')
+  })
+
+  test('Should clear payloads and reset status when projectSlug changes', async () => {
+    respondWith([buildPayload()])
+
+    const { result, rerender } = renderHook(
+      ({ projectSlug }) => useLiveFeed({ ...options, projectSlug }),
+      { initialProps: { projectSlug: 'project-a' } }
+    )
+
+    await waitFor(() => expect(result.current.status).toBe('open'))
+    expect(result.current.payloads).toHaveLength(1)
+
+    respondWith([buildPayload({ prNumber: 99 })])
+    rerender({ projectSlug: 'project-b' })
+
+    expect(result.current.payloads).toEqual([])
+    expect(result.current.status).toBe('connecting')
+
+    await waitFor(() => expect(result.current.status).toBe('open'))
+    expect(result.current.payloads).toHaveLength(1)
+    expect(result.current.payloads[0].prNumber).toBe(99)
   })
 
   test('Should keep polling on the configured interval', async () => {

@@ -1,0 +1,18 @@
+// The only Sass entry. GOV.UK base is configured through MOJ's settings, because
+// MOJ forwards it with its own `with` and a module can only be configured once.
+@use 'pkg:@ministryofjustice/frontend/moj/base' with (
+  $moj-assets-path: '/public/assets/',
+  $moj-font-family: (
+    Arial,
+    Helvetica,
+    sans-serif
+  ),
+  $moj-page-width: 1340px
+);
+@use 'pkg:govuk-frontend';
+@use 'pkg:@ministryofjustice/frontend';
+
+@use 'tokens';
+@use 'layout';
+@use 'components';
+@use 'dashboard';

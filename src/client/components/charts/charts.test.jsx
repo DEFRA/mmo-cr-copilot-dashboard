@@ -1,9 +1,9 @@
-import { render, screen } from '@testing-library/react'
+import { render, screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 
-import { lastChartOption } from '#/test-helpers/charts.js'
+import { chartEventsFor, lastChartOption } from '#/test-helpers/charts.js'
+import { reducedMotion } from '#/test-helpers/motion.js'
 import { Chart } from './Chart.jsx'
-import { KpiCard } from './KpiCard.jsx'
 import { StatusGauge } from './StatusGauge.jsx'
 import { TrendLine } from './TrendLine.jsx'
 import { CategoryBar } from './CategoryBar.jsx'
@@ -20,6 +20,16 @@ import { LiveCommitStream } from './LiveCommitStream.jsx'
 const seriesTypes = () =>
   (lastChartOption()?.series ?? []).map((series) => series.type)
 
+const preferReducedMotion = () =>
+  vi
+    .spyOn(window, 'matchMedia')
+    .mockImplementation(reducedMotion(true).matchMedia)
+
+afterEach(() => {
+  vi.restoreAllMocks()
+  vi.useRealTimers()
+})
+
 describe('#Chart', () => {
   test('Should expose the chart as a labelled image', () => {
     render(<Chart option={{ series: [] }} ariaLabel="Adoption over time" />)
@@ -34,8 +44,30 @@ describe('#Chart', () => {
 
     expect(lastChartOption()).toMatchObject({
       animation: true,
-      animationEasing: 'cubicOut',
+      animationDuration: 900,
+      textStyle: { fontFamily: 'Arial, Helvetica, sans-serif' },
       series: [{ type: 'bar' }]
+    })
+  })
+
+  test('Should enable ECharts aria with the label as its description', () => {
+    render(<Chart option={{ series: [] }} ariaLabel="Bars by repository" />)
+
+    expect(lastChartOption().aria).toStrictEqual({
+      enabled: true,
+      label: { description: 'Bars by repository' }
+    })
+  })
+
+  test('Should switch animation off when the user prefers reduced motion', () => {
+    preferReducedMotion()
+
+    render(<Chart option={{ series: [] }} ariaLabel="Bars" />)
+
+    expect(lastChartOption()).toMatchObject({
+      animation: false,
+      animationDuration: 0,
+      animationDurationUpdate: 0
     })
   })
 
@@ -69,36 +101,6 @@ describe('#Chart', () => {
     render(<Chart option={{}} ariaLabel="Adoption" />)
 
     expect(screen.queryByRole('table')).not.toBeInTheDocument()
-  })
-})
-
-describe('#KpiCard', () => {
-  test('Should render the label, value and unit', () => {
-    render(<KpiCard label="Adoption" value={75} unit="%" />)
-
-    expect(screen.getByText('Adoption')).toBeInTheDocument()
-    expect(screen.getByText(/75/)).toBeInTheDocument()
-    expect(screen.getByText('%')).toBeInTheDocument()
-  })
-
-  test('Should hide a decorative icon from assistive technology', () => {
-    const { container } = render(
-      <KpiCard label="Adoption" value={75} icon="✦" />
-    )
-
-    expect(container.querySelector('[aria-hidden="true"]')).toBeInTheDocument()
-  })
-
-  test('Should render a delta when one is supplied', () => {
-    render(
-      <KpiCard
-        label="Adoption"
-        value={75}
-        delta={{ text: '+12 pts', icon: '▲', color: 'var(--color-success)' }}
-      />
-    )
-
-    expect(screen.getByText('+12 pts')).toBeInTheDocument()
   })
 })
 
@@ -156,6 +158,25 @@ describe('#CategoryBar', () => {
     )
 
     expect(seriesTypes()).toEqual(['bar'])
+  })
+
+  test('Should render accessible drill-down buttons when onSelect is provided', async () => {
+    const onSelect = vi.fn()
+    render(
+      <CategoryBar
+        categories={['repo-a', 'repo-b']}
+        values={[80, 40]}
+        seriesName="Adoption"
+        unit="%"
+        title="By repository"
+        onSelect={onSelect}
+      />
+    )
+
+    const button = screen.getByRole('button', { name: /repo-a/i })
+    expect(button).toBeInTheDocument()
+    await userEvent.click(button)
+    expect(onSelect).toHaveBeenCalledWith(0, 'repo-a')
   })
 })
 
@@ -302,6 +323,58 @@ describe('#ActivityHeatmap', () => {
     expect(seriesTypes()).toEqual(['heatmap'])
     expect(lastChartOption().visualMap).toBeDefined()
   })
+
+  test('Should report contributor and cell clicks, ignoring empty cells', () => {
+    const onSelectContributor = vi.fn()
+    const onSelectCell = vi.fn()
+    render(
+      <ActivityHeatmap
+        xLabels={['repo-a', 'repo-b']}
+        yLabels={['ada']}
+        data={[[0, 0, 50]]}
+        title="Activity"
+        onSelectContributor={onSelectContributor}
+        onSelectCell={onSelectCell}
+      />
+    )
+    const { click } = chartEventsFor('heatmap')
+
+    click({ componentType: 'yAxis', value: 'ada' })
+    click({ componentType: 'series', data: { value: [1, 0, '-'] } })
+    click({ componentType: 'series', data: { value: [0, 0, 50] } })
+
+    expect(onSelectContributor).toHaveBeenCalledWith('ada')
+    expect(onSelectCell).toHaveBeenCalledTimes(1)
+    expect(onSelectCell).toHaveBeenCalledWith('repo-a', 'ada')
+    expect(screen.queryByRole('button', { name: 'ada' })).toBeNull()
+    expect(lastChartOption().yAxis).toMatchObject({
+      triggerEvent: true,
+      axisLabel: { borderRadius: 999, fontWeight: 600 }
+    })
+    expect(lastChartOption().xAxis.axisLabel).toMatchObject({
+      overflow: 'truncate',
+      hideOverlap: true
+    })
+  })
+
+  test('Should size contributor pills to a short handle and truncate longer ones', () => {
+    render(
+      <ActivityHeatmap
+        xLabels={['repo-a']}
+        yLabels={['charlie', 'rhododendron']}
+        data={[[0, 1, 80]]}
+        title="Activity"
+        onSelectContributor={vi.fn()}
+      />
+    )
+
+    expect(lastChartOption().yAxis.axisLabel).toMatchObject({
+      width: 48,
+      overflow: 'truncate',
+      ellipsis: '…'
+    })
+    expect(lastChartOption().yAxis.tooltip).toEqual({ show: true })
+  })
 })
 
 describe('#ProfileRadar', () => {
@@ -320,6 +393,59 @@ describe('#ProfileRadar', () => {
 
     expect(seriesTypes()).toEqual(['radar'])
     expect(lastChartOption().radar.indicator).toHaveLength(2)
+  })
+
+  const twoRepos = [
+    { key: 'DEFRA/repo-a', name: 'repo-a', values: [80, 20] },
+    { key: 'DEFRA/repo-b', name: 'repo-b', values: [40, 60] }
+  ]
+  const renderTwo = (props = {}) =>
+    render(
+      <ProfileRadar
+        indicators={[
+          { name: 'Adoption', max: 100 },
+          { name: 'Rework', max: 100 }
+        ]}
+        series={twoRepos}
+        title="Profile"
+        {...props}
+      />
+    )
+
+  test('Should list every series in an HTML legend', () => {
+    renderTwo()
+
+    const legend = screen.getByRole('list', {
+      name: 'Repositories in this chart'
+    })
+    expect(
+      within(legend)
+        .getAllByRole('button')
+        .map((b) => b.textContent)
+    ).toEqual(['repo-a', 'repo-b'])
+    expect(lastChartOption().legend.show).toBe(false)
+  })
+
+  test('Should hide a series and keep the colours of the rest', async () => {
+    renderTwo()
+    const before = lastChartOption().series[0].data[1].itemStyle.color
+
+    const toggle = screen.getByRole('button', { name: 'repo-a' })
+    await userEvent.click(toggle)
+
+    expect(toggle).toHaveAttribute('aria-pressed', 'false')
+    const data = lastChartOption().series[0].data
+    expect(data.map((d) => d.name)).toEqual(['repo-b'])
+    expect(data[0].itemStyle.color).toBe(before)
+  })
+
+  test('Should drill into a series from a polygon click', () => {
+    const onSelect = vi.fn()
+    renderTwo({ onSelect })
+
+    chartEventsFor('radar').click({ name: 'repo-b' })
+
+    expect(onSelect).toHaveBeenCalledWith('DEFRA/repo-b')
   })
 })
 

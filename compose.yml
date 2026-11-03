@@ -1,98 +1,65 @@
-version: '3.4'
 services:
-  floci:
-    image: hectorvent/floci:latest-aws
-    ports:
-      - '4566:4566'
-    env_file:
-      - 'compose/aws.env'
-    environment:
-      FLOCI_DEFAULT_REGION: eu-west-2
-    volumes:
-      - ./compose/floci/start.d:/etc/floci/init/start.d:ro
-    networks:
-      - cdp-tenant
-
   redis:
     image: redis:7.2.3-alpine3.18
     ports:
       - '6379:6379'
-    networks:
-      - cdp-tenant
-
-  mongodb:
-    image: mongo:7.0.28
-    networks:
-      - cdp-tenant
-    ports:
-      - '27017:27017'
-    volumes:
-      - ./compose/mongo:/docker-entrypoint-initdb.d:ro
-      - mongodb-data:/data
-    healthcheck:
-      test: ["CMD", "mongosh", "--eval", "db.hello().ok"]
-      interval: 10s
-      timeout: 5s
-      retries: 3
-      start_period: 30s
-
-  ################################################################################
 
   mmo-cr-copilot-dashboard:
-    build: ./
+    build:
+      context: .
+      target: development
     ports:
       - '3000:3000'
-    links:
-      - 'floci:floci'
-      - 'redis:redis'
+      # Vite HMR websocket, so client edits reach the browser without a reload.
+      - '24678:24678'
     depends_on:
-      floci:
-        condition: service_healthy
       redis:
         condition: service_started
+    # Reaches the backend on the host's port 3001, whether it runs from the
+    # backend repo's compose or `npm run dev`.
+    extra_hosts:
+      - 'host.docker.internal:host-gateway'
+    # Local secrets such as Entra IDs; `environment` below still wins.
     env_file:
-      - 'compose/aws.env'
+      - path: .env
+        required: false
     environment:
       PORT: 3000
-      NODE_ENV: production
+      NODE_ENV: development
       REDIS_HOST: redis
-      LOG_FORMAT: pino-pretty
-      SESSION_COOKIE_SECURE: false
       USE_SINGLE_INSTANCE_CACHE: true
       REDIS_TLS: false
-      COPILOT_BACKEND_API_URL: http://mmo-cr-copilot-backend:3001
+      SESSION_COOKIE_SECURE: false
+      COPILOT_BACKEND_API_URL: http://host.docker.internal:3001
       # Must match INGEST_TOKEN on the backend and in the GitHub Actions workflow.
       INGEST_TOKEN: local-development-ingest-token
-    networks:
-      - cdp-tenant
+    # Source is mounted, so nodemon restarts the server and Vite recompiles the
+    # client on every edit. Dependency changes rebuild the image under --watch.
+    volumes:
+      - ./src:/home/node/src
+      - ./public:/home/node/public
+      - ./vite.config.js:/home/node/vite.config.js
+    develop:
+      watch:
+        - action: rebuild
+          path: ./package.json
+        - action: rebuild
+          path: ./package-lock.json
 
-  mmo-cr-copilot-backend:
-    image: defradigital/mmo-cr-copilot-backend:${MMO_CR_COPILOT_BACKEND_VERSION:-latest}
-    ports:
-      - '3001:3001'
-    links:
-      - 'floci:floci'
-      - 'mongodb:mongodb'
-    depends_on:
-      floci:
-        condition: service_healthy
-      mongodb:
-        condition: service_started
-    env_file:
-      - 'compose/aws.env'
-    environment:
-      PORT: 3001
-      NODE_ENV: development
-      MONGO_URI: mongodb://mongodb:27017/
-      INGEST_TOKEN: local-development-ingest-token
-    networks:
-      - cdp-tenant
-
-################################################################################
-
-volumes:
-  mongodb-data:
-
-networks:
-  cdp-tenant:
-    driver: bridge
+  # Not used by this service: MongoDB belongs to the backend, and there is no
+  # AWS (S3/SQS/SNS) dependency.
+  # floci:
+  #   image: hectorvent/floci:latest-aws
+  #   ports:
+  #     - '4566:4566'
+  #   env_file:
+  #     - 'compose/aws.env'
+  #   environment:
+  #     FLOCI_DEFAULT_REGION: eu-west-2
+  #   volumes:
+  #     - ./compose/floci/start.d:/etc/floci/init/start.d:ro
+  #
+  # mongodb:
+  #   image: mongo:7.0.28
+  #   ports:
+  #     - '27017:27017'

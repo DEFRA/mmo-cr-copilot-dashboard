@@ -1,15 +1,21 @@
 <!doctype html>
-<html lang="en" data-theme="light">
+<html lang="en" class="govuk-template">
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="theme-color" content="#008531" />
+    <link rel="icon" href="{{ assetPath | default("/public") }}/images/favicon.svg" type="image/svg+xml" />
+    <link rel="icon" href="{{ assetPath | default("/public") }}/images/favicon.ico" sizes="48x48" />
+    <link rel="apple-touch-icon" href="{{ assetPath | default("/public") }}/images/apple-touch-icon.png" />
     <title>{% block pageTitle %}{{ pageTitle }} | {{ serviceName }}{% endblock %}</title>
     {% for href in stylesheets %}
       <link rel="stylesheet" href="{{ href }}" />
     {% endfor %}
     {% block head %}{% endblock %}
   </head>
-  <body>
+  {# Hand-written rather than govuk/template.njk, whose inline script the CSP forbids. #}
+  <body class="govuk-template__body">
+    <a href="#main-content" class="govuk-skip-link">Skip to main content</a>
     {% block content %}{% endblock %}
     {% block bodyEnd %}{% endblock %}
   </body>

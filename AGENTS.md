@@ -4,7 +4,9 @@ The Copilot analytics dashboard: a React single page app served by a Hapi backen
 the only publicly reachable part of the system — it receives analytics payloads from GitHub Actions,
 forwards them to `mmo-cr-copilot-backend`, and proxies the read APIs back to the browser.
 
-This is **not** a GOV.UK Design System service. There is no `govuk-frontend` and no GDS SCSS.
+The UI uses **GOV.UK Frontend + MOJ Frontend** with non-GOV.UK branding (Arial, no crown);
+`docs/design-system.md` governs look-and-feel. Tailwind is legacy, being removed by E1-S12 — no new
+Tailwind.
 
 ## Setup
 
@@ -55,6 +57,9 @@ Import with `#/` (→ `src/`) and `#/test-helpers/` (→ `test-helpers/`).
   validation on every route that accepts input.
 - **The proxy is an allow-list.** Each route builds its own upstream path from validated parameters.
   No catch-all proxy, and no direct browser-to-backend calls.
+- **Title Case for every title and heading** across the whole dashboard (joining words such as "by"
+  and "of" lower case; acronyms and identifiers as written). Body text stays in sentence case. See
+  `docs/design-system.md` §10.
 - **No inline script.** Runtime config reaches the browser as `data-` attributes so `script-src`
   stays `'self'`. `style-src` allows inline styles only because ECharts requires it.
 - Tests sit beside the code: `*.test.js` for the server project, `*.test.{js,jsx}` for the client.

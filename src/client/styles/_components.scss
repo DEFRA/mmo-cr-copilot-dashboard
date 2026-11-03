@@ -1,0 +1,18 @@
+@use 'pkg:govuk-frontend' as *;
+
+// A button that reads as a GOV.UK link, for in-page actions with no URL.
+.app-link-button {
+  @include govuk-link-common;
+
+  padding: 0;
+  border: 0;
+  background: none;
+  color: govuk-functional-colour(link);
+  font-size: inherit;
+  line-height: inherit;
+  cursor: pointer;
+
+  &:hover {
+    color: govuk-functional-colour(link-hover);
+  }
+}

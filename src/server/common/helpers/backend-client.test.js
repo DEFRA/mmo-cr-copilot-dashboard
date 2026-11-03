@@ -75,6 +75,27 @@ describe('#backendRequest', () => {
     expect(fetchMock.mock.calls[0][1].headers['x-ingest-token']).toBe('secret')
   })
 
+  test('Should drop caller headers outside the allow-list', async () => {
+    fetchMock.mockResponse(JSON.stringify({}))
+
+    await backendRequest(
+      {
+        path: '/api/x',
+        headers: {
+          authorization: 'Bearer t',
+          cookie: 'session=1',
+          'x-user-context': 'forged'
+        }
+      },
+      options
+    )
+
+    const sent = fetchMock.mock.calls[0][1].headers
+    expect(sent.authorization).toBe('Bearer t')
+    expect(sent).not.toHaveProperty('cookie')
+    expect(sent).not.toHaveProperty('x-user-context')
+  })
+
   test('Should relay the upstream status code', async () => {
     fetchMock.mockResponse(JSON.stringify({ error: 'Bad Request' }), {
       status: 400

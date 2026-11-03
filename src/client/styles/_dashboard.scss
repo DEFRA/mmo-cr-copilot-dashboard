@@ -1,0 +1,1833 @@
+@use 'pkg:govuk-frontend' as *;
+
+// Dashboard components (docs/design-system.md §8). Family colour comes from `.app-family--*`.
+
+@mixin app-focus {
+  outline: 3px solid transparent;
+  background: var(--app-colour-focus);
+  color: var(--app-colour-text);
+  box-shadow:
+    0 -2px var(--app-colour-focus),
+    0 4px var(--app-colour-text);
+  text-decoration: none;
+}
+
+// ---------- KPI card ----------
+// 260px is the narrowest card that fits icon, a 2-line label and the chevron.
+.app-kpi-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+  gap: govuk-spacing(4);
+}
+
+.app-kpi {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: govuk-spacing(2);
+  padding: 22px 18px govuk-spacing(3);
+  overflow: hidden;
+  border-radius: var(--app-radius);
+  background: var(--app-colour-white);
+  box-shadow: var(--app-shadow);
+  min-width: 0;
+  container: kpi / inline-size;
+
+  &::before {
+    content: '';
+    position: absolute;
+    inset: 0 0 auto;
+    height: 8px;
+    background: var(--app-family-band);
+  }
+}
+
+.app-kpi--dimmed {
+  opacity: 0.6;
+}
+
+.app-kpi__head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.app-kpi__icon {
+  display: inline-grid;
+  flex: none;
+  place-items: center;
+  width: 40px;
+  height: 40px;
+  border-radius: var(--app-radius-icon);
+  background: var(--app-family-tint);
+  color: var(--app-family-ink);
+}
+
+.app-kpi__label {
+  flex: 1 1 auto;
+  min-width: 0;
+  margin: 0;
+  font-size: clamp(0.9375rem, 0.85rem + 0.5cqi, 1rem);
+  font-weight: $govuk-font-weight-bold;
+  line-height: 1.25;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.app-kpi__family,
+.app-mini-tag {
+  padding: 2px govuk-spacing(2);
+  border-radius: var(--app-radius-pill);
+  background: var(--app-family-tint, var(--app-colour-brand-tint));
+  color: var(--app-family-ink, var(--app-colour-brand-ink));
+  font-size: 0.8125rem;
+  font-weight: $govuk-font-weight-bold;
+  white-space: nowrap;
+}
+
+// Measured: with the chip shown, every label needs a third line below a 280px card (244px content).
+@container kpi (max-width: 243px) {
+  .app-kpi__family {
+    display: none;
+  }
+}
+
+// Narrow cards: the pill drops under the label so long names ("Sprint Predictability") keep
+// one or two whole lines. Every card in a row shares the width, so heads stay aligned.
+@container kpi (min-width: 244px) and (max-width: 380px) {
+  .app-kpi__head {
+    display: grid;
+    grid-template-columns: 40px minmax(0, 1fr) auto;
+    gap: 6px 10px;
+  }
+
+  .app-kpi__label {
+    grid-column: 2;
+    grid-row: 1;
+  }
+
+  .app-kpi__chevron {
+    grid-column: 3;
+    grid-row: 1;
+  }
+
+  .app-kpi__family {
+    grid-column: 2;
+    grid-row: 2;
+    justify-self: start;
+  }
+}
+
+.app-kpi__body {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  min-width: 0;
+  min-height: 60px;
+}
+
+.app-kpi__value {
+  flex: 1 1 auto;
+  min-width: 0;
+  margin: 0;
+  color: var(--app-family-ink);
+  font-size: clamp(2rem, 13cqi, 2.75rem);
+  font-weight: $govuk-font-weight-bold;
+  line-height: 1;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.app-kpi__value--m {
+  font-size: clamp(1.625rem, 10cqi, 2.125rem);
+}
+
+.app-kpi__unit {
+  margin-left: 2px;
+  font-size: clamp(1rem, 6cqi, 1.5rem);
+}
+
+.app-kpi__viz {
+  flex: 0 1 auto;
+  max-width: 42%;
+  overflow: hidden;
+  line-height: 0;
+
+  svg {
+    display: block;
+    max-width: 100%;
+    height: auto;
+  }
+}
+
+.app-kpi__sub {
+  margin: 0;
+  color: var(--app-colour-text-muted);
+  font-size: clamp(0.875rem, 0.8rem + 0.4cqi, 1rem);
+}
+
+.app-kpi__foot {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: govuk-spacing(2);
+  margin-top: auto;
+}
+
+.app-kpi__action {
+  margin: 0;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  text-decoration: none;
+  cursor: pointer;
+
+  // Stretches the one action over the whole card.
+  &::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    z-index: 1;
+  }
+
+  &:focus {
+    outline: none;
+  }
+}
+
+.app-kpi:has(.app-kpi__action:focus-visible) {
+  outline: 3px solid var(--app-colour-focus);
+  box-shadow: 0 0 0 7px var(--app-colour-text);
+}
+
+.app-kpi--action {
+  transition:
+    transform 150ms ease-out,
+    box-shadow 150ms ease-out;
+
+  &:hover {
+    transform: translateY(-2px);
+    box-shadow: var(--app-shadow-hover);
+  }
+
+  &:hover .app-kpi__action {
+    text-decoration: underline;
+    text-decoration-thickness: 2px;
+  }
+}
+
+.app-kpi__chevron {
+  display: inline-grid;
+  flex: none;
+  place-items: center;
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  background: var(--app-family-tint);
+  color: var(--app-family-ink);
+  font-size: 1.5rem;
+  font-weight: $govuk-font-weight-bold;
+  line-height: 1;
+  transition: transform 150ms ease-out;
+}
+
+.app-kpi--action:hover .app-kpi__chevron,
+.app-kpi--open .app-kpi__chevron {
+  background: var(--app-family-band);
+  color: var(--app-colour-white);
+}
+
+.app-kpi--open {
+  box-shadow:
+    inset 0 -4px var(--app-family-band),
+    var(--app-shadow);
+
+  .app-kpi__chevron {
+    transform: rotate(90deg);
+  }
+}
+
+.app-delta {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin: 0;
+  padding: 3px 10px;
+  border-radius: var(--app-radius-pill);
+  font-size: 0.875rem;
+  font-weight: $govuk-font-weight-bold;
+}
+
+.app-delta--good {
+  background: var(--app-colour-adoption-tint);
+  color: var(--app-colour-adoption-ink);
+}
+
+.app-delta--bad {
+  background: var(--app-colour-error-tint);
+  color: var(--app-colour-error-ink);
+}
+
+.app-delta--flat {
+  background: var(--app-colour-neutral-tint);
+  color: var(--app-colour-text-muted);
+}
+
+// ---------- Mini charts ----------
+.app-mini__stop {
+  stop-color: var(--app-family-band);
+}
+
+.app-mini__line {
+  fill: none;
+  stroke: var(--app-family-band);
+  stroke-width: 2.5;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.app-mini__dot {
+  fill: var(--app-colour-white);
+  stroke: var(--app-family-band);
+  stroke-width: 2.5;
+}
+
+.app-mini__track,
+.app-mini__arc {
+  fill: none;
+  stroke-width: 9;
+}
+
+.app-mini__track {
+  stroke: var(--app-family-tint);
+}
+
+.app-mini__arc {
+  stroke: var(--app-family-band);
+  stroke-linecap: round;
+}
+
+.app-mini__bar {
+  fill: var(--app-family-band);
+  opacity: 0.4;
+}
+
+.app-mini__bar--current {
+  opacity: 1;
+}
+
+// ---------- Panel, chart figure and panel states ----------
+.app-panel {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  margin: 0;
+  padding: govuk-spacing(3) govuk-spacing(4) 14px;
+  border-left: 8px solid var(--app-family-band);
+  border-radius: var(--app-radius);
+  background: var(--app-colour-white);
+  box-shadow: var(--app-shadow);
+}
+
+.app-panel__head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: govuk-spacing(2);
+}
+
+// The panel is a flex column; keep buttons at their natural width.
+.app-panel > .govuk-button {
+  align-self: flex-start;
+}
+
+.app-panel__icon {
+  display: inline-grid;
+  flex: none;
+  place-items: center;
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  background: var(--app-family-tint);
+  color: var(--app-family-ink);
+}
+
+.app-panel__title {
+  margin: 0;
+  font-size: clamp(1rem, 0.9rem + 0.4vw, 1.1875rem);
+  font-weight: $govuk-font-weight-bold;
+  line-height: 1.3;
+}
+
+.app-panel__aside {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: govuk-spacing(2);
+  margin-left: auto;
+}
+
+// Tags and badges are 14–16px on the dashboard (§3.1), not GOV.UK's 19px.
+.app-panel .govuk-tag,
+.app-kpi .govuk-tag {
+  font-size: 1rem;
+}
+
+.app-figure__chart {
+  width: 100%;
+  min-height: 290px;
+}
+
+.app-panel__details {
+  // Pinned to the panel foot so it lines up across a grid row.
+  margin: auto 0 0;
+  padding-top: 6px;
+
+  .govuk-details__summary,
+  .govuk-details__text,
+  .govuk-table {
+    font-size: 1rem;
+  }
+}
+
+// ---------- Scope header, subsection and drill panel (§8.4, §8.5) ----------
+.app-scope {
+  margin-bottom: 56px;
+
+  > .app-subsection,
+  > .app-panel,
+  > .app-grid,
+  > .govuk-summary-list,
+  > .govuk-warning-text {
+    margin-top: govuk-spacing(7);
+    margin-bottom: 0;
+  }
+}
+
+.app-scope__head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px govuk-spacing(3);
+  margin-bottom: govuk-spacing(5);
+  padding-bottom: 12px;
+  border-bottom: 4px solid var(--app-colour-scope);
+
+  .govuk-heading-l {
+    margin: 0;
+  }
+}
+
+.app-scope__level {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 12px;
+  border-radius: var(--app-radius-pill);
+  background: var(--app-colour-scope);
+  color: var(--app-colour-white);
+  font-size: 0.875rem;
+  font-weight: $govuk-font-weight-bold;
+}
+
+.app-scope__meta {
+  margin: 0 0 0 auto;
+  color: var(--app-colour-text-muted);
+  font-size: 1rem;
+}
+
+.app-muted {
+  color: var(--app-colour-text-muted);
+}
+
+.app-subsection {
+  margin-top: govuk-spacing(7);
+}
+
+.app-section__head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: govuk-spacing(3);
+
+  .govuk-heading-m {
+    margin: 0;
+  }
+}
+
+.app-section__icon {
+  display: inline-grid;
+  place-items: center;
+  width: 36px;
+  height: 36px;
+  border-radius: var(--app-radius-icon);
+  background: var(--app-family-tint);
+  color: var(--app-family-ink);
+}
+
+// auto-fit collapses empty tracks, so a short row stretches to the full width.
+.app-kpi-grid--3 {
+  grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+}
+
+.app-drill {
+  margin-top: govuk-spacing(4);
+  padding: 18px 22px;
+  border-left: 8px solid var(--app-family-band);
+  border-radius: var(--app-radius);
+  background: var(--app-colour-white);
+  box-shadow: var(--app-shadow);
+}
+
+.app-drill__head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: govuk-spacing(2) govuk-spacing(4);
+  margin-bottom: 14px;
+}
+
+.app-drill__def {
+  margin-left: auto;
+  font-size: 1rem;
+}
+
+.app-drill__list {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.app-drill__item {
+  display: grid;
+  align-content: start;
+  gap: govuk-spacing(1);
+  padding: 12px 14px;
+  border-radius: var(--app-radius-s);
+  background: var(--app-family-tint);
+}
+
+.app-drill__name {
+  font-size: 1rem;
+  font-weight: $govuk-font-weight-bold;
+}
+
+.app-drill__value {
+  color: var(--app-family-ink);
+  font-size: 1.5rem;
+  font-weight: $govuk-font-weight-bold;
+  font-variant-numeric: tabular-nums;
+}
+
+.app-drill__sub {
+  color: var(--app-colour-text-muted);
+  font-size: 0.875rem;
+}
+
+.app-meter {
+  display: block;
+  height: 10px;
+  overflow: hidden;
+  border-radius: var(--app-radius-pill);
+  background: var(--app-colour-neutral-tint);
+}
+
+.app-meter__fill {
+  display: block;
+  height: 100%;
+  border-radius: var(--app-radius-pill);
+  background: var(--app-family-band);
+}
+
+.app-stat-list {
+  display: grid;
+  gap: 10px;
+  margin: 0;
+}
+
+.app-stat-list__row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: govuk-spacing(1) 12px;
+
+  dt,
+  dd {
+    margin: 0;
+    font-size: 1rem;
+  }
+
+  dd {
+    font-weight: $govuk-font-weight-bold;
+    font-variant-numeric: tabular-nums;
+  }
+
+  .app-meter {
+    grid-column: 1 / 3;
+  }
+}
+
+.app-compare {
+  .govuk-table__cell,
+  .govuk-table__header {
+    vertical-align: middle;
+    font-size: 1rem;
+  }
+
+  // Numeric columns size to their header; the label column takes the rest.
+  .govuk-table__header--numeric,
+  .govuk-table__cell--numeric {
+    width: 1%;
+    white-space: nowrap;
+  }
+
+  .app-meter {
+    display: inline-block;
+    width: 80px;
+    margin-right: govuk-spacing(2);
+    vertical-align: middle;
+  }
+}
+
+// A wrapped tag keeps GOV.UK's full max-width, leaving an empty coloured band.
+.govuk-table .govuk-tag {
+  max-width: none;
+  white-space: nowrap;
+}
+
+// Wide tables scroll inside their panel instead of spilling past it.
+.app-table-scroll {
+  overflow-x: auto;
+
+  // A ring, not app-focus's yellow fill, and only for keyboard focus, not a click.
+  &:focus {
+    outline: none;
+  }
+
+  &:focus-visible {
+    outline: 3px solid var(--app-colour-focus);
+    outline-offset: 2px;
+    box-shadow: 0 0 0 5px var(--app-colour-text);
+  }
+
+  .govuk-table__header[scope='row'] {
+    white-space: nowrap;
+  }
+
+  // Headers may wrap so many columns still fit a desktop panel; cells stay on one line.
+  .govuk-table__head .govuk-table__header--numeric {
+    white-space: normal;
+  }
+
+  .app-meter {
+    width: 56px;
+  }
+}
+
+// ---------- Model leaderboard (§8.14) ----------
+.app-leaderboard {
+  .govuk-table__cell,
+  .govuk-table__header {
+    padding-top: 12px;
+    padding-bottom: 12px;
+    vertical-align: middle;
+  }
+
+  .govuk-table__header--numeric,
+  .govuk-table__cell--numeric {
+    padding-left: govuk-spacing(4);
+  }
+
+  // Tags qualify a figure, so they sit smaller than it rather than reading as values.
+  .govuk-tag {
+    margin: 0;
+    padding: 1px 6px 2px;
+    font-size: 0.875rem;
+    line-height: 1.25;
+  }
+}
+
+.app-leaderboard__model {
+  display: inline-flex;
+  align-items: center;
+  gap: govuk-spacing(2);
+}
+
+.app-leaderboard__stack {
+  display: inline-grid;
+  justify-items: end;
+  gap: 6px;
+
+  .app-meter {
+    width: 72px;
+    margin: 0;
+  }
+}
+
+.app-crown {
+  display: inline-flex;
+  flex: none;
+  line-height: 0;
+
+  svg {
+    fill: var(--app-colour-crown);
+    stroke: var(--app-colour-crown-edge);
+    stroke-width: 1.5;
+    stroke-linejoin: round;
+  }
+}
+
+.app-panel-state {
+  display: grid;
+  justify-items: center;
+  gap: govuk-spacing(2);
+  min-height: 160px;
+  padding: govuk-spacing(4);
+  text-align: center;
+  align-content: center;
+}
+
+.app-panel-state--empty {
+  border: 3px dashed var(--app-colour-line);
+  border-radius: var(--app-radius-s);
+  color: var(--app-colour-text-muted);
+}
+
+.app-panel-state--error {
+  justify-items: start;
+  text-align: left;
+}
+
+.app-panel-state__title,
+.app-panel-state__message {
+  margin: 0;
+}
+
+.app-skeleton {
+  display: grid;
+  gap: govuk-spacing(3);
+  width: 100%;
+}
+
+.app-skeleton__line,
+.app-skeleton__block {
+  display: block;
+  border-radius: var(--app-radius-s);
+  background: var(--app-colour-neutral-tint);
+}
+
+.app-skeleton__line {
+  width: 33%;
+  height: 16px;
+}
+
+.app-skeleton__block {
+  height: 120px;
+}
+
+// ---------- Badges ----------
+.app-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 3px 10px;
+  border-radius: var(--app-radius-pill);
+  font-size: 0.875rem;
+  font-weight: $govuk-font-weight-bold;
+  white-space: nowrap;
+}
+
+.app-badge--copilot {
+  background: var(--app-colour-copilot);
+  color: var(--app-colour-white);
+}
+
+.app-badge--human {
+  background: var(--app-colour-risk-tint);
+  color: var(--app-colour-risk-ink);
+  box-shadow: inset 0 0 0 2px var(--app-colour-human);
+}
+
+.app-badge--live {
+  background: var(--app-colour-adoption);
+  color: var(--app-colour-white);
+}
+
+.app-badge--ticket {
+  background: var(--app-colour-brand-tint);
+  color: var(--app-colour-brand-ink);
+  font-family: monospace;
+}
+
+.app-badge--excluded {
+  background: var(--app-colour-neutral-tint);
+  color: var(--app-colour-text-muted);
+}
+
+.app-ratings {
+  display: flex;
+  flex-wrap: wrap;
+  gap: govuk-spacing(4);
+}
+
+// ---------- Quality gate panel (§8.6) ----------
+// Sized by the panel, not the viewport, so it also fits a half-width column.
+.app-quality {
+  container-type: inline-size;
+  display: flex;
+  flex-direction: column;
+  flex: 1 1 auto;
+}
+
+.app-quality__body {
+  display: grid;
+  gap: govuk-spacing(4);
+  flex: 1 1 auto;
+}
+
+@container (min-width: 640px) {
+  .app-quality__body {
+    grid-template-columns: auto minmax(0, 1fr);
+    align-items: start;
+    column-gap: govuk-spacing(6);
+  }
+
+  .app-quality__stats {
+    grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+    align-items: start;
+    column-gap: govuk-spacing(6);
+  }
+}
+
+.app-quality__foot {
+  display: flex;
+  flex-wrap: wrap;
+  gap: govuk-spacing(1) govuk-spacing(4);
+  margin: auto 0 0;
+  padding-top: govuk-spacing(3);
+}
+
+.app-linked-jira__action {
+  margin: auto 0 0;
+  align-self: flex-start;
+}
+
+// ---------- SonarCloud repository cards (§8.13) ----------
+.app-gate-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+  gap: govuk-spacing(4);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+
+  > li {
+    display: flex;
+  }
+
+  .app-kpi {
+    flex: 1 1 auto;
+  }
+}
+
+.app-gate--passed {
+  --app-family-band: var(--app-colour-adoption);
+  --app-family-ink: var(--app-colour-adoption-ink);
+  --app-family-tint: var(--app-colour-adoption-tint);
+}
+
+.app-gate--failed {
+  --app-family-band: var(--app-colour-error);
+  --app-family-ink: var(--app-colour-error-ink);
+  --app-family-tint: var(--app-colour-error-tint);
+}
+
+.app-gate--warning {
+  --app-family-band: var(--app-colour-risk);
+  --app-family-ink: var(--app-colour-risk-ink);
+  --app-family-tint: var(--app-colour-risk-tint);
+}
+
+.app-gate--none {
+  --app-family-band: var(--app-colour-text-muted);
+  --app-family-ink: var(--app-colour-text-muted);
+  --app-family-tint: var(--app-colour-neutral-tint);
+}
+
+.app-gate__status {
+  margin: 0;
+}
+
+.app-gate__stats {
+  display: flex;
+  flex-wrap: wrap;
+  gap: govuk-spacing(2) govuk-spacing(5);
+  margin: 0;
+
+  dt {
+    color: var(--app-colour-text-muted);
+    font-size: 0.875rem;
+  }
+
+  dd {
+    margin: 0;
+    color: var(--app-family-ink);
+    font-size: 1.5rem;
+    font-weight: $govuk-font-weight-bold;
+    line-height: 1.2;
+    font-variant-numeric: tabular-nums;
+  }
+}
+
+.app-size {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 12px;
+  border-radius: var(--app-radius-pill);
+  font-size: 1rem;
+  font-weight: $govuk-font-weight-bold;
+  white-space: nowrap;
+}
+
+.app-ratings__item {
+  display: inline-grid;
+  justify-items: center;
+  gap: govuk-spacing(1);
+}
+
+.app-rating {
+  display: inline-grid;
+  place-items: center;
+  width: 36px;
+  height: 36px;
+  border-radius: var(--app-radius);
+  font-size: 1.1875rem;
+  font-weight: $govuk-font-weight-bold;
+}
+
+.app-rating__label {
+  color: var(--app-colour-text-muted);
+  font-size: 0.875rem;
+}
+
+.app-rating--none {
+  background: var(--app-colour-neutral-tint);
+  color: var(--app-colour-text-muted);
+}
+
+$app-scale-text: (
+  xs: white,
+  s: text,
+  m: text,
+  l: text,
+  xl: white
+);
+
+@each $step, $text in $app-scale-text {
+  .app-size--#{$step} {
+    background: var(--app-size-#{$step});
+    color: var(--app-colour-#{$text});
+  }
+}
+
+$app-rating-text: (
+  a: white,
+  b: text,
+  c: text,
+  d: text,
+  e: white
+);
+
+@each $rating, $text in $app-rating-text {
+  .app-rating--#{$rating} {
+    background: var(--app-rating-#{$rating});
+    color: var(--app-colour-#{$text});
+  }
+}
+
+// ---------- Live stream controls ----------
+.app-live-controls {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: govuk-spacing(2);
+
+  > .app-badge,
+  > .app-chip {
+    box-sizing: border-box;
+    height: 28px;
+    min-height: 28px;
+    padding-block: 0;
+    font-size: 0.8125rem;
+    line-height: 1;
+  }
+}
+
+.app-live-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: govuk-spacing(2);
+  margin-bottom: govuk-spacing(2);
+}
+
+.app-live-header__status {
+  margin: 0;
+  color: var(--app-colour-text-muted);
+}
+
+.app-live {
+  display: grid;
+  grid-template-columns: minmax(0, 7fr) minmax(0, 3fr);
+  gap: govuk-spacing(4);
+  align-items: start;
+}
+
+@media (max-width: 48em) {
+  .app-live {
+    grid-template-columns: 1fr;
+  }
+
+  .app-live__feed {
+    display: none;
+  }
+}
+
+.app-feed {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  max-height: 340px;
+  overflow: hidden;
+}
+
+.app-feed__item--new {
+  animation: app-feed-flash 1.2s ease-out;
+}
+
+@keyframes app-feed-flash {
+  from {
+    background: var(--app-colour-brand-tint);
+  }
+
+  to {
+    background: transparent;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .app-feed__item--new {
+    animation: none;
+  }
+}
+
+.app-feed__item {
+  display: grid;
+  grid-template-columns: 32px minmax(0, 1fr) auto;
+  gap: 8px;
+  align-items: center;
+  padding: 8px 4px;
+  border-bottom: 1px solid var(--app-colour-border);
+}
+
+.app-feed__content {
+  overflow: hidden;
+  min-width: 0;
+}
+
+.app-feed__msg {
+  overflow: hidden;
+  margin: 0;
+  font-size: 0.875rem;
+  font-weight: 700;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.app-feed__meta {
+  margin: 0;
+  color: var(--app-colour-text-muted);
+  font-size: 0.75rem;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.app-sha {
+  font-family: monospace;
+  font-weight: bold;
+}
+
+.app-live--paused .app-badge--live {
+  background: var(--app-colour-text-muted);
+}
+
+.app-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: govuk-spacing(2);
+  min-height: 44px;
+  padding: 0 govuk-spacing(3);
+  border: 2px solid var(--app-colour-text);
+  border-radius: var(--app-radius-pill);
+  background: var(--app-colour-white);
+  color: var(--app-colour-text);
+  font: inherit;
+  font-size: 1rem;
+  font-weight: $govuk-font-weight-bold;
+  cursor: pointer;
+
+  &:hover {
+    background: var(--app-colour-neutral-tint);
+  }
+}
+
+.app-pulse {
+  position: relative;
+  display: inline-block;
+  flex: none;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: currentcolor;
+}
+
+// ---------- Period filter ----------
+.app-period {
+  display: grid;
+  justify-items: end;
+  gap: 4px;
+}
+
+.app-period__controls {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: govuk-spacing(2);
+}
+
+.app-period__menu {
+  position: relative;
+}
+
+.app-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: govuk-spacing(2);
+  min-height: 32px;
+  margin: 0;
+  padding: 2px 10px;
+  border: 2px solid var(--app-colour-brand);
+  border-radius: var(--app-radius-pill);
+  background: var(--app-colour-white);
+  color: var(--app-colour-brand-ink);
+  font: inherit;
+  font-size: 0.8125rem;
+  font-weight: 600;
+  text-decoration: none;
+  cursor: pointer;
+
+  &:hover {
+    background: var(--app-colour-brand-tint);
+  }
+
+  &[aria-expanded='true'] svg {
+    transform: rotate(180deg);
+  }
+}
+
+.app-chip--s {
+  min-height: 30px;
+  padding: 0 10px;
+  font-size: 0.8125rem;
+}
+
+.app-chip__sub {
+  font-size: 0.75rem;
+  font-weight: $govuk-font-weight-regular;
+}
+
+.app-chip--selected {
+  background: var(--app-colour-brand);
+  color: var(--app-colour-white);
+
+  &:hover {
+    background: var(--app-colour-brand-ink);
+  }
+}
+
+.app-chip--live {
+  border-color: var(--app-colour-adoption);
+  color: var(--app-colour-adoption-ink);
+
+  &:hover {
+    background: var(--app-colour-adoption-tint);
+  }
+
+  &[aria-pressed='true'] {
+    background: var(--app-colour-adoption);
+    color: var(--app-colour-white);
+  }
+}
+
+.app-popover {
+  position: absolute;
+  top: calc(100% + 6px);
+  right: 0;
+  z-index: 30;
+  width: min(380px, 92vw);
+  padding: govuk-spacing(3) 16px 16px;
+  border-top: 6px solid var(--app-colour-brand);
+  border-radius: var(--app-radius);
+  background: var(--app-colour-white);
+  box-shadow:
+    0 0 0 1px var(--app-colour-line),
+    var(--app-shadow-hover);
+  text-align: left;
+
+  &[hidden] {
+    display: none;
+  }
+
+  .govuk-button {
+    min-height: 36px;
+    padding: 4px 12px;
+    font-size: 0.875rem;
+  }
+}
+
+.app-popover__title {
+  margin: 0 0 govuk-spacing(2);
+  font-size: 1rem;
+  font-weight: 600;
+
+  &:focus {
+    outline: 3px solid var(--app-colour-focus);
+    box-shadow: 0 0 0 6px var(--app-colour-text);
+  }
+}
+
+.app-popover__sub {
+  margin: 12px 0 6px;
+  color: var(--app-colour-text-muted);
+  font-size: 0.875rem;
+  font-weight: 600;
+}
+
+.app-popover__rule {
+  margin: govuk-spacing(2) 0;
+  border: 0;
+  border-top: 1px solid var(--app-colour-line);
+}
+
+.app-popover__back {
+  margin: 0 0 govuk-spacing(2);
+  padding: govuk-spacing(1) 0;
+  border: 0;
+  background: none;
+  color: var(--app-colour-brand-ink);
+  font: inherit;
+  font-size: 0.875rem;
+  text-decoration: underline;
+  cursor: pointer;
+}
+
+.app-options {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.app-option {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  width: 100%;
+  min-height: 32px;
+  padding: 6px 12px;
+  border: 0;
+  border-radius: var(--app-radius-s);
+  background: transparent;
+  color: var(--app-colour-text);
+  font: inherit;
+  font-size: 0.8125rem;
+  font-weight: 600;
+  text-align: left;
+  cursor: pointer;
+
+  &:hover,
+  &[aria-current='true'] {
+    background: var(--app-colour-brand-tint);
+  }
+
+  &[aria-current='true'] {
+    box-shadow: inset 4px 0 var(--app-colour-brand);
+  }
+}
+
+.app-option__label {
+  display: inline-flex;
+  align-items: center;
+  gap: govuk-spacing(2);
+}
+
+.app-option__sub {
+  color: var(--app-colour-text-muted);
+  font-size: 0.75rem;
+  font-weight: $govuk-font-weight-regular;
+}
+
+.app-quick {
+  display: flex;
+  flex-wrap: wrap;
+  gap: govuk-spacing(2);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.app-select-list {
+  margin: govuk-spacing(2) 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+// ---------- Radar with an HTML legend ----------
+// Legend sits below so the radar's axis names get the full panel width.
+.app-radar {
+  display: grid;
+  gap: govuk-spacing(2);
+}
+
+.app-radar__legend {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 0 govuk-spacing(3);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.app-radar__item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 32px;
+  padding: 4px;
+  border: 0;
+  background: none;
+  color: var(--app-colour-text);
+  font: inherit;
+  font-size: 0.875rem;
+  text-align: left;
+  cursor: pointer;
+
+  &[aria-pressed='false'] {
+    color: var(--app-colour-text-muted);
+    text-decoration: line-through;
+  }
+
+  &:focus {
+    @include app-focus;
+  }
+}
+
+.app-radar__swatch {
+  flex: none;
+  width: 18px;
+  height: 0;
+  border-top-width: 3px;
+  border-top-color: var(--swatch);
+}
+
+.app-radar__name {
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.app-cal {
+  margin-bottom: 12px;
+}
+
+.app-cal__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: govuk-spacing(1);
+}
+
+.app-cal__title {
+  margin: 0;
+  font-size: 0.875rem;
+  font-weight: 600;
+}
+
+.app-cal__nav {
+  width: 32px;
+  height: 32px;
+  border: 2px solid var(--app-colour-line);
+  border-radius: var(--app-radius-s);
+  background: var(--app-colour-white);
+  color: var(--app-colour-text);
+  font: inherit;
+  font-size: 1.125rem;
+  font-weight: 600;
+  cursor: pointer;
+
+  &:disabled {
+    color: var(--app-colour-text-muted);
+    cursor: not-allowed;
+  }
+}
+
+.app-cal__grid {
+  width: 100%;
+  border-collapse: collapse;
+  table-layout: fixed;
+
+  th {
+    padding: govuk-spacing(1) 0;
+    color: var(--app-colour-text-muted);
+    font-size: 0.75rem;
+  }
+
+  abbr {
+    text-decoration: none;
+  }
+
+  td {
+    padding: 1px 0;
+    text-align: center;
+  }
+}
+
+.app-cal__day {
+  width: 100%;
+  height: 32px;
+  border: 0;
+  border-radius: var(--app-radius-s);
+  background: transparent;
+  color: var(--app-colour-text);
+  font: inherit;
+  font-size: 0.875rem;
+  cursor: pointer;
+
+  &:hover {
+    background: var(--app-colour-brand-tint);
+  }
+
+  &:disabled {
+    background: transparent;
+    color: var(--app-colour-text-muted);
+    cursor: not-allowed;
+  }
+}
+
+.app-cal__day--in {
+  border-radius: 0;
+  background: var(--app-colour-brand-tint);
+}
+
+.app-cal__day--edge,
+.app-cal__day--edge:hover {
+  background: var(--app-colour-brand);
+  color: var(--app-colour-white);
+  font-weight: 600;
+}
+
+.app-cal__day--today {
+  box-shadow: inset 0 0 0 2px var(--app-colour-text);
+}
+
+.app-range__hint {
+  margin-bottom: govuk-spacing(2);
+  font-size: 0.8125rem;
+}
+
+.app-range__row {
+  display: grid;
+  grid-template-columns: 52px minmax(0, 1fr) 140px;
+  align-items: center;
+  gap: govuk-spacing(2);
+  margin-bottom: govuk-spacing(2);
+
+  .govuk-label,
+  .govuk-input {
+    margin: 0;
+    font-size: 0.875rem;
+  }
+
+  .govuk-input {
+    min-height: 32px;
+    padding: 4px 8px;
+  }
+}
+
+// Focus last so it wins over hover and selected states.
+.app-chip:focus,
+.app-option:focus,
+.app-toggle:focus,
+.app-cal__day:focus,
+.app-cal__nav:focus,
+.app-popover__back:focus {
+  @include app-focus;
+}
+
+@media (max-width: 64em) {
+  .app-drill__list {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+@media (max-width: 40.0525em) {
+  .app-compare {
+    overflow-x: auto;
+  }
+
+  .app-period {
+    justify-items: start;
+  }
+
+  .app-period__controls {
+    justify-content: flex-start;
+  }
+
+  .app-popover {
+    right: auto;
+    left: 0;
+  }
+}
+
+// ---------- Motion: initial states only exist when motion is welcome ----------
+@media (prefers-reduced-motion: no-preference) {
+  .app-anim-rise {
+    animation: app-rise 500ms var(--app-motion-ease) var(--d, 0ms) both;
+  }
+
+  .app-anim-draw {
+    stroke-dasharray: 1;
+    stroke-dashoffset: 1;
+    animation: app-draw var(--app-motion-duration) var(--app-motion-ease)
+      var(--d, 0ms) forwards;
+  }
+
+  .app-anim-fade {
+    opacity: 0;
+    animation: app-fade 600ms ease-out calc(var(--d, 0ms) + 300ms) forwards;
+  }
+
+  .app-anim-dot {
+    opacity: 0;
+    animation: app-fade 250ms ease-out
+      calc(var(--d, 0ms) + var(--app-motion-duration)) forwards;
+  }
+
+  .app-anim-sweep {
+    animation: app-sweep var(--app-motion-duration) var(--app-motion-ease)
+      var(--d, 0ms) both;
+  }
+
+  .app-anim-grow {
+    transform-box: fill-box;
+    transform-origin: 50% 100%;
+    animation: app-grow 700ms var(--app-motion-ease)
+      calc(var(--d, 0ms) + var(--i, 0) * 60ms) both;
+  }
+
+  .app-pulse::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    border-radius: 50%;
+    background: currentcolor;
+    animation: app-pulse 1.6s ease-out infinite;
+  }
+
+  .app-live--paused .app-pulse::after {
+    animation: none;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .app-kpi--action,
+  .app-kpi__chevron {
+    transition: none;
+  }
+
+  .app-kpi--action:hover {
+    transform: none;
+  }
+}
+
+@keyframes app-rise {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+}
+
+@keyframes app-draw {
+  to {
+    stroke-dashoffset: 0;
+  }
+}
+
+@keyframes app-fade {
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes app-sweep {
+  from {
+    stroke-dashoffset: var(--len);
+  }
+}
+
+@keyframes app-grow {
+  from {
+    transform: scaleY(0);
+  }
+}
+
+@keyframes app-pulse {
+  from {
+    opacity: 0.7;
+    transform: scale(1);
+  }
+
+  to {
+    opacity: 0;
+    transform: scale(3);
+  }
+}
+
+// ── Access denied: a harbour lock with its gates shut ─────────────────────
+.app-denied {
+  display: grid;
+  gap: govuk-spacing(6);
+  align-items: center;
+}
+
+@media (min-width: 48.0625em) {
+  .app-denied {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1.15fr);
+  }
+}
+
+.app-denied__art {
+  min-width: 0;
+}
+
+.app-denied__scene {
+  display: block;
+  width: 100%;
+  height: auto;
+  border-radius: 6px;
+  overflow: hidden;
+  box-shadow: var(--app-shadow-hover);
+}
+
+.app-denied__toggle {
+  margin: govuk-spacing(3) 0 0;
+}
+
+.app-denied__sky {
+  fill: var(--app-colour-scope);
+}
+.app-denied__moon {
+  fill: var(--app-colour-neutral-tint);
+}
+.app-denied__star {
+  fill: var(--app-colour-white);
+  animation: app-denied-twinkle 4.8s ease-in-out var(--star-delay, 0s) infinite;
+}
+.app-denied__hills {
+  fill: var(--app-colour-speed-ink);
+}
+.app-denied__beam polygon {
+  fill: var(--app-colour-focus);
+  opacity: 0.3;
+}
+.app-denied__beam {
+  transform-origin: 0 0;
+  animation: app-denied-sweep 9s ease-in-out infinite alternate;
+}
+.app-denied__tower {
+  fill: var(--app-colour-white);
+}
+.app-denied__tower-band {
+  fill: var(--app-colour-risk);
+}
+.app-denied__lamp {
+  fill: var(--app-colour-focus);
+}
+.app-denied__roof {
+  fill: var(--app-colour-text);
+}
+
+.app-denied__sea path {
+  stroke: var(--app-colour-white);
+  stroke-opacity: 0.45;
+  stroke-width: 1.5;
+}
+.app-denied__sea--back path {
+  fill: var(--app-colour-speed);
+}
+.app-denied__sea--front path {
+  fill: var(--app-colour-speed-ink);
+}
+.app-denied__sea--back {
+  animation: app-denied-drift 16s linear infinite;
+}
+.app-denied__sea--front {
+  animation: app-denied-drift 10s linear infinite reverse;
+}
+
+.app-denied__boat {
+  animation: app-denied-bob 5s ease-in-out infinite;
+}
+.app-denied__hull {
+  fill: var(--app-colour-risk-ink);
+}
+.app-denied__cabin {
+  fill: var(--app-colour-white);
+}
+.app-denied__mast {
+  fill: var(--app-colour-text);
+}
+.app-denied__flag {
+  fill: var(--app-colour-output);
+}
+
+.app-denied__pier {
+  fill: var(--app-colour-text-muted);
+}
+.app-denied__door {
+  fill: var(--app-colour-defra-green-dark);
+  stroke: var(--app-colour-text);
+  stroke-width: 1.5;
+}
+.app-denied__plank {
+  stroke: var(--app-colour-text);
+  stroke-opacity: 0.45;
+  stroke-width: 1.5;
+}
+.app-denied__padlock {
+  transform-origin: 0 13px;
+  animation: app-denied-rattle 7s ease-in-out infinite;
+}
+.app-denied__shackle {
+  fill: none;
+  stroke: var(--app-colour-neutral-tint);
+  stroke-width: 3.4;
+  stroke-linecap: round;
+}
+.app-denied__lock-body {
+  fill: var(--app-colour-focus);
+  stroke: var(--app-colour-text);
+  stroke-width: 1.5;
+}
+.app-denied__keyhole {
+  fill: var(--app-colour-text);
+}
+
+.app-denied__buoy {
+  animation: app-denied-bob 3.6s ease-in-out infinite;
+}
+.app-denied__buoy-body {
+  fill: var(--app-colour-error);
+}
+.app-denied__buoy-band {
+  fill: var(--app-colour-white);
+}
+.app-denied__buoy-mast {
+  fill: var(--app-colour-text);
+}
+.app-denied__buoy-light {
+  fill: var(--app-colour-focus);
+  animation: app-denied-glow 3s ease-in-out infinite;
+}
+
+.app-denied--paused .app-denied__scene * {
+  animation-play-state: paused;
+}
+
+@keyframes app-denied-twinkle {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.25;
+  }
+}
+@keyframes app-denied-sweep {
+  from {
+    transform: rotate(-14deg);
+  }
+  to {
+    transform: rotate(9deg);
+  }
+}
+@keyframes app-denied-drift {
+  to {
+    transform: translateX(-640px);
+  }
+}
+@keyframes app-denied-bob {
+  0%,
+  100% {
+    transform: translateY(0) rotate(-2deg);
+  }
+  50% {
+    transform: translateY(4px) rotate(2deg);
+  }
+}
+@keyframes app-denied-glow {
+  0%,
+  100% {
+    opacity: 0.35;
+  }
+  50% {
+    opacity: 1;
+  }
+}
+@keyframes app-denied-rattle {
+  0%,
+  80%,
+  100% {
+    transform: rotate(0);
+  }
+  83% {
+    transform: rotate(-9deg);
+  }
+  86% {
+    transform: rotate(8deg);
+  }
+  89% {
+    transform: rotate(-6deg);
+  }
+  92% {
+    transform: rotate(4deg);
+  }
+  95% {
+    transform: rotate(-2deg);
+  }
+}

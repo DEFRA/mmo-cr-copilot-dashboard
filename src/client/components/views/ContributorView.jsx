@@ -1,21 +1,57 @@
-import { useMemo } from 'react'
-import { Panel } from '../Panel'
-import { KpiCard } from '../charts/KpiCard'
-import { DistributionDonut } from '../charts/DistributionDonut'
-import { StackedBar } from '../charts/StackedBar'
+import { useId, useMemo } from 'react'
+
+import {
+  ChartFigure,
+  KpiCard,
+  MiniBars,
+  Panel,
+  PanelState,
+  ProgressRing
+} from '../dashboard'
+import { SortableTable } from '../govuk'
 import { CategoryBar } from '../charts/CategoryBar'
+import { DistributionDonut } from '../charts/DistributionDonut'
 import { HotspotScatter } from '../charts/HotspotScatter'
+import { StackedBar } from '../charts/StackedBar'
 import {
   selectContributorPRs,
-  selectContributorSummaries
+  selectContributorSummaries,
+  shortRepoName
 } from '../../lib/selectors'
+import {
+  Meter,
+  OpenButton,
+  PERIOD_CHIP,
+  ScopeHeader,
+  lines,
+  plural
+} from './scope.jsx'
+
+const prLabel = (p) => `${p.repoName} #${p.prNumber}`
 
 /**
- * Cross-cutting — one contributor across every repository. Their overall
- * adoption, PR-by-PR assist rate (click → PR), Copilot vs manual commit stacks,
- * per-commit hotspots, and line composition.
+ * One contributor's part in the team's delivery across every repository:
+ * KPI cards, adoption and change-size figures, then their pull requests.
  */
-export function ContributorView({ payloads, contributor, onOpenPR }) {
+export function ContributorView({
+  payloads: allPayloads,
+  contributor,
+  repository,
+  onOpenPR
+}) {
+  const scopeId = useId()
+  const prsId = useId()
+  const payloads = useMemo(
+    () =>
+      repository
+        ? allPayloads.filter((p) => p.repository === repository)
+        : allPayloads,
+    [allPayloads, repository]
+  )
+  const who = repository
+    ? `${contributor} in ${shortRepoName(repository)}`
+    : contributor
+
   const summary = useMemo(
     () =>
       selectContributorSummaries(payloads).find(
@@ -27,7 +63,6 @@ export function ContributorView({ payloads, contributor, onOpenPR }) {
     () => selectContributorPRs(payloads, contributor),
     [payloads, contributor]
   )
-
   const commitPoints = useMemo(
     () =>
       prs.flatMap((p) =>
@@ -36,127 +71,305 @@ export function ContributorView({ payloads, contributor, onOpenPR }) {
           y: c.linesDeleted,
           size: c.linesTouched,
           category: c.classification,
-          label: `${p.repoName} #${p.prNumber} ${c.commit}`
+          label: `${prLabel(p)} ${c.commit}`
         }))
       ),
     [prs]
   )
 
   if (!summary) {
-    return <Panel title="Contributor" state="empty" />
+    return (
+      <section className="app-scope" aria-labelledby={scopeId}>
+        <ScopeHeader
+          id={scopeId}
+          level="Drill-down"
+          icon="person"
+          title="Contributor overview"
+          meta={who}
+        />
+        <Panel title="Pull requests" family="adoption" icon="person">
+          <PanelState
+            state="empty"
+            title="Pull requests"
+            icon="person"
+            emptyMessage="No counted commits from this contributor in the selected period."
+          />
+        </Panel>
+      </section>
+    )
   }
 
+  const openPr = (p) => () => onOpenPR(p.repository, p.prNumber)
+  const categories = prs.map(prLabel)
+
+  const kpis = [
+    {
+      label: 'Commit assist rate',
+      family: 'assist',
+      icon: 'sparkle',
+      value: String(summary.copilotAssistedRate),
+      unit: '%',
+      sub: `${summary.copilotAssisted} of ${plural(summary.totalCommits, 'commit')}`,
+      chart: <ProgressRing value={summary.copilotAssistedRate} />
+    },
+    {
+      label: 'Line assist rate',
+      family: 'assist',
+      icon: 'code',
+      value: String(summary.copilotAssistedLineRate),
+      unit: '%',
+      sub: `${lines(summary.copilotAssistedLines)} of ${lines(summary.linesTouched)} lines`,
+      chart: <ProgressRing value={summary.copilotAssistedLineRate} />
+    },
+    {
+      label: 'Repositories',
+      family: 'leverage',
+      icon: 'repo',
+      value: String(summary.repoCount),
+      sub: plural(summary.prCount, 'pull request')
+    },
+    {
+      label: 'Net lines delivered',
+      family: 'output',
+      icon: 'plusminus',
+      value: lines(summary.netLines),
+      sub: `${lines(summary.linesAdded)} added minus ${lines(summary.linesDeleted)} deleted`,
+      chart: <MiniBars data={prs.map((p) => p.netLines)} />
+    }
+  ]
+
   return (
-    <div className="flex flex-col gap-4">
-      <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
-        <KpiCard
-          label="Assist Rate"
-          value={summary.copilotAssistedRate}
-          unit="%"
-          accent="var(--color-copilot)"
-          icon="✦"
-          footnote={`${summary.copilotAssisted} of ${summary.totalCommits} commits`}
-          info="Share of this contributor's commits that are Copilot-assisted, across all repos (Rebase excluded)."
+    <>
+      <section className="app-scope" aria-labelledby={scopeId}>
+        <ScopeHeader
+          id={scopeId}
+          level="Drill-down"
+          icon="person"
+          title="Contributor overview"
+          meta={`${who} · ${plural(summary.repoCount, 'repository', 'repositories')} · ${plural(summary.prCount, 'pull request')}`}
         />
-        <KpiCard
-          label="Line Rate"
-          value={summary.copilotAssistedLineRate}
-          unit="%"
-          accent="var(--color-accent)"
-          icon="≣"
-          footnote={`${summary.copilotAssistedLines.toLocaleString()} lines`}
-          info="Share of lines this contributor touched via Copilot-assisted commits (Rebase/merge commits excluded)."
-        />
-        <KpiCard
-          label="Repositories"
-          value={summary.repoCount}
-          accent="var(--color-info)"
-          icon="⌗"
-          footnote={`${summary.prCount} pull requests`}
-          info="Distinct repositories this contributor made at least one non-Rebase commit to."
-        />
-        <KpiCard
-          label="Net Lines"
-          value={summary.netLines.toLocaleString()}
-          accent="var(--color-success)"
-          icon="±"
-          footnote={`+${summary.linesAdded.toLocaleString()} added − ${summary.linesDeleted.toLocaleString()} deleted`}
-          info="Lines added minus lines deleted across this contributor's non-Rebase commits — the net code they actually delivered after rework."
-        />
-      </div>
 
-      <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-        <Panel title="Commit Composition">
-          <DistributionDonut
-            title="Commit Composition"
-            data={[
-              { name: 'Copilot-assisted', value: summary.copilotAssisted },
-              { name: 'Human-authored', value: summary.humanAuthored }
-            ]}
-          />
-        </Panel>
-        <Panel title="Line Composition">
-          <DistributionDonut
-            title="Line Composition"
-            data={[
-              { name: 'Copilot-assisted', value: summary.copilotAssistedLines },
-              { name: 'Human-authored', value: summary.humanAuthoredLines }
-            ]}
-          />
-        </Panel>
-      </div>
+        <div className="app-kpi-grid">
+          {kpis.map((kpi, index) => (
+            <KpiCard key={kpi.label} {...kpi} index={index} />
+          ))}
+        </div>
 
-      <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">
-        <Panel
-          title="Assist Rate by Pull Request"
-          subtitle="Every PR this contributor touched · click to open"
-        >
-          <CategoryBar
-            title="Assist Rate by Pull Request"
-            categories={prs.map((p) => `${p.repoName} #${p.prNumber}`)}
-            values={prs.map((p) => p.copilotAssistedRate)}
-            seriesName="assist rate"
-            unit="%"
-            colorByValue
-            onSelect={(i) => onOpenPR(prs[i].repository, prs[i].prNumber)}
-          />
-        </Panel>
-        <Panel
-          title="Commits per PR: Copilot vs Human-authored"
-          subtitle="Click a PR to drill in"
-        >
-          <StackedBar
-            title="Commits per PR: Copilot vs Human-authored"
-            categories={prs.map((p) => `${p.repoName} #${p.prNumber}`)}
-            onSelect={(i) => onOpenPR(prs[i].repository, prs[i].prNumber)}
-            series={[
+        <div className="app-grid govuk-!-margin-top-5">
+          <ChartFigure
+            number={1}
+            title="Commit composition"
+            subtitle={`Counted commits by classification, ${contributor}, selected period. Rebase and merge commits are excluded.`}
+            description={`${summary.copilotAssisted} of ${summary.totalCommits} commits (${summary.copilotAssistedRate}%) were Copilot-assisted.`}
+            family="assist"
+            icon="donut"
+            chip={PERIOD_CHIP}
+            className="app-span-6"
+            columns={[
+              { id: 'class', label: 'Classification' },
+              { id: 'commits', label: 'Commits', numeric: true }
+            ]}
+            rows={[
+              ['Copilot-assisted', summary.copilotAssisted],
+              ['Human-authored', summary.humanAuthored]
+            ]}
+          >
+            <DistributionDonut
+              title="Commit composition"
+              data={[
+                { name: 'Copilot-assisted', value: summary.copilotAssisted },
+                { name: 'Human-authored', value: summary.humanAuthored }
+              ]}
+            />
+          </ChartFigure>
+          <ChartFigure
+            number={2}
+            title="Line composition"
+            subtitle={`Lines touched by classification, ${contributor}, selected period`}
+            description={`${lines(summary.copilotAssistedLines)} of ${lines(summary.linesTouched)} lines touched (${summary.copilotAssistedLineRate}%) were in Copilot-assisted commits.`}
+            family="assist"
+            icon="donut"
+            chip={PERIOD_CHIP}
+            className="app-span-6"
+            columns={[
+              { id: 'class', label: 'Classification' },
+              { id: 'lines', label: 'Lines touched', numeric: true }
+            ]}
+            rows={
+              summary.linesTouched
+                ? [
+                    ['Copilot-assisted', summary.copilotAssistedLines],
+                    ['Human-authored', summary.humanAuthoredLines]
+                  ]
+                : []
+            }
+          >
+            <DistributionDonut
+              title="Line composition"
+              data={[
+                {
+                  name: 'Copilot-assisted',
+                  value: summary.copilotAssistedLines
+                },
+                { name: 'Human-authored', value: summary.humanAuthoredLines }
+              ]}
+            />
+          </ChartFigure>
+          <ChartFigure
+            number={3}
+            title="Commit assist rate by pull request"
+            subtitle={`Commit assist rate per pull request for this contributor's commits, percentage, selected period`}
+            description={`This contributor's commits appear in ${plural(prs.length, 'pull request')}; ${prs.filter((p) => p.copilotAssisted > 0).length} of them include Copilot-assisted work.`}
+            family="assist"
+            icon="bars"
+            chip={PERIOD_CHIP}
+            className="app-span-6"
+            columns={[
+              { id: 'pr', label: 'Pull request' },
+              { id: 'rate', label: 'Commit assist rate (%)', numeric: true }
+            ]}
+            rows={prs.map((p) => [prLabel(p), p.copilotAssistedRate])}
+          >
+            <CategoryBar
+              title="Commit assist rate by pull request"
+              categories={categories}
+              values={prs.map((p) => p.copilotAssistedRate)}
+              seriesName="commit assist rate"
+              unit="%"
+              colorByValue
+              onSelect={(i) => onOpenPR(prs[i].repository, prs[i].prNumber)}
+            />
+          </ChartFigure>
+          <ChartFigure
+            number={4}
+            title="Commits per PR by Classification"
+            subtitle={`Copilot-assisted and human-authored commits per pull request for this contributor, selected period`}
+            description={`${summary.copilotAssisted} Copilot-assisted and ${summary.humanAuthored} human-authored commits across ${plural(prs.length, 'pull request')}.`}
+            family="assist"
+            icon="bars"
+            chip={PERIOD_CHIP}
+            className="app-span-6"
+            columns={[
+              { id: 'pr', label: 'Pull request' },
               {
-                name: 'Copilot-assisted',
-                colorToken: 'copilot',
-                data: prs.map((p) => p.copilotAssisted)
+                id: 'copilot',
+                label: 'Copilot-assisted commits',
+                numeric: true
               },
-              {
-                name: 'Human-authored',
-                colorToken: 'manual',
-                data: prs.map((p) => p.humanAuthored)
-              }
+              { id: 'human', label: 'Human-authored commits', numeric: true }
             ]}
+            rows={prs.map((p) => [
+              prLabel(p),
+              p.copilotAssisted,
+              p.humanAuthored
+            ])}
+          >
+            <StackedBar
+              title="Commits by pull request and classification"
+              categories={categories}
+              onSelect={(i) => onOpenPR(prs[i].repository, prs[i].prNumber)}
+              series={[
+                {
+                  name: 'Copilot-assisted',
+                  colorToken: 'copilot',
+                  data: prs.map((p) => p.copilotAssisted)
+                },
+                {
+                  name: 'Human-authored',
+                  colorToken: 'manual',
+                  data: prs.map((p) => p.humanAuthored)
+                }
+              ]}
+            />
+          </ChartFigure>
+          <ChartFigure
+            number={5}
+            title="Lines Added and Deleted per Commit"
+            subtitle={`Lines added against lines deleted per counted commit, sized by lines touched, ${contributor}, selected period. Rebase and merge commits are excluded.`}
+            description={`${plural(commitPoints.length, 'counted commit')} in ${plural(prs.length, 'pull request')}. Commits far from the origin are the largest changes.`}
+            family="risk"
+            icon="scatter"
+            chip={PERIOD_CHIP}
+            className="app-span-12"
+            columns={[
+              { id: 'commit', label: 'Commit' },
+              { id: 'class', label: 'Classification' },
+              { id: 'added', label: 'Lines added', numeric: true },
+              { id: 'deleted', label: 'Lines deleted', numeric: true },
+              { id: 'touched', label: 'Lines touched', numeric: true }
+            ]}
+            rows={commitPoints.map((c) => [
+              c.label,
+              c.category,
+              c.x,
+              c.y,
+              c.size
+            ])}
+          >
+            <HotspotScatter
+              title="Lines added and deleted per commit"
+              points={commitPoints}
+              xName="Lines added"
+              yName="Lines deleted"
+            />
+          </ChartFigure>
+        </div>
+      </section>
+
+      <section className="app-scope" aria-labelledby={prsId}>
+        <ScopeHeader
+          id={prsId}
+          level="Browse"
+          icon="merge"
+          title="Pull requests"
+          meta="Select a pull request to see its commits"
+        />
+        <Panel
+          title="Pull request history"
+          family="leverage"
+          icon="merge"
+          aside={<span className="app-mini-tag">Newest first</span>}
+          className="app-compare"
+        >
+          <SortableTable
+            className="govuk-!-margin-bottom-0"
+            caption={`Pull requests with commits from ${contributor} in the selected period, newest first`}
+            captionHidden
+            head={[
+              { id: 'pr', label: 'Pull request' },
+              { id: 'repo', label: 'Repository' },
+              { id: 'commits', label: 'Commits', numeric: true },
+              { id: 'assist', label: 'Commit assist rate' },
+              { id: 'net', label: 'Net lines delivered', numeric: true }
+            ]}
+            rows={prs.map((p) => ({
+              id: `${p.repository}#${p.prNumber}`,
+              cells: [
+                {
+                  content: (
+                    <OpenButton onClick={openPr(p)} hint={` in ${p.repoName}`}>
+                      #{p.prNumber}
+                    </OpenButton>
+                  ),
+                  sortValue: p.prNumber
+                },
+                p.repoName,
+                p.totalCommits,
+                {
+                  content: (
+                    <span className="app-family--assist">
+                      <Meter value={p.copilotAssistedRate} />
+                      {p.copilotAssistedRate}%
+                    </span>
+                  ),
+                  sortValue: p.copilotAssistedRate
+                },
+                { content: lines(p.netLines), sortValue: p.netLines }
+              ]
+            }))}
           />
         </Panel>
-      </div>
-
-      <Panel
-        title="Change Hotspots"
-        subtitle="Every commit by lines added vs deleted · size = total touched"
-      >
-        <HotspotScatter
-          title="Change Hotspots"
-          height={360}
-          points={commitPoints}
-          xName="Lines added"
-          yName="Lines deleted"
-        />
-      </Panel>
-    </div>
+      </section>
+    </>
   )
 }

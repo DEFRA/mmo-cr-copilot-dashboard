@@ -94,4 +94,26 @@ export function toDateTimeLocal(date) {
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`
 }
 
+const pad2 = (n) => String(n).padStart(2, '0')
+
+/** `dd/mm/yyyy` for the period filter's date inputs. */
+export function toDateInput(date) {
+  return `${pad2(date.getDate())}/${pad2(date.getMonth() + 1)}/${date.getFullYear()}`
+}
+
+/** `hh:mm` for a <input type="time">. */
+export function toTimeInput(date) {
+  return `${pad2(date.getHours())}:${pad2(date.getMinutes())}`
+}
+
+/** Parses `dd/mm/yyyy` plus `hh:mm` as local time; null when either is invalid. */
+export function parseDateTime(date, time) {
+  const d = /^(\d{1,2})\/(\d{1,2})\/(\d{4})$/.exec(String(date).trim())
+  const t = /^(\d{2}):(\d{2})$/.exec(String(time ?? ''))
+  if (!d || !t) return null
+  const [day, month, year] = [Number(d[1]), Number(d[2]) - 1, Number(d[3])]
+  const parsed = new Date(year, month, day, Number(t[1]), Number(t[2]))
+  return parsed.getDate() === day && parsed.getMonth() === month ? parsed : null
+}
+
 export { SPRINT_LENGTH_DAYS }

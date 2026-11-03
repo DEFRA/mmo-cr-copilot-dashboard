@@ -1,5 +1,8 @@
 import { Component } from 'react'
 
+import { Panel } from './dashboard/Panel.jsx'
+import { PanelState } from './dashboard/PanelState.jsx'
+
 /**
  * Class-based error boundary (the one React API that still requires a class).
  * Wraps risky chart/render subtrees so a single failure can't blank the app.
@@ -22,12 +25,13 @@ export class ErrorBoundary extends Component {
     if (this.state.hasError) {
       return (
         this.props.fallback ?? (
-          <div className="panel p-6 text-center text-sm text-[var(--color-danger)]">
-            <p className="m-0 font-semibold">This section failed to render.</p>
-            <p className="m-0 mt-1 text-[var(--color-text-muted)]">
-              Try refreshing the page.
-            </p>
-          </div>
+          <Panel
+            title="This section failed to render."
+            family="risk"
+            icon="warning"
+          >
+            <PanelState state="error" errorMessage="Try refreshing the page." />
+          </Panel>
         )
       )
     }

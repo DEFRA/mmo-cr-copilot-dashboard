@@ -8,23 +8,15 @@
  * reflects the correction immediately rather than waiting for the next poll.
  */
 import { useCallback } from 'react'
-import { apiUrl } from '../lib/api'
+import { jsonWrite } from '../lib/api'
 
 export function useCommitClassification(onUpdated) {
   return useCallback(
     async ({ repository, prNumber, commit, classification }) => {
-      const res = await fetch(
-        apiUrl(
-          `/api/payloads/${encodeURIComponent(repository)}/${prNumber}/commits/${encodeURIComponent(commit)}`
-        ),
-        {
-          method: 'PATCH',
-          headers: {
-            'Content-Type': 'application/json',
-            Accept: 'application/json'
-          },
-          body: JSON.stringify({ classification })
-        }
+      const res = await jsonWrite(
+        `/api/payloads/${encodeURIComponent(repository)}/${prNumber}/commits/${encodeURIComponent(commit)}`,
+        'PATCH',
+        { classification }
       )
 
       const text = await res.text()

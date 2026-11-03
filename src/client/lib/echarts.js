@@ -4,12 +4,14 @@ import {
   LineChart,
   PieChart,
   ScatterChart,
+  EffectScatterChart,
   HeatmapChart,
   TreemapChart,
   GaugeChart,
   RadarChart
 } from 'echarts/charts'
 import {
+  AriaComponent,
   GridComponent,
   TooltipComponent,
   LegendComponent,
@@ -20,17 +22,20 @@ import {
   GraphicComponent,
   RadarComponent
 } from 'echarts/components'
-import { CanvasRenderer } from 'echarts/renderers'
+import { LabelLayout } from 'echarts/features'
+import { SVGRenderer } from 'echarts/renderers'
 
 echarts.use([
   BarChart,
   LineChart,
   PieChart,
   ScatterChart,
+  EffectScatterChart,
   HeatmapChart,
   TreemapChart,
   GaugeChart,
   RadarChart,
+  AriaComponent,
   GridComponent,
   TooltipComponent,
   LegendComponent,
@@ -40,7 +45,8 @@ echarts.use([
   MarkLineComponent,
   GraphicComponent,
   RadarComponent,
-  CanvasRenderer
+  LabelLayout,
+  SVGRenderer
 ])
 
 export default echarts

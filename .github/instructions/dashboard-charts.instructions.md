@@ -5,6 +5,13 @@ applyTo: 'src/client/components/**/*.jsx'
 
 # Dashboard & Charting Rules — Apache ECharts
 
+> **Every title and heading is Title Case, dashboard-wide** — chart figures, panels, KPI labels,
+> subsections, scope headers and page titles alike. See
+> [docs/design-system.md §10](../../docs/design-system.md#10-content-rules).
+
+> [docs/design-system.md](../../docs/design-system.md) is the source of truth for visual design and
+> takes precedence over this file on look-and-feel.
+
 ## The registry
 
 ECharts is imported lean through `src/client/lib/echarts.js`, which registers only the charts,

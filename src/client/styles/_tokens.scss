@@ -1,0 +1,86 @@
+// Design tokens. Names, values and contrast are recorded in docs/design-system.md.
+:root {
+  --app-colour-adoption: #00703c;
+  --app-colour-adoption-ink: #00703c;
+  --app-colour-adoption-tint: #e6f2ec;
+  --app-colour-assist: #28a197;
+  --app-colour-assist-ink: #0b6e65;
+  --app-colour-assist-tint: #e5f5f3;
+  --app-colour-quality: #28a197;
+  --app-colour-quality-ink: #0b6e65;
+  --app-colour-quality-tint: #e5f5f3;
+  --app-colour-speed: #1d70b8;
+  --app-colour-speed-ink: #155a96;
+  --app-colour-speed-tint: #e8f1f8;
+  --app-colour-leverage: #4c2c92;
+  --app-colour-leverage-ink: #4c2c92;
+  --app-colour-leverage-tint: #eeeaf6;
+  --app-colour-risk: #d9621a;
+  --app-colour-risk-ink: #a8400f;
+  --app-colour-risk-tint: #fef0e8;
+  --app-colour-output: #d53880;
+  --app-colour-output-ink: #b0246a;
+  --app-colour-output-tint: #fbe9f1;
+
+  --app-colour-copilot: #4c2c92;
+  --app-colour-human: #d9621a;
+  --app-colour-brand: #1d70b8;
+  --app-colour-brand-ink: #155a96;
+  --app-colour-brand-tint: #e8f1f8;
+  --app-colour-defra-green: #00a33b;
+  --app-colour-defra-green-dark: #008531;
+  --app-colour-scope: #12436d;
+  --app-colour-error: #d4351c;
+  --app-colour-error-ink: #aa2a16;
+  --app-colour-error-tint: #fbe9e6;
+  --app-colour-focus: #ffdd00;
+  --app-colour-crown: #f2b705;
+  --app-colour-crown-edge: #7a5a00;
+  --app-colour-text: #0b0c0c;
+  --app-colour-text-muted: #505a5f;
+  --app-colour-line: #d8e2ea;
+  --app-colour-canvas: #f4f8fb;
+  --app-colour-neutral-tint: #eef0f1;
+  --app-colour-footer: #f3f2f1;
+  --app-colour-white: #ffffff;
+
+  --app-chart-1: #12436d;
+  --app-chart-2: #28a197;
+  --app-chart-3: #801650;
+  --app-chart-4: #f46a25;
+  --app-chart-5: #3d3d3d;
+  --app-chart-6: #a285d1;
+
+  --app-size-xs: #00703c;
+  --app-size-s: #28a197;
+  --app-size-m: #ffdd00;
+  --app-size-l: #f47738;
+  --app-size-xl: #d4351c;
+  --app-rating-a: #00703c;
+  --app-rating-b: #a7c957;
+  --app-rating-c: #ffdd00;
+  --app-rating-d: #f47738;
+  --app-rating-e: #d4351c;
+
+  --app-radius: 8px;
+  --app-radius-s: 6px;
+  --app-radius-icon: 10px;
+  --app-radius-pill: 999px;
+  --app-shadow:
+    0 1px 2px rgb(18 67 109 / 0.08), 0 10px 28px -16px rgb(18 67 109 / 0.35);
+  --app-shadow-hover:
+    0 2px 4px rgb(18 67 109 / 0.12), 0 18px 34px -16px rgb(18 67 109 / 0.55);
+
+  --app-motion-duration: 900ms;
+  --app-motion-ease: cubic-bezier(0.22, 1, 0.36, 1);
+  --app-motion-stagger: 80ms;
+}
+
+// Sets the band, ink and tint a component reads, without an inline style.
+@each $family in adoption, assist, quality, speed, leverage, risk, output {
+  .app-family--#{$family} {
+    --app-family-band: var(--app-colour-#{$family});
+    --app-family-ink: var(--app-colour-#{$family}-ink);
+    --app-family-tint: var(--app-colour-#{$family}-tint);
+  }
+}

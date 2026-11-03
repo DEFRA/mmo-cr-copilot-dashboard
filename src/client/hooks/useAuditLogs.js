@@ -1,6 +1,6 @@
 /**
- * useAuditLogs — reads a page of the audit trail (`/api/audit-logs`), the
- * record of every change an operator has made through the dashboard.
+ * useAuditLogs — reads a page of one project's audit trail, the record of
+ * every change an operator has made to it through the dashboard.
  *
  * The window and paging are owned by the caller so they can be reflected in
  * the UI; this hook only fetches whatever is passed in.
@@ -16,9 +16,10 @@
  *   refresh()  — re-fetches the current page
  */
 import { useCallback, useEffect, useState } from 'react'
-import { apiUrl } from '../lib/api'
+import { apiFetch, apiUrl } from '../lib/api'
 
-const ENDPOINT = '/api/audit-logs'
+const endpointFor = (slug) =>
+  `/api/projects/${encodeURIComponent(slug)}/audit-logs`
 
 const EMPTY = {
   entries: [],
@@ -37,7 +38,13 @@ function buildQuery({ from, to, page, pageSize }) {
   return params.toString()
 }
 
-export function useAuditLogs({ from, to, page = 1, pageSize = 25 } = {}) {
+export function useAuditLogs({
+  projectSlug,
+  from,
+  to,
+  page = 1,
+  pageSize = 25
+} = {}) {
   const [state, setState] = useState({
     ...EMPTY,
     status: 'idle',
@@ -46,12 +53,13 @@ export function useAuditLogs({ from, to, page = 1, pageSize = 25 } = {}) {
   const [reloadToken, setReloadToken] = useState(0)
 
   useEffect(() => {
+    if (!projectSlug) return undefined
     const controller = new AbortController()
     setState((s) => ({ ...s, status: 'loading', error: null }))
 
     const query = buildQuery({ from, to, page, pageSize })
 
-    fetch(apiUrl(`${ENDPOINT}?${query}`), {
+    apiFetch(apiUrl(`${endpointFor(projectSlug)}?${query}`), {
       signal: controller.signal,
       headers: { Accept: 'application/json' }
     })
@@ -81,7 +89,7 @@ export function useAuditLogs({ from, to, page = 1, pageSize = 25 } = {}) {
       })
 
     return () => controller.abort()
-  }, [from, to, page, pageSize, reloadToken])
+  }, [projectSlug, from, to, page, pageSize, reloadToken])
 
   const refresh = useCallback(() => setReloadToken((t) => t + 1), [])
 

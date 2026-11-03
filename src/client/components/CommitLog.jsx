@@ -1,56 +1,54 @@
 import { useEffect, useRef, useState } from 'react'
-import { Panel } from './Panel'
+
+import { ClassificationBadge, Panel } from './dashboard'
 import { COMMIT_CLASSIFICATIONS } from '../lib/classification'
-import { effectiveClassification, shortRepoName } from '../lib/selectors'
-
-const PILL = {
-  'Copilot-assisted': { icon: '✦', label: 'Copilot', color: 'copilot' },
-  'Human-authored': { icon: '✎', label: 'Human-authored', color: 'manual' },
-  Rebase: { icon: '⮑', label: 'Rebase', color: 'text-muted' },
-  Dependabot: { icon: '⬢', label: 'Dependabot', color: 'text-muted' }
-}
-
-function pillFor(classification) {
-  return PILL[classification] ?? PILL['Human-authored']
-}
-
-function PencilIcon() {
-  return (
-    <svg
-      aria-hidden="true"
-      className="h-3.5 w-3.5"
-      viewBox="0 0 16 16"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="1.6"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-    >
-      <path d="M11.1 2.2a1.7 1.7 0 0 1 2.4 2.4L5.3 12.8l-3.1.7.7-3.1z" />
-    </svg>
-  )
-}
+import { effectiveClassification } from '../lib/selectors'
 
 const SAVE_FAILED = 'Failed to update the classification.'
 
+const formatCommitted = (iso) => {
+  const time = Date.parse(iso)
+  return Number.isNaN(time)
+    ? '—'
+    : new Date(time).toLocaleString('en-GB', {
+        day: 'numeric',
+        month: 'short',
+        hour: '2-digit',
+        minute: '2-digit'
+      })
+}
+
+function CommitBadge({ classification }) {
+  if (classification === 'Rebase' || classification === 'Dependabot') {
+    return (
+      <span className="app-badge app-badge--excluded">
+        Excluded: {classification === 'Rebase' ? 'rebase' : 'Dependabot'}
+      </span>
+    )
+  }
+  return <ClassificationBadge classification={classification} long />
+}
+
+function logStatus(canReclassify, editable) {
+  if (!canReclassify) return null
+  return editable
+    ? 'Merged: classification can be corrected, every change is audited'
+    : 'Open: classification can be corrected once merged'
+}
+
 /**
- * The commit log for one pull request.
+ * The commit log for one pull request (docs/design-system.md §8.10).
  *
- * Once a PR is merged its commit list is final, so an operator may correct a
- * misclassified commit here. While the PR is still open the column stays
- * read-only: the analytics producer re-runs on every push and would overwrite
- * the correction. Every accepted change is recorded in the audit trail shown
- * on the Settings page.
- *
- * Correction is an explicit inline edit — pill plus pencil, then a select with
- * confirm and cancel — rather than a save-on-change select, because every
- * accepted change writes an audit entry and a stray selection must not.
+ * Correction is admin-only and waits for the merge, because the producer
+ * re-runs on every push and would overwrite it. It is an explicit edit with
+ * save and cancel, as every accepted change writes an audit entry.
  */
 export function CommitLog({
   repository,
   prNumber,
   commits,
   editable = false,
+  canReclassify = false,
   onChangeClassification
 }) {
   const [editingCommit, setEditingCommit] = useState(null)
@@ -112,183 +110,193 @@ export function CommitLog({
     }
   }
 
+  const renderCorrection = (c) => {
+    if (!editable) return <span className="app-muted">Once merged</span>
+
+    if (editingCommit !== c.commit) {
+      return (
+        <button
+          type="button"
+          ref={(el) => {
+            if (el) editButtons.current.set(c.commit, el)
+            else editButtons.current.delete(c.commit)
+          }}
+          className="app-link-button"
+          onClick={() => startEdit(c.commit, c.classification)}
+        >
+          Edit{' '}
+          <span className="govuk-visually-hidden">
+            classification for commit {c.commit}
+          </span>
+        </button>
+      )
+    }
+
+    const isPending = pendingCommit === c.commit
+    const rowError = error?.commit === c.commit ? error.message : null
+    const selectId = `commit-class-${c.commit}`
+    const errorId = `${selectId}-error`
+
+    return (
+      <div
+        className={`govuk-form-group govuk-!-margin-bottom-0${rowError ? ' govuk-form-group--error' : ''}`}
+      >
+        <label className="govuk-label govuk-visually-hidden" htmlFor={selectId}>
+          Classification for commit {c.commit}
+        </label>
+        {rowError && (
+          <p id={errorId} className="govuk-error-message" role="alert">
+            <span className="govuk-visually-hidden">Error:</span> {rowError}
+          </p>
+        )}
+        <select
+          ref={selectRef}
+          id={selectId}
+          className={`govuk-select${rowError ? ' govuk-select--error' : ''}`}
+          aria-describedby={rowError ? errorId : undefined}
+          value={draft}
+          disabled={isPending}
+          onChange={(e) => setDraft(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === 'Escape') closeEdit(c.commit)
+            if (e.key === 'Enter') {
+              e.preventDefault()
+              confirmEdit(c.commit, c.classification)
+            }
+          }}
+        >
+          {COMMIT_CLASSIFICATIONS.map((option) => (
+            <option key={option} value={option}>
+              {option}
+            </option>
+          ))}
+        </select>
+        <div className="govuk-button-group govuk-!-margin-top-2 govuk-!-margin-bottom-0">
+          <button
+            type="button"
+            className="govuk-button govuk-!-margin-bottom-0"
+            disabled={isPending}
+            aria-disabled={isPending || undefined}
+            onClick={() => confirmEdit(c.commit, c.classification)}
+          >
+            Save{' '}
+            <span className="govuk-visually-hidden">
+              classification for commit {c.commit}
+            </span>
+          </button>
+          <button
+            type="button"
+            className="govuk-button govuk-button--secondary govuk-!-margin-bottom-0"
+            disabled={isPending}
+            aria-disabled={isPending || undefined}
+            onClick={() => closeEdit(c.commit)}
+          >
+            Cancel{' '}
+            <span className="govuk-visually-hidden">
+              editing classification for commit {c.commit}
+            </span>
+          </button>
+        </div>
+      </div>
+    )
+  }
+
   return (
     <Panel
-      title="Commit Log"
-      subtitle={
-        editable
-          ? `${shortRepoName(repository)} · PR #${prNumber} · classifications can be corrected — every change is audited`
-          : `${shortRepoName(repository)} · PR #${prNumber} · classifications become editable once the PR is merged`
+      title="Commit log"
+      family="leverage"
+      icon="code"
+      aside={
+        canReclassify && (
+          <span className="app-mini-tag">
+            {logStatus(canReclassify, editable)}
+          </span>
+        )
       }
+      className="app-compare"
     >
-      {error && (
-        <p
-          role="alert"
-          className="mb-3 text-xs font-medium text-[var(--color-danger)]"
-        >
-          {error.message}
-        </p>
-      )}
-      <div className="overflow-x-auto">
-        <table className="w-full border-collapse text-left text-sm">
-          <thead>
-            <tr className="text-[var(--color-text-muted)]">
-              <th scope="col" className="px-3 py-2 font-medium">
-                Commit
+      <table className="govuk-table govuk-!-margin-bottom-0">
+        <caption className="govuk-table__caption govuk-visually-hidden">
+          Commits in pull request {prNumber}
+        </caption>
+        <thead className="govuk-table__head">
+          <tr className="govuk-table__row">
+            <th scope="col" className="govuk-table__header">
+              Commit
+            </th>
+            <th scope="col" className="govuk-table__header">
+              Subject
+            </th>
+            <th scope="col" className="govuk-table__header">
+              Author
+            </th>
+            <th scope="col" className="govuk-table__header">
+              Committed
+            </th>
+            <th
+              scope="col"
+              className="govuk-table__header govuk-table__header--numeric"
+            >
+              Added
+            </th>
+            <th
+              scope="col"
+              className="govuk-table__header govuk-table__header--numeric"
+            >
+              Deleted
+            </th>
+            <th
+              scope="col"
+              className="govuk-table__header govuk-table__header--numeric"
+            >
+              Net
+            </th>
+            <th scope="col" className="govuk-table__header">
+              Classification
+            </th>
+            {canReclassify && (
+              <th scope="col" className="govuk-table__header">
+                <span className="govuk-visually-hidden">
+                  Classification actions
+                </span>
               </th>
-              <th scope="col" className="px-3 py-2 font-medium">
-                Author
+            )}
+          </tr>
+        </thead>
+        <tbody className="govuk-table__body">
+          {commits.map((c) => (
+            <tr
+              key={c.commit}
+              className="govuk-table__row"
+              aria-busy={pendingCommit === c.commit || undefined}
+            >
+              <th scope="row" className="govuk-table__header">
+                <code>{c.commit}</code>
               </th>
-              <th scope="col" className="px-3 py-2 font-medium">
-                Subject
-              </th>
-              <th
-                scope="col"
-                className={`px-3 py-2 font-medium${editable ? ' commit-class-col' : ''}`}
-              >
-                Class
-              </th>
-              <th scope="col" className="px-3 py-2 text-right font-medium">
-                +Added
-              </th>
-              <th scope="col" className="px-3 py-2 text-right font-medium">
-                −Deleted
-              </th>
-              <th scope="col" className="px-3 py-2 text-right font-medium">
-                Net
-              </th>
+              <td className="govuk-table__cell">{c.subject}</td>
+              <td className="govuk-table__cell">{c.author ?? '—'}</td>
+              <td className="govuk-table__cell">
+                {formatCommitted(c.committedAt)}
+              </td>
+              <td className="govuk-table__cell govuk-table__cell--numeric">
+                +{c.linesAdded}
+              </td>
+              <td className="govuk-table__cell govuk-table__cell--numeric">
+                −{c.linesDeleted}
+              </td>
+              <td className="govuk-table__cell govuk-table__cell--numeric">
+                {c.netLines}
+              </td>
+              <td className="govuk-table__cell">
+                <CommitBadge classification={effectiveClassification(c)} />
+              </td>
+              {canReclassify && (
+                <td className="govuk-table__cell">{renderCorrection(c)}</td>
+              )}
             </tr>
-          </thead>
-          <tbody>
-            {commits.map((c) => {
-              const kind = effectiveClassification(c)
-              const pill = pillFor(kind)
-              const pillColor = `var(--color-${pill.color})`
-              const isEditing = editingCommit === c.commit
-              const isPending = pendingCommit === c.commit
-              const rowError = error?.commit === c.commit ? error.message : null
-              const errorId = `commit-class-error-${c.commit}`
-
-              return (
-                <tr
-                  key={c.commit}
-                  aria-busy={isPending || undefined}
-                  className="commit-row border-t border-[var(--color-border)]"
-                >
-                  <td className="px-3 py-2 font-mono text-xs text-[var(--color-text-muted)]">
-                    {c.commit}
-                  </td>
-                  <td className="px-3 py-2 text-[var(--color-text)]">
-                    {c.author ?? '—'}
-                  </td>
-                  <td className="px-3 py-2 text-[var(--color-text)]">
-                    {c.subject}
-                  </td>
-                  <td className="px-3 py-2">
-                    <div className="commit-class-cell">
-                      {isEditing ? (
-                        <>
-                          <select
-                            ref={selectRef}
-                            className="filter-input filter-input--inline"
-                            aria-label={`Classification for commit ${c.commit}`}
-                            aria-invalid={rowError ? 'true' : undefined}
-                            aria-describedby={rowError ? errorId : undefined}
-                            value={draft}
-                            disabled={isPending}
-                            onChange={(e) => setDraft(e.target.value)}
-                            onKeyDown={(e) => {
-                              if (e.key === 'Escape') closeEdit(c.commit)
-                              if (e.key === 'Enter') {
-                                e.preventDefault()
-                                confirmEdit(c.commit, c.classification)
-                              }
-                            }}
-                          >
-                            {COMMIT_CLASSIFICATIONS.map((option) => (
-                              <option key={option} value={option}>
-                                {option}
-                              </option>
-                            ))}
-                          </select>
-                          <button
-                            type="button"
-                            className="icon-button icon-button--confirm focus-ring"
-                            aria-label={`Save classification for commit ${c.commit}`}
-                            disabled={isPending}
-                            onClick={() =>
-                              confirmEdit(c.commit, c.classification)
-                            }
-                          >
-                            {isPending ? (
-                              <span
-                                className="icon-button__spinner"
-                                aria-hidden="true"
-                              />
-                            ) : (
-                              <span aria-hidden="true">✓</span>
-                            )}
-                          </button>
-                          <button
-                            type="button"
-                            className="icon-button icon-button--cancel focus-ring"
-                            aria-label={`Cancel editing classification for commit ${c.commit}`}
-                            disabled={isPending}
-                            onClick={() => closeEdit(c.commit)}
-                          >
-                            <span aria-hidden="true">✕</span>
-                          </button>
-                        </>
-                      ) : (
-                        <>
-                          <span
-                            className="pill"
-                            style={{ color: pillColor, borderColor: pillColor }}
-                          >
-                            <span aria-hidden="true">{pill.icon}</span>
-                            {pill.label}
-                          </span>
-                          {editable && (
-                            <button
-                              type="button"
-                              ref={(el) => {
-                                if (el) editButtons.current.set(c.commit, el)
-                                else editButtons.current.delete(c.commit)
-                              }}
-                              className="icon-button icon-button--ghost focus-ring"
-                              aria-label={`Edit classification for commit ${c.commit}`}
-                              onClick={() =>
-                                startEdit(c.commit, c.classification)
-                              }
-                            >
-                              <PencilIcon />
-                            </button>
-                          )}
-                        </>
-                      )}
-                    </div>
-                    {rowError && (
-                      <p id={errorId} className="commit-class-error">
-                        <span aria-hidden="true">⚠</span>
-                        {rowError}
-                      </p>
-                    )}
-                  </td>
-                  <td className="px-3 py-2 text-right tabular-nums text-[var(--color-success)]">
-                    +{c.linesAdded}
-                  </td>
-                  <td className="px-3 py-2 text-right tabular-nums text-[var(--color-danger)]">
-                    −{c.linesDeleted}
-                  </td>
-                  <td className="px-3 py-2 text-right tabular-nums text-[var(--color-text)]">
-                    {c.netLines}
-                  </td>
-                </tr>
-              )
-            })}
-          </tbody>
-        </table>
-      </div>
+          ))}
+        </tbody>
+      </table>
     </Panel>
   )
 }

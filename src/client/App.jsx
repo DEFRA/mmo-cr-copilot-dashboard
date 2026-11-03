@@ -1,24 +1,44 @@
-import { lazy, Suspense, useCallback, useMemo, useState } from 'react'
-import { Header } from './components/Header'
-import { Breadcrumb } from './components/Breadcrumb'
-import { Panel } from './components/Panel'
+import {
+  lazy,
+  Suspense,
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState
+} from 'react'
 import { ErrorBoundary } from './components/ErrorBoundary'
-import { useTheme } from './hooks/useTheme'
+import {
+  CascadeBreadcrumbs,
+  Panel,
+  PanelState,
+  PeriodFilter,
+  PeriodLabelContext,
+  ProjectSwitcher
+} from './components/dashboard'
+import { NotificationBanner } from './components/govuk'
+import { AppLayout } from './components/layout/AppLayout'
+import { Hero } from './components/layout/Hero'
+import { ServiceNavigation } from './components/layout/ServiceNavigation'
 import { useLiveFeed } from './hooks/useLiveFeed'
 import { usePersonaMappings } from './hooks/usePersonaMappings'
 import { useCommitClassification } from './hooks/useCommitClassification'
+import { useCurrentUser } from './hooks/useCurrentUser'
+import { useProjects } from './hooks/useProjects'
+import { useProjectSprints } from './hooks/useProjectSprints'
+import { useDeliveryMetrics } from './hooks/useDeliveryMetrics'
+import { useDeliveryTrend } from './hooks/useDeliveryTrend'
+import { useLeverageV2, useProjectMetric } from './hooks/useProjectMetric'
 import {
   shortRepoName,
   filterPayloadsByWindow,
-  isPlottablePayload
+  isPlottablePayload,
+  selectContributorSummaries
 } from './lib/selectors'
 import { buildContributorPersonaMap } from './lib/personas'
-import {
-  currentSprint,
-  recentSprints,
-  formatSprintRange,
-  formatWindow
-} from './lib/sprints'
+import { canAdministerProject } from './lib/roles'
+import { fromHash, isGlobalLevel, toHash } from './lib/routes'
+import { currentSprint, recentSprints } from './lib/sprints'
 
 const OverviewView = lazy(() =>
   import('./components/views/OverviewView').then((m) => ({
@@ -27,6 +47,26 @@ const OverviewView = lazy(() =>
 )
 const RepoView = lazy(() =>
   import('./components/views/RepoView').then((m) => ({ default: m.RepoView }))
+)
+const DeliveryView = lazy(() =>
+  import('./components/views/DeliveryView').then((m) => ({
+    default: m.DeliveryView
+  }))
+)
+const TicketView = lazy(() =>
+  import('./components/views/DeliveryView').then((m) => ({
+    default: m.TicketView
+  }))
+)
+const LeverageView = lazy(() =>
+  import('./components/views/LeverageView').then((m) => ({
+    default: m.LeverageView
+  }))
+)
+const AiNativeOverviewView = lazy(() =>
+  import('./components/views/AiNativeOverviewView').then((m) => ({
+    default: m.AiNativeOverviewView
+  }))
 )
 const PRView = lazy(() =>
   import('./components/views/PRView').then((m) => ({ default: m.PRView }))
@@ -46,73 +86,220 @@ const SettingsView = lazy(() =>
     default: m.SettingsView
   }))
 )
+const AccessibilityStatementView = lazy(() =>
+  import('./components/views/AccessibilityStatementView').then((m) => ({
+    default: m.AccessibilityStatementView
+  }))
+)
+const UnauthorisedView = lazy(() =>
+  import('./components/views/UnauthorisedView').then((m) => ({
+    default: m.UnauthorisedView
+  }))
+)
+const AdminProjectsView = lazy(() =>
+  import('./components/views/AdminProjectsView').then((m) => ({
+    default: m.AdminProjectsView
+  }))
+)
+const CookiesView = lazy(() =>
+  import('./components/views/CookiesView').then((m) => ({
+    default: m.CookiesView
+  }))
+)
+const PrivacyView = lazy(() =>
+  import('./components/views/PrivacyView').then((m) => ({
+    default: m.PrivacyView
+  }))
+)
+const CopilotUsageView = lazy(() =>
+  import('./components/views/CopilotUsageView').then((m) => ({
+    default: m.CopilotUsageView
+  }))
+)
+const PullRequestsView = lazy(() =>
+  import('./components/views/PullRequestsView').then((m) => ({
+    default: m.PullRequestsView
+  }))
+)
+const ContributorsView = lazy(() =>
+  import('./components/views/ContributorsView').then((m) => ({
+    default: m.ContributorsView
+  }))
+)
 
-const ROOT_NAV = { level: 'overview' }
+// Service-wide pages with no hero, breadcrumbs or period filter.
+const PLAIN_PAGES = new Set([
+  'accessibility',
+  'adminProjects',
+  'cookies',
+  'privacy'
+])
 
-const STATUS_LABEL = {
-  connecting: 'Connecting…',
-  open: 'Live',
-  reconnecting: 'Reconnecting…',
-  closed: 'Offline',
-  error: 'Error'
+const SERVICE_NAME = 'Copilot Delivery Insights'
+const PROJECT_NAME = 'MMO Catch Recording'
+
+// Service navigation and footer ids, and the page each one opens.
+const TOP_LEVEL = {
+  overview: { level: 'overview' },
+  repositories: { level: 'overview', section: 'repositories' },
+  'pull-requests': { level: 'pullRequests' },
+  contributors: { level: 'contributors' },
+  delivery: { level: 'delivery' },
+  settings: { level: 'settings' },
+  accessibility: { level: 'accessibility' },
+  cookies: { level: 'cookies' },
+  privacy: { level: 'privacy' }
 }
 
-function ConnectionBanner({ status }) {
-  if (status === 'open') return null
-  const isHard = status === 'closed' || status === 'error'
-  const sev = isHard ? 'var(--color-danger)' : 'var(--color-warning)'
+const NAV_LABELS = [
+  ['overview', 'Overview'],
+  ['repositories', 'Repositories'],
+  ['pull-requests', 'Pull requests'],
+  ['contributors', 'Contributors'],
+  ['delivery', 'Delivery'],
+  ['settings', 'Settings']
+]
+
+function activeNavId(nav) {
+  if (nav.section === 'repositories') return 'repositories'
+  switch (nav.level) {
+    case 'pullRequests':
+      return 'pull-requests'
+    case 'contributors':
+    case 'contributor':
+      return 'contributors'
+    case 'delivery':
+    case 'ticket':
+      return 'delivery'
+    case 'settings':
+    case 'adminProjects':
+      return 'settings'
+    default:
+      return PLAIN_PAGES.has(nav.level) ? null : 'overview'
+  }
+}
+
+const withProject = (nav, slug) =>
+  isGlobalLevel(nav.level) || nav.project || !slug
+    ? nav
+    : { ...nav, project: slug }
+
+function useScrollRestoration(pendingScroll, deps) {
+  useEffect(() => {
+    const target = pendingScroll.current
+    if (!target) return undefined
+    let frame = 0
+    let id
+    const attempt = () => {
+      if (target.section) {
+        const el = document.getElementById(target.section)
+        if (el) {
+          el.scrollIntoView?.({ block: 'start' })
+          pendingScroll.current = null
+          return
+        }
+      } else if (
+        document.documentElement.scrollHeight >=
+          target.y + window.innerHeight ||
+        frame > 60
+      ) {
+        window.scrollTo?.(0, target.y)
+        pendingScroll.current = null
+        return
+      }
+      frame += 1
+      // Lazy views and late data grow the page; keep trying for about a second.
+      if (frame <= 60) id = window.requestAnimationFrame(attempt)
+    }
+    id = window.requestAnimationFrame(attempt)
+    return () => window.cancelAnimationFrame(id)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, deps)
+}
+
+const OFFLINE_HEADLINE = {
+  reconnecting: 'Live updates paused: reconnecting to the analytics service.',
+  closed: 'Live updates paused: we cannot reach the analytics service.',
+  error: 'Live updates paused: we cannot reach the analytics service.'
+}
+
+function ConnectionBanner({ status, lastUpdated }) {
+  const headline = OFFLINE_HEADLINE[status]
+  if (!headline) return null
   return (
-    <div
-      role="status"
-      aria-live="polite"
-      className="flex items-center justify-center gap-2 border-b px-4 py-2 text-sm font-medium"
-      style={{
-        background: `color-mix(in srgb, ${sev} 16%, var(--color-surface))`,
-        borderColor: `color-mix(in srgb, ${sev} 50%, var(--color-border))`,
-        color: 'var(--color-text)'
-      }}
-    >
-      <span aria-hidden="true" style={{ color: sev }}>
-        {isHard ? '✕' : '↻'}
-      </span>
-      {STATUS_LABEL[status]} —{' '}
-      {isHard
-        ? 'Unable to reach backend.'
-        : 'Attempting to reconnect to the analytics backend…'}
-      {isHard && (
-        <span className="opacity-75">
-          Retrying automatically — the last known data is still shown.
-        </span>
-      )}
-    </div>
+    <NotificationBanner>
+      <p className="govuk-notification-banner__heading">{headline}</p>
+      <p className="govuk-body govuk-!-margin-bottom-0">
+        {lastUpdated
+          ? `Showing data from ${lastUpdated}.`
+          : 'No data has loaded yet.'}{' '}
+        Trying again automatically.
+      </p>
+    </NotificationBanner>
   )
 }
 
-function ViewSkeleton() {
+function LoadingPanels({ count }) {
   return (
-    <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
-      {Array.from({ length: 4 }).map((_, i) => (
-        <Panel key={i} state="loading" title="Loading…" />
+    <div className="app-grid">
+      {Array.from({ length: count }).map((_, i) => (
+        // Plain divs: identically named sections would be duplicate landmarks.
+        <Panel key={i} as="div" className="app-span-3" title="Loading…" busy>
+          <PanelState state="loading" title="dashboard data" />
+        </Panel>
       ))}
     </div>
   )
 }
 
+function ViewSkeleton() {
+  return <LoadingPanels count={4} />
+}
+
 export default function App() {
-  const { theme, toggleTheme } = useTheme()
-  const [nav, setNav] = useState(ROOT_NAV)
-  const { payloads, status, lastMessageAt, applyPayload } = useLiveFeed()
-  const personaMappings = usePersonaMappings()
+  const [nav, setNav] = useState(() => fromHash(window.location.hash))
+  const pendingScroll = useRef(null)
+  const {
+    projects,
+    activeProject,
+    selectProject,
+    status: projectsStatus,
+    loading: projectsLoading
+  } = useProjects()
+  const activeSlug = activeProject?.slug
+  const { user, isAdmin } = useCurrentUser()
+  const { payloads, status, lastMessageAt, applyPayload } = useLiveFeed({
+    projectSlug: activeProject?.slug
+  })
+  const personaMappings = usePersonaMappings(activeSlug)
   const changeCommitClassification = useCommitClassification(applyPayload)
   const mappingsByHandle = useMemo(
     () => buildContributorPersonaMap(personaMappings.mappings),
     [personaMappings.mappings]
   )
+  const projectName = activeProject?.name || PROJECT_NAME
+  const role = activeProject?.role ?? null
+  const canAdminister = canAdministerProject(role)
+  // Deny by default: a signed-in user with no project role sees nothing.
+  const noAccess = projectsStatus === 'success' && projects.length === 0
+  const projectsFailed = projectsStatus === 'error'
 
   // ── Global time-window filter ──────────────────────────────────────────────
   // Live = the current sprint; custom = a user-selected [start, end) range.
   const [filter, setFilter] = useState({ mode: 'live', start: null, end: null })
-  const liveWindow = useMemo(() => currentSprint(), [])
+  const { sprints: projectSprints } = useProjectSprints(activeSlug)
+  // Server windows are used only when the newest one really contains today.
+  const serverSprints = useMemo(() => {
+    const now = Date.now()
+    const live = projectSprints[0]
+    return live && live.start.getTime() <= now && now < live.end.getTime()
+      ? projectSprints
+      : []
+  }, [projectSprints])
+  const liveWindow = useMemo(
+    () => serverSprints[0] ?? currentSprint(),
+    [serverSprints]
+  )
 
   const activeWindow = useMemo(
     () =>
@@ -122,50 +309,18 @@ export default function App() {
     [filter, liveWindow]
   )
 
-  const windowLabel = useMemo(
+  // A past period shows SonarCloud as at its last second; the live sprint shows today's state.
+  const sonarAsOf = useMemo(
     () =>
       filter.mode === 'live'
-        ? `Sprint · ${formatSprintRange(liveWindow.start, liveWindow.end)}`
-        : formatWindow(filter.start, filter.end),
-    [filter, liveWindow]
+        ? undefined
+        : new Date(new Date(activeWindow.end).getTime() - 1000).toISOString(),
+    [filter.mode, activeWindow]
   )
-
-  const presets = useMemo(() => {
-    const sprints = recentSprints(3)
-    const now = new Date()
-    const day = 24 * 60 * 60 * 1000
-    return [
-      {
-        id: 'live',
-        label: `Current sprint · ${formatSprintRange(sprints[0].start, sprints[0].end)}`,
-        isLive: true
-      },
-      {
-        id: 'prev',
-        label: `Previous sprint · ${formatSprintRange(sprints[1].start, sprints[1].end)}`,
-        start: sprints[1].start,
-        end: sprints[1].end
-      },
-      {
-        id: 'prev2',
-        label: `Sprint · ${formatSprintRange(sprints[2].start, sprints[2].end)}`,
-        start: sprints[2].start,
-        end: sprints[2].end
-      },
-      {
-        id: '7d',
-        label: 'Last 7 days',
-        start: new Date(now.getTime() - 7 * day),
-        end: now
-      },
-      {
-        id: '24h',
-        label: 'Last 24 hours',
-        start: new Date(now.getTime() - day),
-        end: now
-      }
-    ]
-  }, [])
+  const trendSprints = useMemo(
+    () => (serverSprints.length > 0 ? serverSprints : recentSprints(4)),
+    [serverSprints]
+  )
 
   const goLive = useCallback(
     () => setFilter({ mode: 'live', start: null, end: null }),
@@ -186,6 +341,39 @@ export default function App() {
     [payloads, activeWindow]
   )
 
+  const jiraConnected = (activeProject?.jira?.projectKeys?.length ?? 0) > 0
+  const isNative = activeProject?.type === 'ai-native'
+  const nativeOverview = isNative && nav.level === 'overview'
+  const delivery = useDeliveryMetrics(
+    jiraConnected &&
+      (nav.level === 'delivery' ||
+        nav.level === 'ticket' ||
+        nav.level === 'overview')
+      ? activeSlug
+      : null,
+    activeWindow
+  )
+  const deliveryTrend = useDeliveryTrend(
+    jiraConnected && nav.level === 'delivery' ? activeSlug : null,
+    trendSprints
+  )
+  const nativeLeverage = useProjectMetric(
+    nativeOverview ? activeSlug : null,
+    'ai-native-leverage',
+    activeWindow
+  )
+  const nativeChurn = useProjectMetric(
+    nativeOverview ? activeSlug : null,
+    'churn',
+    activeWindow
+  )
+  const leverage = useLeverageV2(
+    nav.level === 'leverage' || (nav.level === 'overview' && !isNative)
+      ? activeSlug
+      : null,
+    activeWindow
+  )
+
   // Full, un-windowed history (still validity-filtered) — used only for the
   // Copilot Leverage "manual baseline": median cycle time is stable enough
   // that it doesn't need to be restricted to the currently selected sprint,
@@ -195,15 +383,87 @@ export default function App() {
     () => payloads.filter(isPlottablePayload),
     [payloads]
   )
+  const contributorHandles = useMemo(
+    () =>
+      selectContributorSummaries(allPayloads)
+        .map((c) => c.contributor)
+        .sort((a, b) => a.localeCompare(b)),
+    [allPayloads]
+  )
+
+  const navigate = useCallback(
+    (target) => {
+      const next = withProject(target, activeSlug)
+      window.history.replaceState(
+        { ...window.history.state, scrollY: window.scrollY },
+        ''
+      )
+      const hash = toHash(next)
+      if (window.location.hash !== hash) {
+        window.history.pushState(
+          { scrollY: 0, section: next.section ?? null },
+          '',
+          hash
+        )
+      }
+      pendingScroll.current = next.section
+        ? { section: next.section }
+        : { y: 0 }
+      setNav(next)
+    },
+    [activeSlug]
+  )
+
+  useEffect(() => {
+    if ('scrollRestoration' in window.history) {
+      window.history.scrollRestoration = 'manual'
+    }
+    const onLocationChange = () => {
+      setNav(fromHash(window.location.hash))
+      pendingScroll.current = { y: window.history.state?.scrollY ?? 0 }
+    }
+    window.addEventListener('popstate', onLocationChange)
+    window.addEventListener('hashchange', onLocationChange)
+    return () => {
+      window.removeEventListener('popstate', onLocationChange)
+      window.removeEventListener('hashchange', onLocationChange)
+    }
+  }, [])
+
+  // A legacy or unscoped link gets the active project written into the URL.
+  useEffect(() => {
+    if (isGlobalLevel(nav.level) || nav.project || !activeSlug) return
+    const canonical = { ...nav, project: activeSlug }
+    window.history.replaceState(window.history.state, '', toHash(canonical))
+    setNav(canonical)
+  }, [nav, activeSlug])
+
+  const projectKnown = projects.some((p) => p.slug === nav.project)
+  const projectUnavailable =
+    Boolean(nav.project) && !projectsLoading && !projectKnown
+
+  // A shared link switches to its project without adding a history entry.
+  useEffect(() => {
+    if (nav.project && projectKnown && nav.project !== activeSlug) {
+      selectProject(nav.project)
+    }
+  }, [nav.project, projectKnown, activeSlug, selectProject])
+
+  useScrollRestoration(pendingScroll, [nav, payloads.length])
+
+  const handleSelectProject = useCallback(
+    (slug) => navigate({ level: 'overview', project: slug }),
+    [navigate]
+  )
 
   // Identifies the active time window; used to restart the commit-stream replay
   // when the filter changes (but not when live data merely appends).
   const windowKey = useMemo(
     () =>
       filter.mode === 'live'
-        ? `live:${liveWindow.start.getTime()}-${liveWindow.end.getTime()}`
-        : `custom:${new Date(filter.start).getTime()}-${new Date(filter.end).getTime()}`,
-    [filter, liveWindow]
+        ? `${activeProject?.slug}:live:${liveWindow.start.getTime()}-${liveWindow.end.getTime()}`
+        : `${activeProject?.slug}:custom:${new Date(filter.start).getTime()}-${new Date(filter.end).getTime()}`,
+    [activeProject?.slug, filter, liveWindow]
   )
 
   const lastUpdated = useMemo(() => {
@@ -217,104 +477,196 @@ export default function App() {
   }, [lastMessageAt])
 
   const openRepo = useCallback(
-    (repository) => setNav({ level: 'repo', repository }),
-    []
+    (repository) => navigate({ level: 'repo', repository }),
+    [navigate]
   )
   const openRepoCycle = useCallback(
-    (repository) => setNav({ level: 'repoCycle', repository }),
-    []
+    (repository) => navigate({ level: 'repoCycle', repository }),
+    [navigate]
   )
   const openPR = useCallback(
-    (repository, prNumber) => setNav({ level: 'pr', repository, prNumber }),
-    []
+    (repository, prNumber) => navigate({ level: 'pr', repository, prNumber }),
+    [navigate]
   )
   const openContributor = useCallback(
-    (contributor) => setNav({ level: 'contributor', contributor }),
-    []
+    (contributor, repository) =>
+      navigate(
+        typeof repository === 'string'
+          ? { level: 'contributor', contributor, repository }
+          : { level: 'contributor', contributor }
+      ),
+    [navigate]
   )
-  const openSettings = useCallback(() => setNav({ level: 'settings' }), [])
+  const openTopLevel = useCallback(
+    (id) => navigate(TOP_LEVEL[id] ?? TOP_LEVEL.overview),
+    [navigate]
+  )
+  const openTicket = useCallback(
+    (ticket) => navigate({ level: 'ticket', ticket }),
+    [navigate]
+  )
+  const openLeverage = useCallback(
+    () => navigate({ level: 'leverage' }),
+    [navigate]
+  )
+  const goHome = useCallback(() => navigate({ level: 'overview' }), [navigate])
+
+  const navItems = useMemo(
+    () =>
+      NAV_LABELS.map(([id, label]) => ({
+        id,
+        label,
+        href: toHash(withProject(TOP_LEVEL[id], activeSlug))
+      })),
+    [activeSlug]
+  )
+
+  const insightsHref = useMemo(
+    () => toHash(withProject({ level: 'copilotUsage' }, activeSlug)),
+    [activeSlug]
+  )
+
   const handleSaveMapping = personaMappings.upsert
   const handleRemoveMapping = personaMappings.remove
 
-  const crumbs = useMemo(() => {
-    const items = [
-      { key: 'overview', label: 'All Repositories', nav: ROOT_NAV }
-    ]
-    if (nav.level === 'settings') {
-      items.push({ key: 'settings', label: 'Settings', nav })
-    }
-    if (
-      nav.level === 'repo' ||
-      nav.level === 'pr' ||
-      nav.level === 'repoCycle'
-    ) {
-      items.push({
-        key: `repo:${nav.repository}`,
-        label: shortRepoName(nav.repository),
-        nav: { level: 'repo', repository: nav.repository }
-      })
-    }
-    if (nav.level === 'repoCycle') {
-      items.push({
-        key: `cycle:${nav.repository}`,
-        label: 'Cycle time',
-        nav
-      })
-    }
-    if (nav.level === 'pr') {
-      items.push({
-        key: `pr:${nav.repository}:${nav.prNumber}`,
-        label: `PR #${nav.prNumber}`,
-        nav
-      })
-    }
-    if (nav.level === 'contributor') {
-      items.push({
-        key: `contributor:${nav.contributor}`,
-        label: nav.contributor,
-        nav
-      })
-    }
-    return items
-  }, [nav])
-
   const activeView = useMemo(() => {
+    if (nav.level === 'accessibility') {
+      return <AccessibilityStatementView onBack={goHome} />
+    }
+    if (nav.level === 'adminProjects') {
+      if (!isAdmin) {
+        return (
+          <Panel title="You cannot manage projects" icon="warning">
+            <p className="govuk-body">
+              You need the Dashboard admin role to manage projects.
+            </p>
+          </Panel>
+        )
+      }
+      return <AdminProjectsView onNavigateHome={goHome} />
+    }
+    if (nav.level === 'cookies' || nav.level === 'privacy') {
+      const Page = nav.level === 'cookies' ? CookiesView : PrivacyView
+      return <Page onBack={goHome} />
+    }
+    if (projectsLoading) return <ViewSkeleton />
+    if (projectsFailed) {
+      return (
+        <Panel title="Projects not available" icon="warning">
+          <PanelState
+            state="error"
+            title="Projects"
+            errorMessage="We could not load your projects. Try again later."
+          />
+        </Panel>
+      )
+    }
+    if (noAccess) {
+      return isAdmin ? (
+        <Panel title="No projects yet" icon="warning">
+          <PanelState
+            state="empty"
+            emptyTag="No projects"
+            emptyMessage="No project has been added yet."
+          />
+          <p className="govuk-body">
+            <a
+              className="govuk-link"
+              href={toHash({ level: 'adminProjects' })}
+              onClick={(event) => {
+                event.preventDefault()
+                navigate({ level: 'adminProjects' })
+              }}
+            >
+              Add a project
+            </a>
+          </p>
+        </Panel>
+      ) : (
+        <UnauthorisedView reason="no-access" userName={user?.name} />
+      )
+    }
     if (nav.level === 'settings') {
       return (
         <SettingsView
+          project={activeProject}
+          role={role}
+          projects={projects}
+          isDashboardAdmin={isAdmin}
           mappings={personaMappings.mappings}
           status={personaMappings.status}
           error={personaMappings.error}
           onSave={handleSaveMapping}
           onRemove={handleRemoveMapping}
+          contributors={contributorHandles}
+        />
+      )
+    }
+    if (projectUnavailable) {
+      const fallback = projects[0]
+      return (
+        <UnauthorisedView
+          reason="project"
+          userName={user?.name}
+          fallbackName={fallback?.name}
+          fallbackHref={
+            fallback
+              ? toHash({ level: 'overview', project: fallback.slug })
+              : undefined
+          }
+        />
+      )
+    }
+    if (nav.level === 'delivery') {
+      return (
+        <DeliveryView
+          delivery={delivery}
+          trend={deliveryTrend}
+          payloads={visiblePayloads}
+          window={activeWindow}
+          jiraConnected={jiraConnected}
+          onOpenTicket={openTicket}
+          onOpenPR={openPR}
+        />
+      )
+    }
+    if (nav.level === 'leverage') {
+      return <LeverageView leverage={leverage} />
+    }
+    if (nav.level === 'ticket') {
+      return (
+        <TicketView
+          ticketKey={nav.ticket}
+          delivery={delivery}
+          payloads={allPayloads}
+          jiraConnected={jiraConnected}
+          onOpenTicket={openTicket}
+          onOpenPR={openPR}
         />
       )
     }
     if (payloads.length === 0 && status === 'connecting') {
-      return (
-        <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
-          {Array.from({ length: 8 }).map((_, i) => (
-            <Panel key={i} state="loading" title="Loading…" />
-          ))}
-        </div>
-      )
+      return <LoadingPanels count={8} />
     }
     if (payloads.length === 0 && (status === 'closed' || status === 'error')) {
       return (
-        <Panel
-          title="No data"
-          state="empty"
-          subtitle="The analytics backend is not reachable. Start the backend server to see live data."
-        />
+        <Panel title="No data" icon="warning">
+          <PanelState
+            state="empty"
+            emptyTag="Not available"
+            emptyMessage="The analytics backend is not reachable. Start the backend server to see live data."
+          />
+        </Panel>
       )
     }
     if (payloads.length > 0 && visiblePayloads.length === 0) {
       return (
-        <Panel
-          title="No data in this time window"
-          state="empty"
-          subtitle="No pull requests fall inside the selected range. Widen the window or return to live."
-        />
+        <Panel title="No data in this time window" icon="calendar">
+          <PanelState
+            state="empty"
+            emptyMessage="No pull requests fall inside the selected range. Widen the window or return to live."
+          />
+        </Panel>
       )
     }
     switch (nav.level) {
@@ -322,9 +674,14 @@ export default function App() {
         return (
           <RepoView
             payloads={visiblePayloads}
+            allPayloads={allPayloads}
             repository={nav.repository}
+            projectSlug={activeSlug}
+            window={activeWindow}
+            onOpenLeverage={openLeverage}
             onOpenPR={openPR}
             onOpenContributor={openContributor}
+            sonarAsOf={sonarAsOf}
           />
         )
       case 'repoCycle':
@@ -343,6 +700,8 @@ export default function App() {
             prNumber={nav.prNumber}
             onOpenContributor={openContributor}
             onChangeClassification={changeCommitClassification}
+            canReclassify={canAdminister}
+            projectSlug={activeSlug}
           />
         )
       case 'contributor':
@@ -350,114 +709,198 @@ export default function App() {
           <ContributorView
             payloads={visiblePayloads}
             contributor={nav.contributor}
+            repository={nav.repository}
             onOpenPR={openPR}
           />
         )
+      case 'copilotUsage':
+        return <CopilotUsageView payloads={visiblePayloads} />
+      case 'pullRequests':
+        return <PullRequestsView payloads={visiblePayloads} onOpenPR={openPR} />
+      case 'contributors':
+        return (
+          <ContributorsView
+            payloads={visiblePayloads}
+            onOpenContributor={openContributor}
+            projectType={activeProject?.type}
+          />
+        )
       default:
+        if (isNative) {
+          return (
+            <AiNativeOverviewView
+              payloads={visiblePayloads}
+              windowKey={windowKey}
+              window={activeWindow}
+              delivery={delivery}
+              leverage={nativeLeverage}
+              churn={nativeChurn}
+              jiraConnected={jiraConnected}
+              onOpenRepo={openRepo}
+              onOpenTicket={openTicket}
+              onOpenPR={openPR}
+              sonarAsOf={sonarAsOf}
+              sprintWindows={trendSprints}
+              insightsHref={insightsHref}
+            />
+          )
+        }
         return (
           <OverviewView
             payloads={visiblePayloads}
             allPayloads={allPayloads}
             windowKey={windowKey}
+            projectType={activeProject?.type}
             mappingsByHandle={mappingsByHandle}
+            personaStatus={personaMappings.status}
             onOpenRepo={openRepo}
             onOpenRepoCycle={openRepoCycle}
             onOpenContributor={openContributor}
+            onOpenLeverage={openLeverage}
+            leverageData={leverage.data}
+            sonarAsOf={sonarAsOf}
+            sprintWindows={trendSprints}
+            jiraDelivery={jiraConnected ? delivery : undefined}
+            deliveryWindow={activeWindow}
+            deliveryHref={toHash(
+              withProject({ level: 'delivery' }, activeSlug)
+            )}
+            onOpenTicket={openTicket}
+            onOpenPR={openPR}
+            insightsHref={insightsHref}
           />
         )
     }
   }, [
+    insightsHref,
     nav,
     payloads,
     visiblePayloads,
     allPayloads,
     status,
     windowKey,
+    sonarAsOf,
+    trendSprints,
     mappingsByHandle,
     personaMappings.mappings,
     personaMappings.status,
     personaMappings.error,
+    contributorHandles,
     handleSaveMapping,
     handleRemoveMapping,
     changeCommitClassification,
+    isAdmin,
+    canAdminister,
+    role,
+    activeProject,
+    projectsLoading,
+    projectsFailed,
+    noAccess,
+    user,
+    navigate,
+    activeSlug,
+    delivery,
+    deliveryTrend,
+    activeWindow,
+    jiraConnected,
+    openTicket,
+    openLeverage,
+    leverage,
+    isNative,
+    nativeLeverage,
+    nativeChurn,
     openRepo,
     openRepoCycle,
     openPR,
-    openContributor
+    openContributor,
+    goHome,
+    projectUnavailable,
+    projects
   ])
 
   const heading = {
-    overview: 'Global Overview',
+    overview: 'Project Overview',
     repo: shortRepoName(nav.repository ?? ''),
-    repoCycle: `${shortRepoName(nav.repository ?? '')} · Cycle time`,
+    repoCycle: `${shortRepoName(nav.repository ?? '')} · PR Coding Cycle Time`,
     pr: `Pull Request #${nav.prNumber}`,
     contributor: nav.contributor,
-    settings: 'Settings'
+    pullRequests: 'Pull Requests',
+    contributors: 'Contributors',
+    delivery: 'Delivery',
+    ticket: nav.ticket,
+    leverage: 'Copilot Leverage',
+    copilotUsage: 'Copilot Usage Insights',
+    settings: 'Settings',
+    accessibility: 'Accessibility Statement',
+    adminProjects: 'Manage Projects',
+    cookies: 'Cookies',
+    privacy: 'Privacy'
   }[nav.level]
 
   return (
-    <div className="app-shell flex min-h-full flex-col">
-      <a className="skip-link" href="#main-content">
-        Skip to main content
-      </a>
-      <Header
-        theme={theme}
-        onToggleTheme={toggleTheme}
-        lastUpdated={lastUpdated}
-        connection={
-          status === 'open'
-            ? 'live'
-            : status === 'connecting'
-              ? 'live'
-              : 'stale'
-        }
-        filter={{
-          mode: filter.mode,
-          start: activeWindow.start,
-          end: activeWindow.end,
-          label: windowLabel
-        }}
-        presets={presets}
-        onGoLive={goLive}
-        onApplyRange={applyRange}
-        onOpenSettings={openSettings}
-      />
-      <ConnectionBanner status={status} />
-      <main
-        id="main-content"
-        tabIndex={-1}
-        className="mx-auto w-full max-w-[1440px] flex-1 px-4 py-5 md:px-6"
-      >
-        {filter.mode === 'custom' && (
-          <div className="window-banner mb-4" role="status" aria-live="polite">
-            <span aria-hidden="true">🗓</span>
-            <span className="text-sm">
-              Viewing <strong>{windowLabel}</strong> — historical snapshot, not
-              live.
-            </span>
-            <button
-              type="button"
-              onClick={goLive}
-              className="focus-ring ml-auto rounded-[var(--radius-pill)] border border-[var(--color-border-strong)] bg-[var(--color-surface)] px-3 py-1 text-xs font-semibold text-[var(--color-text)] transition-colors hover:border-[var(--color-primary)]"
-            >
-              Return to live
-            </button>
-          </div>
-        )}
-        <div className="mb-4 flex flex-col gap-2">
-          <Breadcrumb items={crumbs} onNavigate={(item) => setNav(item.nav)} />
-          <h2 className="text-xl font-semibold text-[var(--color-text)]">
-            {heading}
-          </h2>
-        </div>
-        <ErrorBoundary>
-          <Suspense fallback={<ViewSkeleton />}>
-            {/* Remount the chart subtree on theme change so ECharts palettes,
-                which are read once into each chart's memo, refresh cleanly. */}
-            <div key={theme}>{activeView}</div>
-          </Suspense>
-        </ErrorBoundary>
-      </main>
-    </div>
+    <AppLayout
+      serviceName={SERVICE_NAME}
+      projectName={projectName}
+      user={user}
+      projectSwitcher={
+        activeProject ? (
+          <ProjectSwitcher
+            projects={projects}
+            activeProject={activeProject}
+            onSelectProject={handleSelectProject}
+            onManageProjects={
+              isAdmin ? () => navigate({ level: 'adminProjects' }) : undefined
+            }
+          />
+        ) : null
+      }
+      navigation={
+        noAccess && !isAdmin ? null : (
+          <ServiceNavigation
+            items={navItems}
+            activeId={activeNavId(nav)}
+            onNavigate={openTopLevel}
+          />
+        )
+      }
+      hero={
+        PLAIN_PAGES.has(nav.level) || noAccess || projectsFailed ? null : (
+          <Hero
+            serviceName={SERVICE_NAME}
+            caption={projectName}
+            heading={heading}
+            breadcrumbs={
+              <CascadeBreadcrumbs
+                nav={nav}
+                projectName={projectName}
+                onNavigate={navigate}
+              />
+            }
+            controls={
+              <PeriodFilter
+                mode={filter.mode}
+                start={activeWindow.start}
+                end={activeWindow.end}
+                onGoLive={goLive}
+                onApplyRange={applyRange}
+                sprintWindows={serverSprints}
+              />
+            }
+            notices={
+              <ConnectionBanner status={status} lastUpdated={lastUpdated} />
+            }
+          />
+        )
+      }
+      onNavigate={openTopLevel}
+    >
+      <ErrorBoundary>
+        <PeriodLabelContext.Provider
+          value={filter.mode === 'live' ? 'Live sprint' : 'Selected period'}
+        >
+          <Suspense fallback={<ViewSkeleton />}>{activeView}</Suspense>
+        </PeriodLabelContext.Provider>
+      </ErrorBoundary>
+    </AppLayout>
   )
 }

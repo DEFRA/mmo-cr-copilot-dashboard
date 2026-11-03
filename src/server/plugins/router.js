@@ -4,6 +4,7 @@ import { api } from '../routes/api/index.js'
 import { health } from '../routes/health/index.js'
 import { ingest } from '../routes/ingest/index.js'
 import { dashboard } from '../routes/dashboard/index.js'
+import { authRoutes } from '../routes/auth/index.js'
 import { serveStaticFiles } from './serve-static-files.js'
 import { config } from '#/config/config.js'
 
@@ -15,6 +16,8 @@ export const router = {
 
       // Health-check route. Used by platform to check if service is running, do not remove!
       await server.register([health])
+
+      server.route(authRoutes)
 
       // Ingest from GitHub Actions, read proxy for the browser, and the app shell
       await server.register([ingest, api, dashboard])

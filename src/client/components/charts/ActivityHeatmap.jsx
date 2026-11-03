@@ -1,122 +1,159 @@
 import { useMemo } from 'react'
 import { Chart } from './Chart'
-import { getPalette } from '../../lib/palette'
+import { getAppPalette } from '../../lib/palette'
+import {
+  categoryAxis,
+  escapeHtml,
+  textStyle,
+  tooltip
+} from '../../lib/chart-style'
+
+// Above this rate the cell is dark enough that only white text meets 4.5:1.
+const WHITE_TEXT_FROM = 80
+const CONTRIBUTOR_LABEL_WIDTH = 48
 
 /**
  * Heatmap of a value across two categorical axes (contributor × repository
- * assist rate). Uses a sequential visualMap; null cells render as "no activity".
+ * assist rate). Every cell is labelled with its value; null cells read as
+ * "no activity".
  */
 export function ActivityHeatmap({
   xLabels,
   yLabels,
   data,
   title,
-  theme,
-  height = 340
+  height = 340,
+  onSelectContributor,
+  onSelectCell
 }) {
   // data: [xIndex, yIndex, value|null]
   const option = useMemo(() => {
-    const p = getPalette()
-    const cells = data.map(([x, y, v]) => [x, y, v == null ? '-' : v])
+    const p = getAppPalette()
+    const assist = p.family.assist
+    const cells = data.map(([x, y, v]) => ({
+      value: [x, y, v == null ? '-' : v],
+      label: { color: v > WHITE_TEXT_FROM ? p.white : p.text }
+    }))
     return {
-      grid: { left: 120, right: 24, top: 48, bottom: 48 },
-      tooltip: {
+      grid: { left: 8, right: 16, top: 56, bottom: 8, containLabel: true },
+      tooltip: tooltip(p, {
         position: 'top',
-        backgroundColor: p.surface2,
-        borderColor: p.border,
-        textStyle: { color: p.text },
         formatter: (params) => {
-          const [x, y, v] = params.data
-          return `${yLabels[y]} · ${xLabels[x]}<br/><b>${v === '-' ? 'No activity' : `${v}%`}</b>`
+          const [x, y, v] = params.data.value
+          return `${escapeHtml(yLabels[y])} · ${escapeHtml(xLabels[x])}<br/><b>${v === '-' ? 'No activity' : `${v}%`}</b>`
         }
-      },
-      xAxis: {
-        type: 'category',
-        data: xLabels,
-        splitArea: { show: true },
-        axisLabel: {
-          color: p.text,
-          rotate: xLabels.length > 4 ? 20 : 0,
-          hideOverlap: true,
-          fontSize: 11
-        },
-        axisLine: { lineStyle: { color: p.borderStrong } }
-      },
-      yAxis: {
-        type: 'category',
-        data: yLabels,
-        splitArea: { show: true },
-        axisLabel: { color: p.text, fontSize: 11 },
-        axisLine: { lineStyle: { color: p.borderStrong } }
-      },
+      }),
+      xAxis: categoryAxis(p, xLabels, {
+        position: 'top',
+        axisLabel: textStyle(p, {
+          interval: 0,
+          width: 110,
+          overflow: 'truncate',
+          hideOverlap: true
+        })
+      }),
+      yAxis: categoryAxis(p, yLabels, {
+        inverse: true,
+        triggerEvent: Boolean(onSelectContributor),
+        // Full name on hover, since long handles are truncated below.
+        tooltip: { show: true },
+        axisLabel: textStyle(p, {
+          // Fits "charlie" in 14px bold Arial; longer handles truncate.
+          width: CONTRIBUTOR_LABEL_WIDTH,
+          overflow: 'truncate',
+          ellipsis: '…',
+          // Styled like .app-chip so the clickable names read as buttons.
+          ...(onSelectContributor && {
+            color: p.brandInk,
+            fontWeight: 600,
+            backgroundColor: p.white,
+            borderColor: p.brand,
+            borderWidth: 2,
+            borderRadius: 999,
+            padding: [4, 8]
+          })
+        })
+      }),
       visualMap: {
         min: 0,
         max: 100,
-        calculable: true,
+        calculable: false,
         orient: 'horizontal',
-        left: 'center',
-        top: 6,
-        itemWidth: 14,
-        itemHeight: 140,
-        text: ['High', 'Low'],
-        textStyle: { color: p.textMuted, fontSize: 11 },
-        inRange: { color: p.heat }
+        right: 0,
+        top: 0,
+        itemWidth: 12,
+        itemHeight: 120,
+        text: ['100%', '0%'],
+        textStyle: textStyle(p, { color: p.muted }),
+        inRange: { color: [assist.tint, assist.band, assist.ink] }
       },
       series: [
         {
           name: title,
           type: 'heatmap',
+          cursor: 'pointer',
           data: cells,
-          label: {
+          label: textStyle(p, {
             show: true,
-            color: p.heatInk,
             formatter: (params) =>
-              params.data[2] === '-' ? '' : `${params.data[2]}%`
-          },
-          itemStyle: {
-            borderColor: p.surface,
-            borderWidth: 2,
-            borderRadius: 4
-          },
-          emphasis: { itemStyle: { shadowBlur: 8, shadowColor: p.border } }
+              params.data.value[2] === '-' ? '' : `${params.data.value[2]}%`
+          }),
+          itemStyle: { borderColor: p.white, borderWidth: 2 },
+          emphasis: { itemStyle: { borderColor: p.text, borderWidth: 2 } }
         }
       ]
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [xLabels, yLabels, data, title, theme])
+  }, [xLabels, yLabels, data, title, onSelectContributor])
+
+  const handleEvents = useMemo(
+    () => ({
+      click: (params) => {
+        if (params.componentType === 'yAxis') {
+          onSelectContributor?.(params.value)
+        } else if (params.componentType === 'series') {
+          const [x, y, v] = params.data.value
+          if (v !== '-') onSelectCell?.(xLabels[x], yLabels[y])
+        }
+      }
+    }),
+    [onSelectContributor, onSelectCell, xLabels, yLabels]
+  )
 
   return (
-    <Chart
-      option={option}
-      height={height}
-      ariaLabel={`${title}. Assist rate for ${yLabels.length} contributors across ${xLabels.length} repositories.`}
-      dataTable={
-        <table>
-          <caption>{title}</caption>
-          <thead>
-            <tr>
-              <th scope="col">Contributor</th>
-              {xLabels.map((x) => (
-                <th key={x} scope="col">
-                  {x}
-                </th>
-              ))}
-            </tr>
-          </thead>
-          <tbody>
-            {yLabels.map((y, yi) => (
-              <tr key={y}>
-                <td>{y}</td>
-                {xLabels.map((x, xi) => {
-                  const cell = data.find(([dx, dy]) => dx === xi && dy === yi)
-                  const v = cell ? cell[2] : null
-                  return <td key={x}>{v == null ? '—' : `${v}%`}</td>
-                })}
+    <div>
+      <Chart
+        option={option}
+        height={height}
+        onEvents={handleEvents}
+        ariaLabel={`${title}. Assist rate for ${yLabels.length} contributors across ${xLabels.length} repositories.`}
+        dataTable={
+          <table>
+            <caption>{title}</caption>
+            <thead>
+              <tr>
+                <th scope="col">Contributor</th>
+                {xLabels.map((x) => (
+                  <th key={x} scope="col">
+                    {x}
+                  </th>
+                ))}
               </tr>
-            ))}
-          </tbody>
-        </table>
-      }
-    />
+            </thead>
+            <tbody>
+              {yLabels.map((y, yi) => (
+                <tr key={y}>
+                  <td>{y}</td>
+                  {xLabels.map((x, xi) => {
+                    const cell = data.find(([dx, dy]) => dx === xi && dy === yi)
+                    const v = cell ? cell[2] : null
+                    return <td key={x}>{v == null ? '—' : `${v}%`}</td>
+                  })}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        }
+      />
+    </div>
   )
 }
