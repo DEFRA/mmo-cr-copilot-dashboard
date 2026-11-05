@@ -9,10 +9,9 @@ const model = (overrides) => ({
   rank: 1,
   requests: 12000,
   requestShare: 50,
-  totalTokens: 3400000,
-  tokensPerRequest: 283,
-  cacheHitRate: 72,
-  reasoningTokens: 5000,
+  credits: 1500.5,
+  creditsPerRequest: 0.1251,
+  creditShare: 55.2,
   prCount: 40,
   ...overrides
 })
@@ -24,7 +23,9 @@ const MODELS = [
     rank: 2,
     requests: 8000,
     requestShare: 33,
-    cacheHitRate: 45,
+    credits: 1200,
+    creditsPerRequest: 0.15,
+    creditShare: 44.1,
     prCount: 30
   }),
   model({
@@ -32,16 +33,19 @@ const MODELS = [
     rank: 3,
     requests: 3000,
     requestShare: 12,
-    cacheHitRate: 10,
+    credits: 0.004,
+    creditsPerRequest: 0.000001,
+    creditShare: 0,
     prCount: 10
   }),
   model({
     model: 'o-series',
     rank: null,
-    requests: 100,
+    requests: 100.5,
     requestShare: 1,
-    tokensPerRequest: null,
-    cacheHitRate: null,
+    credits: null,
+    creditsPerRequest: null,
+    creditShare: null,
     prCount: 2
   })
 ]
@@ -62,18 +66,33 @@ describe('#ModelLeaderboardPanel', () => {
     expect(cells.map((cell) => cell.textContent)).toEqual([
       '12,000',
       '50%',
-      '3,400,000',
-      '283',
-      '72%High',
+      '1,500.50',
+      '0.13',
+      '55.2%',
       '40'
     ])
   })
 
-  test('Should show a dash for a missing tokens per request', () => {
+  test('Should show credits as not recorded, with dashes for what depends on them', () => {
     render(<ModelLeaderboardPanel models={MODELS} />)
 
     const cells = within(rowFor('o-series')).getAllByRole('cell')
-    expect(cells[3]).toHaveTextContent('–')
+    expect(cells.map((cell) => cell.textContent)).toEqual([
+      '100.5',
+      '1%',
+      'Not recorded',
+      '–',
+      '–',
+      '2'
+    ])
+  })
+
+  test('Should show a tiny non-zero amount as under 0.01, never as zero', () => {
+    render(<ModelLeaderboardPanel models={MODELS} />)
+
+    const cells = within(rowFor('gemini')).getAllByRole('cell')
+    expect(cells[2]).toHaveTextContent('Under 0.01')
+    expect(cells[3]).toHaveTextContent('Under 0.01')
   })
 
   test('Should crown only the favourite model, with a text alternative', () => {
@@ -90,39 +109,34 @@ describe('#ModelLeaderboardPanel', () => {
     expect(document.querySelector('.govuk-tag--purple')).toBeNull()
   })
 
-  test('Should leave out technical columns such as reasoning tokens', () => {
+  test('Should leave out token columns', () => {
     render(<ModelLeaderboardPanel models={MODELS} />)
 
     expect(
-      screen.queryByRole('columnheader', { name: /Reasoning/ })
+      screen.queryByRole('columnheader', { name: /Token|Reasoning|Cache/ })
     ).not.toBeInTheDocument()
     expect(screen.getAllByRole('columnheader')).toHaveLength(7)
   })
 
-  test('Should stack the share value above its meter and the rate above its rating', () => {
+  test('Should stack the share value above its meter', () => {
     render(<ModelLeaderboardPanel models={MODELS} />)
 
     const cells = within(rowFor('gpt-5')).getAllByRole('cell')
     const share = cells[1].querySelector('.app-leaderboard__stack')
     expect(share.firstElementChild).toHaveTextContent('50%')
     expect(share.lastElementChild).toHaveClass('app-meter')
-
-    const cache = cells[4].querySelector('.app-leaderboard__stack')
-    expect(cache.firstElementChild).toHaveTextContent('72%')
-    expect(cache.lastElementChild).toHaveTextContent('High')
   })
 
-  test('Should rate cache hit rate as High, Medium, Low or Not reported', () => {
+  test('Should sort models without recorded credits last when sorting by credits', async () => {
+    const user = userEvent.setup()
     render(<ModelLeaderboardPanel models={MODELS} />)
 
-    expect(within(rowFor('gpt-5')).getByText('High')).toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: 'AI credits' }))
+    await user.click(screen.getByRole('button', { name: 'AI credits' }))
+
     expect(
-      within(rowFor('claude-sonnet')).getByText('Medium')
-    ).toBeInTheDocument()
-    expect(within(rowFor('gemini')).getByText('Low')).toBeInTheDocument()
-    expect(
-      within(rowFor('o-series')).getByText('Not reported')
-    ).toBeInTheDocument()
+      screen.getAllByRole('rowheader').map((header) => header.textContent)
+    ).toEqual(['gpt-5', 'claude-sonnet', 'gemini', 'o-series'])
   })
 
   test('Should sort by requests, most first, initially', () => {

@@ -1,25 +1,18 @@
 import { Panel } from './dashboard'
-import { SortableTable, Tag } from './govuk'
-import { Meter } from './views/scope.jsx'
+import { SortableTable } from './govuk'
+import { formatCredits, Meter } from './views/scope.jsx'
 
 const HEAD = [
   { id: 'model', label: 'Model' },
   { id: 'requests', label: 'Requests', numeric: true },
   { id: 'share', label: 'Share of requests', numeric: true },
-  { id: 'tokens', label: 'Total tokens', numeric: true },
-  { id: 'perRequest', label: 'Tokens per request', numeric: true },
-  { id: 'cache', label: 'Cache hit rate', numeric: true },
+  { id: 'credits', label: 'AI credits', numeric: true },
+  { id: 'perRequest', label: 'Credits per request', numeric: true },
+  { id: 'creditShare', label: 'Share of credits', numeric: true },
   { id: 'prs', label: 'Pull requests', numeric: true }
 ]
 
 const number = (value) => value.toLocaleString('en-GB')
-
-function CacheRating({ rate }) {
-  if (rate === null) return <Tag colour="grey">Not reported</Tag>
-  if (rate >= 60) return <Tag colour="green">High</Tag>
-  if (rate >= 30) return <Tag colour="yellow">Medium</Tag>
-  return <Tag colour="grey">Low</Tag>
-}
 
 // The crown is the visual cue; the hidden text carries the meaning for assistive technology.
 function FavouriteCrown() {
@@ -65,19 +58,17 @@ function toRow(m, favourite) {
         ),
         sortValue: m.requestShare
       },
-      { content: number(m.totalTokens), sortValue: m.totalTokens },
+      { content: formatCredits(m.credits), sortValue: m.credits ?? -1 },
       {
-        content: m.tokensPerRequest === null ? '–' : number(m.tokensPerRequest),
-        sortValue: m.tokensPerRequest ?? -1
+        content:
+          m.creditsPerRequest === null
+            ? '–'
+            : formatCredits(m.creditsPerRequest),
+        sortValue: m.creditsPerRequest ?? -1
       },
       {
-        content: (
-          <span className="app-leaderboard__stack">
-            {m.cacheHitRate !== null && <span>{m.cacheHitRate}%</span>}
-            <CacheRating rate={m.cacheHitRate} />
-          </span>
-        ),
-        sortValue: m.cacheHitRate ?? -1
+        content: m.creditShare === null ? '–' : `${m.creditShare}%`,
+        sortValue: m.creditShare ?? -1
       },
       { content: number(m.prCount), sortValue: m.prCount }
     ]

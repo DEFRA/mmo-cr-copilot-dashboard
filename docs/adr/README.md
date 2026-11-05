@@ -27,11 +27,11 @@ must be raised as a formal exception with DEFRA Delivery Architecture
 
 ## Index
 
-| ADR                                               | Title                                          | Status   |
-| :------------------------------------------------ | :--------------------------------------------- | :------- |
-| [0001](0001-adopt-govuk-frontend.md)              | Adopt GOV.UK Frontend and MOJ Frontend         | Accepted |
-| [0002](0002-entra-id-authentication.md)           | Microsoft Entra ID authentication              | Accepted, partly superseded by 0006 |
-| [0003](0003-ingest-authentication-github-oidc.md) | Ingest authentication with GitHub Actions OIDC | Accepted |
-| [0004](0004-vscode-attribution-capture.md)        | VS Code AI attribution capture                 | Proposed |
-| [0005](0005-survival-ingest-route.md)             | AI code survival ingest route                  | Accepted |
-| [0006](0006-bearer-only-backend-calls-token-refresh-db-role-mappings.md) | Bearer-only backend calls, token refresh and DB role mappings | Accepted |
+| ADR                                                                      | Title                                                         | Status                              |
+| :----------------------------------------------------------------------- | :------------------------------------------------------------ | :---------------------------------- |
+| [0001](0001-adopt-govuk-frontend.md)                                     | Adopt GOV.UK Frontend and MOJ Frontend                        | Accepted                            |
+| [0002](0002-entra-id-authentication.md)                                  | Microsoft Entra ID authentication                             | Accepted, partly superseded by 0006 |
+| [0003](0003-ingest-authentication-github-oidc.md)                        | Ingest authentication with GitHub Actions OIDC                | Accepted                            |
+| [0004](0004-vscode-attribution-capture.md)                               | VS Code AI attribution capture                                | Proposed                            |
+| [0005](0005-survival-ingest-route.md)                                    | AI code survival ingest route                                 | Accepted                            |
+| [0006](0006-bearer-only-backend-calls-token-refresh-db-role-mappings.md) | Bearer-only backend calls, token refresh and DB role mappings | Accepted                            |

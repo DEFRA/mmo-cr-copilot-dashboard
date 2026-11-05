@@ -1500,20 +1500,27 @@ function* usageCommits(payload) {
   }
 }
 
+// GitHub AI credits recorded by the extension; null means not recorded (never derived from tokens).
+const creditsOf = (m) =>
+  isFiniteNum(m?.credits) && m.credits >= 0 ? m.credits : null
+
 /**
- * Copilot model and token usage across pull requests, from the extension's
- * per-commit attribution. Team and model level only; never per person.
- * Coverage says how many Copilot-assisted PRs carry usage at all.
+ * Copilot model usage across pull requests, from the extension's per-commit
+ * attribution: model requests and the GitHub AI credits recorded on developers'
+ * machines. Team and model level only; never per person. Coverage says how many
+ * Copilot-assisted PRs carry usage, and how many of those recorded credits.
  */
 export function selectCopilotUsage(payloads) {
   const byModel = new Map()
-  const perPrTokens = []
+  const perPrCredits = []
+  let prsWithUsage = 0
   let assistedPrs = 0
 
   for (const payload of payloads ?? []) {
     let assisted = false
-    let tokens = 0
+    let credits = 0
     let hasUsage = false
+    let hasCredits = false
 
     for (const commit of payload.commitBreakdown ?? []) {
       const attribution = commit?.attribution
@@ -1534,57 +1541,61 @@ export function selectCopilotUsage(payloads) {
         const entry = byModel.get(m.model) ?? {
           model: m.model,
           requests: 0,
-          inputTokens: 0,
-          outputTokens: 0,
-          cachedTokens: 0
+          credits: 0,
+          recorded: false
         }
         entry.requests += num(m.requests)
-        entry.inputTokens += num(m.inputTokens)
-        entry.outputTokens += num(m.outputTokens)
-        entry.cachedTokens +=
-          num(m.cacheReadTokens) + num(m.cacheCreationTokens)
+        const spent = creditsOf(m)
+        if (spent !== null) {
+          entry.credits += spent
+          entry.recorded = true
+          credits += spent
+          hasCredits = true
+        }
         byModel.set(m.model, entry)
-        tokens += num(m.inputTokens) + num(m.outputTokens)
         hasUsage = true
       }
     }
     if (assisted) assistedPrs += 1
-    if (hasUsage) perPrTokens.push(tokens)
+    if (hasUsage) prsWithUsage += 1
+    if (hasCredits) perPrCredits.push(credits)
   }
 
-  const models = [...byModel.values()].sort(
-    (a, b) =>
-      b.inputTokens + b.outputTokens - (a.inputTokens + a.outputTokens) ||
-      a.model.localeCompare(b.model)
-  )
+  const models = [...byModel.values()]
+    .map((m) => ({
+      model: m.model,
+      requests: round(m.requests, 2),
+      credits: m.recorded ? round(m.credits, 4) : null
+    }))
+    .sort(
+      (a, b) =>
+        (b.credits ?? -1) - (a.credits ?? -1) ||
+        b.requests - a.requests ||
+        a.model.localeCompare(b.model)
+    )
   return {
     models,
-    prsWithUsage: perPrTokens.length,
+    prsWithUsage,
+    prsWithCredits: perPrCredits.length,
     assistedPrs,
     coveragePercent:
-      assistedPrs > 0
-        ? round((perPrTokens.length / assistedPrs) * 100, 1)
-        : null,
-    medianTokensPerPr: perPrTokens.length
-      ? Math.round(median(perPrTokens))
+      assistedPrs > 0 ? round((prsWithUsage / assistedPrs) * 100, 1) : null,
+    totalCredits: perPrCredits.length
+      ? round(
+          perPrCredits.reduce((s, c) => s + c, 0),
+          4
+        )
+      : null,
+    medianCreditsPerPr: perPrCredits.length
+      ? round(median(perPrCredits), 4)
       : null
   }
 }
 
 export const RESERVED_USAGE_MODELS = new Set(['other', 'unknown'])
 export const SUPERLATIVE_MIN_PRS = 2
-export const CACHE_MIN_INPUT_TOKENS = 10_000
-export const ECONOMISER_MIN_REQUESTS = 5
-export const DEEP_THINKER_MIN_OUTPUT_TOKENS = 1_000
+export const BEST_VALUE_MIN_REQUESTS = 5
 export const NIGHT_OWL_MIN_REQUESTS = 5
-export const CACHE_RATING_THRESHOLDS = { high: 60, medium: 30 }
-
-export function cacheRating(hitRate) {
-  if (hitRate === null) return null
-  if (hitRate >= CACHE_RATING_THRESHOLDS.high) return 'high'
-  if (hitRate >= CACHE_RATING_THRESHOLDS.medium) return 'medium'
-  return 'low'
-}
 
 const cappedPercent = (part, whole) =>
   whole > 0 ? Math.min(100, round((part / whole) * 100, 1)) : null
@@ -1607,22 +1618,21 @@ function accrueUsageModels(payloads) {
         const entry = byModel.get(m.model) ?? {
           model: m.model,
           requests: 0,
-          inputTokens: 0,
-          outputTokens: 0,
-          cacheReadTokens: 0,
-          cacheCreationTokens: 0,
-          reasoningTokens: 0,
+          credits: 0,
+          recorded: false,
+          pricedRequests: 0,
           prs: new Set(),
           outOfHoursRequests: 0,
           timedRequests: 0
         }
         const requests = num(m.requests)
         entry.requests += requests
-        entry.inputTokens += num(m.inputTokens)
-        entry.outputTokens += num(m.outputTokens)
-        entry.cacheReadTokens += num(m.cacheReadTokens)
-        entry.cacheCreationTokens += num(m.cacheCreationTokens)
-        entry.reasoningTokens += num(m.reasoningTokens)
+        const spent = creditsOf(m)
+        if (spent !== null) {
+          entry.credits += spent
+          entry.pricedRequests += requests
+          entry.recorded = true
+        }
         entry.prs.add(prKey)
         if (timed) entry.timedRequests += requests
         if (outOfHours) entry.outOfHoursRequests += requests
@@ -1657,34 +1667,18 @@ function buildSuperlatives(named, variety) {
 
   const found = [
     pick(
-      'token-heavyweight',
-      'tokenShare',
-      (m) => m.totalTokens > 0,
-      (m) => m.tokenShare,
+      'biggest-spender',
+      'creditShare',
+      (m) => m.credits > 0,
+      (m) => m.creditShare,
       1
     ),
     pick(
-      'cache-champion',
-      'cacheHitRate',
-      (m) => m.inputTokens >= CACHE_MIN_INPUT_TOKENS,
-      (m) => m.cacheHitRate,
-      1
-    ),
-    pick(
-      'token-economiser',
-      'tokensPerRequest',
-      (m) => m.requests >= ECONOMISER_MIN_REQUESTS,
-      (m) => m.tokensPerRequest,
+      'best-value',
+      'creditsPerRequest',
+      (m) => m.requests >= BEST_VALUE_MIN_REQUESTS,
+      (m) => m.creditsPerRequest,
       -1
-    ),
-    pick(
-      'deep-thinker',
-      'reasoningShare',
-      (m) =>
-        m.outputTokens >= DEEP_THINKER_MIN_OUTPUT_TOKENS &&
-        m.reasoningTokens > 0,
-      (m) => m.reasoningShare,
-      1
     ),
     pick(
       'night-owl',
@@ -1707,8 +1701,9 @@ function buildSuperlatives(named, variety) {
 }
 
 /**
- * Copilot usage insights at team and model level. Never reads authors or
- * contributor breakdowns, so nothing here can identify a person.
+ * Copilot usage insights at team and model level, in requests and recorded
+ * GitHub AI credits. Never reads authors or contributor breakdowns, so nothing
+ * here can identify a person.
  */
 export function selectCopilotInsights(payloads) {
   const usage = selectCopilotUsage(payloads)
@@ -1716,33 +1711,24 @@ export function selectCopilotInsights(payloads) {
 
   const entries = [...byModel.values()]
   const grandRequests = entries.reduce((s, m) => s + m.requests, 0)
-  const grandTokens = entries.reduce(
-    (s, m) => s + m.inputTokens + m.outputTokens,
-    0
-  )
+  const grandCredits = entries.reduce((s, m) => s + m.credits, 0)
 
   const models = entries
     .map((m) => {
-      const totalTokens = m.inputTokens + m.outputTokens
-      const cacheHitRate = cappedPercent(m.cacheReadTokens, m.inputTokens)
+      let creditShare = null
+      if (m.recorded) {
+        creditShare =
+          grandCredits > 0 ? round((m.credits / grandCredits) * 100, 1) : 0
+      }
       return {
         model: m.model,
-        requests: m.requests,
-        inputTokens: m.inputTokens,
-        outputTokens: m.outputTokens,
-        cacheReadTokens: m.cacheReadTokens,
-        cacheCreationTokens: m.cacheCreationTokens,
-        reasoningTokens: m.reasoningTokens,
-        totalTokens,
+        requests: round(m.requests, 2),
+        credits: m.recorded ? round(m.credits, 4) : null,
         requestShare:
           grandRequests > 0 ? round((m.requests / grandRequests) * 100, 1) : 0,
-        tokenShare:
-          grandTokens > 0 ? round((totalTokens / grandTokens) * 100, 1) : 0,
-        cacheHitRate,
-        cacheRating: cacheRating(cacheHitRate),
-        tokensPerRequest:
-          m.requests > 0 ? Math.round(totalTokens / m.requests) : null,
-        reasoningShare: cappedPercent(m.reasoningTokens, m.outputTokens),
+        creditShare,
+        creditsPerRequest:
+          m.pricedRequests > 0 ? round(m.credits / m.pricedRequests, 4) : null,
         outOfHoursShare: cappedPercent(m.outOfHoursRequests, m.timedRequests),
         prCount: m.prs.size,
         reserved: RESERVED_USAGE_MODELS.has(m.model),
@@ -1752,7 +1738,7 @@ export function selectCopilotInsights(payloads) {
     .sort(
       (a, b) =>
         b.requests - a.requests ||
-        b.totalTokens - a.totalTokens ||
+        (b.credits ?? -1) - (a.credits ?? -1) ||
         a.model.localeCompare(b.model)
     )
 
@@ -1790,42 +1776,24 @@ export function selectCopilotInsights(payloads) {
         : null
   }
 
-  const totals = models.reduce(
-    (t, m) => ({
-      requests: t.requests + m.requests,
-      inputTokens: t.inputTokens + m.inputTokens,
-      outputTokens: t.outputTokens + m.outputTokens,
-      cacheReadTokens: t.cacheReadTokens + m.cacheReadTokens,
-      cacheCreationTokens: t.cacheCreationTokens + m.cacheCreationTokens,
-      reasoningTokens: t.reasoningTokens + m.reasoningTokens
-    }),
-    {
-      requests: 0,
-      inputTokens: 0,
-      outputTokens: 0,
-      cacheReadTokens: 0,
-      cacheCreationTokens: 0,
-      reasoningTokens: 0
-    }
-  )
-  totals.totalTokens = totals.inputTokens + totals.outputTokens
-  totals.cacheHitRate = cappedPercent(
-    totals.cacheReadTokens,
-    totals.inputTokens
-  )
-  totals.tokensPerRequest =
-    totals.requests > 0
-      ? Math.round(totals.totalTokens / totals.requests)
-      : null
+  const recorded = entries.some((m) => m.recorded)
+  const pricedRequests = entries.reduce((s, m) => s + m.pricedRequests, 0)
+  const totals = {
+    requests: round(grandRequests, 2),
+    credits: recorded ? round(grandCredits, 4) : null,
+    creditsPerRequest:
+      pricedRequests > 0 ? round(grandCredits / pricedRequests, 4) : null
+  }
 
   return {
     hasUsage: models.length > 0,
     coverage: {
       prsWithUsage: usage.prsWithUsage,
+      prsWithCredits: usage.prsWithCredits,
       assistedPrs: usage.assistedPrs,
       coveragePercent: usage.coveragePercent
     },
-    medianTokensPerPr: usage.medianTokensPerPr,
+    medianCreditsPerPr: usage.medianCreditsPerPr,
     totals,
     models,
     favourite,

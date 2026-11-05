@@ -1,10 +1,9 @@
-import { render, screen, waitFor, within } from '@testing-library/react'
+import { render, screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 
 import {
   AdminProjectsView,
-  validateComplexityModel,
-  validateProject
+  validateComplexityModel
 } from './AdminProjectsView.jsx'
 
 const PROJECTS = [
@@ -16,55 +15,6 @@ const PROJECTS = [
   },
   { name: 'FES AI Assistant', slug: 'FES', type: 'ai-native' }
 ]
-
-const VALID = {
-  name: 'New Service',
-  slug: 'NSVC',
-  type: 'ai-adopted',
-  adoption: { day: '1', month: '10', year: '2025' },
-  jiraKeys: 'MMOCR, FES'
-}
-
-describe('#validateProject', () => {
-  const NOW = new Date('2026-10-19T12:00:00Z')
-
-  test('Should accept a valid project', () => {
-    expect(validateProject(VALID, NOW)).toEqual({})
-  })
-
-  test.each([
-    ['name', { name: ' ' }, 'Enter a project name'],
-    ['name', { name: 'x'.repeat(81) }, /80 characters/],
-    ['slug', { slug: 'crar' }, /capital letters/],
-    ['slug', { slug: 'AB' }, /3 or 4/],
-    ['slug', { slug: 'ABCDE' }, /3 or 4/],
-    ['type', { type: '' }, 'Select the project type'],
-    [
-      'adoption',
-      { adoption: { day: '', month: '', year: '' } },
-      /adopted Copilot/
-    ],
-    [
-      'adoption',
-      { adoption: { day: '31', month: '2', year: '2025' } },
-      /real date/
-    ],
-    ['adoption', { adoption: { day: '1', month: '1', year: '2027' } }, /past/],
-    ['jiraKeys', { jiraKeys: 'mmocr' }, /capital letters/]
-  ])('Should report %s for %o', (field, change, message) => {
-    const errors = validateProject({ ...VALID, ...change }, NOW)
-    expect(errors[field]).toMatch(message)
-  })
-
-  test('Should not require an adoption date for an AI-native project', () => {
-    const form = {
-      ...VALID,
-      type: 'ai-native',
-      adoption: { day: '', month: '', year: '' }
-    }
-    expect(validateProject(form, NOW)).toEqual({})
-  })
-})
 
 describe('#validateComplexityModel', () => {
   const FIELDS = {
@@ -233,62 +183,60 @@ describe('#AdminProjectsView', () => {
     ).toBe(false)
   })
 
-  test('Should show an error summary linked to the fields', async () => {
+  test('Should send project creation to the onboarding wizard', async () => {
     const user = userEvent.setup()
-    renderView()
-
-    await user.click(screen.getByRole('button', { name: 'Continue' }))
-
-    const summary = screen.getByRole('alert')
-    expect(
-      within(summary).getByRole('link', { name: 'Enter a project name' })
-    ).toHaveAttribute('href', '#project-name')
-    expect(
-      within(summary).getByRole('link', { name: 'Select the project type' })
-    ).toBeInTheDocument()
-    expect(screen.getByLabelText('Project name')).toHaveAttribute(
-      'aria-describedby',
-      'project-name-error'
+    const onOnboardProject = vi.fn()
+    render(
+      <AdminProjectsView
+        onNavigateHome={vi.fn()}
+        onOnboardProject={onOnboardProject}
+      />
     )
+    await screen.findByRole('table', { name: 'Configured projects' })
+
+    const section = screen
+      .getByRole('heading', { name: 'Add a project' })
+      .closest('section')
+    const button = within(section).getByRole('button', {
+      name: 'Onboard a project'
+    })
+    expect(button).toHaveAttribute('href', '#/onboarding')
+
+    await user.click(button)
+
+    expect(onOnboardProject).toHaveBeenCalledTimes(1)
   })
 
-  test('Should check the answers, then add the project with the CSRF header', async () => {
+  test('Should leave a modified click on the onboarding link to the browser', async () => {
     const user = userEvent.setup()
+    const onOnboardProject = vi.fn()
+    render(
+      <AdminProjectsView
+        onNavigateHome={vi.fn()}
+        onOnboardProject={onOnboardProject}
+      />
+    )
+    await screen.findByRole('table', { name: 'Configured projects' })
+
+    await user.keyboard('{Shift>}')
+    await user.click(screen.getByRole('button', { name: 'Onboard a project' }))
+    await user.keyboard('{/Shift}')
+
+    expect(onOnboardProject).not.toHaveBeenCalled()
+  })
+
+  test('Should no longer show the inline project form', async () => {
     renderView()
-    await screen.findByRole('cell', { name: '1 October 2025' })
+    await screen.findByRole('table', { name: 'Configured projects' })
 
-    await user.type(screen.getByLabelText('Project name'), 'New Service')
-    await user.type(screen.getByLabelText(/^Project slug/), 'NSVC')
-    await user.click(screen.getByLabelText('AI-adopted'))
-    await user.type(screen.getByLabelText('Day'), '1')
-    await user.type(screen.getByLabelText('Month'), '10')
-    await user.type(screen.getByLabelText('Year'), '2025')
-    await user.click(screen.getByRole('button', { name: 'Continue' }))
-
+    expect(screen.queryByLabelText('Project name')).not.toBeInTheDocument()
+    expect(screen.queryByLabelText(/^Project slug/)).not.toBeInTheDocument()
     expect(
-      screen.getByRole('heading', { name: 'Check the project details' })
-    ).toBeInTheDocument()
-    expect(screen.getByText('NSVC')).toBeInTheDocument()
+      screen.queryByRole('button', { name: 'Continue' })
+    ).not.toBeInTheDocument()
     expect(
-      screen.getByRole('link', { name: 'Change project name' })
-    ).toBeInTheDocument()
-
-    await user.click(screen.getByRole('button', { name: 'Add project' }))
-
-    await waitFor(() =>
-      expect(screen.getByText('Project New Service added.')).toBeInTheDocument()
-    )
-    const post = fetchMock.mock.calls.find(
-      ([, init]) => init?.method === 'POST'
-    )
-    expect(post[1].headers['x-requested-with']).toBe('XMLHttpRequest')
-    expect(JSON.parse(post[1].body)).toEqual({
-      name: 'New Service',
-      slug: 'NSVC',
-      type: 'ai-adopted',
-      adoptionStartDate: '2025-10-01T00:00:00.000Z',
-      jira: { projectKeys: [] }
-    })
+      fetchMock.mock.calls.some(([, init]) => init?.method === 'POST')
+    ).toBe(false)
   })
 
   test('Should no longer offer group editing', async () => {

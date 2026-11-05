@@ -26,8 +26,7 @@ import {
   selectAiCodeChurnRate,
   selectCopilotUsage,
   selectCopilotInsights,
-  foldModels,
-  cacheRating
+  foldModels
 } from './selectors.js'
 
 function commit(overrides = {}) {
@@ -720,52 +719,75 @@ describe('selectCopilotUsage', () => {
       usage: { models, sessions: 1, commitsWithUsage: 1 }
     }
   })
-  const model = (name, input, output, extra = {}) => ({
+  const model = (name, requests = 1, credits) => ({
     model: name,
-    requests: 1,
-    inputTokens: input,
-    outputTokens: output,
+    requests,
+    inputTokens: 100,
+    outputTokens: 10,
     cacheReadTokens: 0,
     cacheCreationTokens: 0,
     reasoningTokens: 0,
-    ...extra
+    ...(credits === undefined ? {} : { credits })
   })
 
-  test('Should total tokens per model across pull requests, largest first', () => {
+  test('Should total requests and AI credits per model across pull requests, most credits first', () => {
     const payloads = [
       buildPayloadV2({
         prNumber: 1,
         commitBreakdown: [
-          usageCommit([
-            model('small', 10, 1),
-            model('big', 1000, 100, {
-              cacheReadTokens: 400,
-              cacheCreationTokens: 50
-            })
-          ])
+          usageCommit([model('small', 1, 0.5), model('big', 2, 3)])
         ]
       }),
       buildPayloadV2({
         prNumber: 2,
-        commitBreakdown: [usageCommit([model('big', 500, 50)])]
+        commitBreakdown: [usageCommit([model('big', 1.5, 1.25)])]
       })
     ]
 
     const usage = selectCopilotUsage(payloads)
 
-    expect(usage.models.map((m) => m.model)).toEqual(['big', 'small'])
-    expect(usage.models[0]).toEqual({
-      model: 'big',
-      requests: 2,
-      inputTokens: 1500,
-      outputTokens: 150,
-      cachedTokens: 450
+    expect(usage.models).toEqual([
+      { model: 'big', requests: 3.5, credits: 4.25 },
+      { model: 'small', requests: 1, credits: 0.5 }
+    ])
+    expect(usage).toMatchObject({
+      prsWithUsage: 2,
+      prsWithCredits: 2,
+      assistedPrs: 2,
+      coveragePercent: 100,
+      totalCredits: 4.75,
+      // PR 1 used 3.5 credits, PR 2 used 1.25; the median is to two places.
+      medianCreditsPerPr: 2.38
     })
-    expect(usage.prsWithUsage).toBe(2)
-    expect(usage.assistedPrs).toBe(2)
-    expect(usage.coveragePercent).toBe(100)
-    // PR 1 used 1111 tokens, PR 2 used 550.
-    expect(usage.medianTokensPerPr).toBe(831)
+  })
+
+  test('Should leave credits not recorded for usage without them, never deriving them from tokens', () => {
+    const payloads = [
+      buildPayloadV2({
+        prNumber: 1,
+        commitBreakdown: [
+          usageCommit([model('old', 2), model('broken', 1, -1)])
+        ]
+      }),
+      buildPayloadV2({
+        prNumber: 2,
+        commitBreakdown: [usageCommit([model('new', 1, 0.2)])]
+      })
+    ]
+
+    const usage = selectCopilotUsage(payloads)
+
+    expect(usage.models).toEqual([
+      { model: 'new', requests: 1, credits: 0.2 },
+      { model: 'old', requests: 2, credits: null },
+      { model: 'broken', requests: 1, credits: null }
+    ])
+    expect(usage).toMatchObject({
+      prsWithUsage: 2,
+      prsWithCredits: 1,
+      totalCredits: 0.2,
+      medianCreditsPerPr: 0.2
+    })
   })
 
   test('Should report coverage against Copilot-assisted pull requests only', () => {
@@ -778,7 +800,7 @@ describe('selectCopilotUsage', () => {
     const payloads = [
       buildPayloadV2({
         prNumber: 1,
-        commitBreakdown: [usageCommit([model('m', 10, 1)])]
+        commitBreakdown: [usageCommit([model('m')])]
       }),
       buildPayloadV2({ prNumber: 2, commitBreakdown: [assistedWithout] }),
       buildPayloadV2({ prNumber: 3, commitBreakdown: [human] })
@@ -795,8 +817,8 @@ describe('selectCopilotUsage', () => {
     const usage = selectCopilotUsage([
       buildPayloadV2({
         commitBreakdown: [
-          usageCommit([model('m', 10, 1)], 'legacy-trailer'),
-          usageCommit([{ model: 7 }, null, model('ok', 1, 1)]),
+          usageCommit([model('m')], 'legacy-trailer'),
+          usageCommit([{ model: 7 }, null, model('ok')]),
           {
             ...buildCommitV2(),
             attribution: {
@@ -816,11 +838,13 @@ describe('selectCopilotUsage', () => {
     expect(selectCopilotUsage(undefined)).toEqual({
       models: [],
       prsWithUsage: 0,
+      prsWithCredits: 0,
       assistedPrs: 0,
       coveragePercent: null,
-      medianTokensPerPr: null
+      totalCredits: null,
+      medianCreditsPerPr: null
     })
-    expect(selectCopilotUsage([buildPayloadV2()]).medianTokensPerPr).toBeNull()
+    expect(selectCopilotUsage([buildPayloadV2()]).medianCreditsPerPr).toBeNull()
   })
 })
 
@@ -866,16 +890,18 @@ describe('selectCopilotInsights', () => {
       expect(insights.models).toEqual([])
       expect(insights.favourite).toBeNull()
       expect(insights.superlatives).toEqual([])
-      expect(insights.totals.requests).toBe(0)
-      expect(insights.totals.cacheHitRate).toBeNull()
-      expect(insights.totals.tokensPerRequest).toBeNull()
+      expect(insights.totals).toEqual({
+        requests: 0,
+        credits: null,
+        creditsPerRequest: null
+      })
       expect(insights.variety).toEqual({
         distinctModels: 0,
         effectiveModels: null,
         multiModelPrShare: null
       })
       expect(insights.coverage.coveragePercent).toBeNull()
-      expect(insights.medianTokensPerPr).toBeNull()
+      expect(insights.medianCreditsPerPr).toBeNull()
     }
   })
 
@@ -883,50 +909,64 @@ describe('selectCopilotInsights', () => {
     const insights = selectCopilotInsights([
       pr(
         1,
-        usageCommit([
-          usageModel('gpt', {
-            requests: 2,
-            inputTokens: 100,
-            outputTokens: 10,
-            cacheReadTokens: 40,
-            cacheCreationTokens: 5,
-            reasoningTokens: 4
-          })
-        ]),
-        usageCommit([
-          usageModel('gpt', { requests: 3, inputTokens: 200, outputTokens: 20 })
-        ])
+        usageCommit([usageModel('gpt', { requests: 2, credits: 1.5 })]),
+        usageCommit([usageModel('gpt', { requests: 3, credits: 2 })])
       ),
-      pr(2, usageCommit([usageModel('gpt', { inputTokens: 50 })]))
+      pr(2, usageCommit([usageModel('gpt', { credits: 0.5 })]))
     ])
 
     expect(insights.hasUsage).toBe(true)
     expect(insights.models).toHaveLength(1)
-    expect(insights.models[0]).toMatchObject({
+    expect(insights.models[0]).toEqual({
       model: 'gpt',
       requests: 6,
-      inputTokens: 350,
-      outputTokens: 30,
-      cacheReadTokens: 40,
-      cacheCreationTokens: 5,
-      reasoningTokens: 4,
-      totalTokens: 380,
+      credits: 4,
+      requestShare: 100,
+      creditShare: 100,
+      creditsPerRequest: 0.6667,
+      outOfHoursShare: 0,
       prCount: 2,
-      tokensPerRequest: 63,
-      rank: 1,
-      reserved: false
+      reserved: false,
+      rank: 1
     })
-    expect(insights.totals).toMatchObject({
+    expect(insights.totals).toEqual({
       requests: 6,
-      totalTokens: 380,
-      tokensPerRequest: 63
+      credits: 4,
+      creditsPerRequest: 0.6667
     })
     expect(insights.coverage).toEqual({
       prsWithUsage: 2,
+      prsWithCredits: 2,
       assistedPrs: 2,
       coveragePercent: 100
     })
-    expect(insights.medianTokensPerPr).toBe(Math.round((330 + 50) / 2))
+    // PR 1 used 3.5 credits, PR 2 used 0.5.
+    expect(insights.medianCreditsPerPr).toBe(2)
+  })
+
+  test('Should price credits per request only from requests that recorded credits', () => {
+    const insights = selectCopilotInsights([
+      pr(1, usageCommit([usageModel('gpt', { requests: 2, credits: 1 })])),
+      pr(2, usageCommit([usageModel('gpt', { requests: 4 })])),
+      pr(3, usageCommit([usageModel('legacy', { requests: 2 })]))
+    ])
+
+    expect(modelOf(insights, 'gpt')).toMatchObject({
+      requests: 6,
+      credits: 1,
+      creditsPerRequest: 0.5
+    })
+    expect(modelOf(insights, 'legacy')).toMatchObject({
+      credits: null,
+      creditShare: null,
+      creditsPerRequest: null
+    })
+    expect(insights.totals).toEqual({
+      requests: 8,
+      credits: 1,
+      creditsPerRequest: 0.5
+    })
+    expect(insights.coverage.prsWithCredits).toBe(1)
   })
 
   test('Should count the same pull request number in different repositories separately', () => {
@@ -966,15 +1006,15 @@ describe('selectCopilotInsights', () => {
     expect(insights.models.map((m) => m.model)).toEqual(['ok'])
   })
 
-  test('Should sort by requests, then tokens, then name, and rank only named models', () => {
+  test('Should sort by requests, then credits, then name, and rank only named models', () => {
     const insights = selectCopilotInsights([
       pr(
         1,
         usageCommit([
           usageModel('other', { requests: 10 }),
-          usageModel('beta', { requests: 3, inputTokens: 5 }),
-          usageModel('alpha', { requests: 3, inputTokens: 5 }),
-          usageModel('gamma', { requests: 3, inputTokens: 50 }),
+          usageModel('beta', { requests: 3, credits: 0.5 }),
+          usageModel('alpha', { requests: 3, credits: 0.5 }),
+          usageModel('gamma', { requests: 3, credits: 5 }),
           usageModel('unknown', { requests: 1 })
         ])
       )
@@ -994,31 +1034,31 @@ describe('selectCopilotInsights', () => {
       pr(
         1,
         usageCommit([
-          usageModel('gpt', { requests: 3, inputTokens: 60, outputTokens: 20 }),
-          usageModel('other', { requests: 1, inputTokens: 20 })
+          usageModel('gpt', { requests: 3, credits: 8 }),
+          usageModel('other', { requests: 1, credits: 2 })
         ])
       )
     ])
 
     expect(modelOf(insights, 'gpt')).toMatchObject({
       requestShare: 75,
-      tokenShare: 80
+      creditShare: 80
     })
     expect(modelOf(insights, 'other')).toMatchObject({
       requestShare: 25,
-      tokenShare: 20
+      creditShare: 20
     })
   })
 
   test('Should report zero shares when nothing was requested or spent', () => {
     const insights = selectCopilotInsights([
-      pr(1, usageCommit([usageModel('gpt', { requests: 0 })]))
+      pr(1, usageCommit([usageModel('gpt', { requests: 0, credits: 0 })]))
     ])
 
     expect(insights.models[0]).toMatchObject({
       requestShare: 0,
-      tokenShare: 0,
-      tokensPerRequest: null
+      creditShare: 0,
+      creditsPerRequest: null
     })
   })
 
@@ -1045,13 +1085,13 @@ describe('selectCopilotInsights', () => {
       })
     })
 
-    test('Should break a request tie on tokens, then name', () => {
-      const byTokens = selectCopilotInsights([
+    test('Should break a request tie on credits, then name', () => {
+      const byCredits = selectCopilotInsights([
         pr(
           1,
           usageCommit([
-            usageModel('alpha', { inputTokens: 1 }),
-            usageModel('beta', { inputTokens: 9 })
+            usageModel('alpha', { credits: 0.1 }),
+            usageModel('beta', { credits: 0.9 })
           ])
         )
       ])
@@ -1059,18 +1099,18 @@ describe('selectCopilotInsights', () => {
         pr(1, usageCommit([usageModel('beta'), usageModel('alpha')]))
       ])
 
-      expect(byTokens.favourite.model).toBe('beta')
-      expect(byTokens.favourite.leadPoints).toBe(0)
+      expect(byCredits.favourite.model).toBe('beta')
+      expect(byCredits.favourite.leadPoints).toBe(0)
       expect(byName.favourite.model).toBe('alpha')
     })
 
-    test('Should fall back to the highest token model when none has requests', () => {
+    test('Should fall back to the highest credit model when none has requests', () => {
       const insights = selectCopilotInsights([
         pr(
           1,
           usageCommit([
-            usageModel('alpha', { requests: 0, inputTokens: 5 }),
-            usageModel('beta', { requests: 0, inputTokens: 50 })
+            usageModel('alpha', { requests: 0, credits: 0.5 }),
+            usageModel('beta', { requests: 0, credits: 5 })
           ])
         )
       ])
@@ -1106,75 +1146,7 @@ describe('selectCopilotInsights', () => {
     })
   })
 
-  describe('cache hit rate', () => {
-    test('Should cap at 100 when cache reads exceed input', () => {
-      const insights = selectCopilotInsights([
-        pr(
-          1,
-          usageCommit([
-            usageModel('gpt', { inputTokens: 100, cacheReadTokens: 250 })
-          ])
-        )
-      ])
-
-      expect(insights.models[0].cacheHitRate).toBe(100)
-      expect(insights.models[0].cacheRating).toBe('high')
-      expect(insights.totals.cacheHitRate).toBe(100)
-    })
-
-    test('Should be null, with no rating, when there was no input', () => {
-      const insights = selectCopilotInsights([
-        pr(1, usageCommit([usageModel('gpt', { cacheReadTokens: 10 })]))
-      ])
-
-      expect(insights.models[0].cacheHitRate).toBeNull()
-      expect(insights.models[0].cacheRating).toBeNull()
-    })
-
-    test('Should rate at the threshold boundaries', () => {
-      expect(cacheRating(null)).toBeNull()
-      expect(cacheRating(100)).toBe('high')
-      expect(cacheRating(60)).toBe('high')
-      expect(cacheRating(59.9)).toBe('medium')
-      expect(cacheRating(30)).toBe('medium')
-      expect(cacheRating(29.9)).toBe('low')
-      expect(cacheRating(0)).toBe('low')
-    })
-
-    test('Should rate a model from its own hit rate', () => {
-      const insights = selectCopilotInsights([
-        pr(
-          1,
-          usageCommit([
-            usageModel('hot', { inputTokens: 1000, cacheReadTokens: 600 }),
-            usageModel('warm', { inputTokens: 1000, cacheReadTokens: 599 }),
-            usageModel('cold', { inputTokens: 1000, cacheReadTokens: 299 })
-          ])
-        )
-      ])
-
-      expect(modelOf(insights, 'hot').cacheRating).toBe('high')
-      expect(modelOf(insights, 'warm').cacheRating).toBe('medium')
-      expect(modelOf(insights, 'cold').cacheRating).toBe('low')
-    })
-  })
-
-  describe('reasoning and out-of-hours shares', () => {
-    test('Should cap reasoning share at 100 and be null without output', () => {
-      const insights = selectCopilotInsights([
-        pr(
-          1,
-          usageCommit([
-            usageModel('capped', { outputTokens: 10, reasoningTokens: 50 }),
-            usageModel('silent', { reasoningTokens: 5 })
-          ])
-        )
-      ])
-
-      expect(modelOf(insights, 'capped').reasoningShare).toBe(100)
-      expect(modelOf(insights, 'silent').reasoningShare).toBeNull()
-    })
-
+  describe('out-of-hours share', () => {
     test('Should measure out-of-hours in local time, 19:00 up to 07:00', () => {
       const at = (committedAt, requests) =>
         usageCommit([usageModel('owl', { requests })], { committedAt })
@@ -1254,88 +1226,57 @@ describe('selectCopilotInsights', () => {
   describe('superlatives', () => {
     test('Should need a model to be used on at least two pull requests', () => {
       const insights = selectCopilotInsights([
-        pr(1, usageCommit([usageModel('solo', { inputTokens: 99_999 })]))
+        pr(1, usageCommit([usageModel('solo', { credits: 999 })]))
       ])
 
       expect(insights.superlatives).toEqual([])
     })
 
-    test('Should award token-heavyweight only for non-zero tokens', () => {
+    test('Should award biggest-spender only for recorded, non-zero credits', () => {
       expect(ids(selectCopilotInsights(twoPrs({})))).not.toContain(
-        'token-heavyweight'
+        'biggest-spender'
+      )
+      expect(ids(selectCopilotInsights(twoPrs({ credits: 0 })))).not.toContain(
+        'biggest-spender'
       )
 
-      const awarded = selectCopilotInsights(twoPrs({ inputTokens: 1 }))
+      const awarded = selectCopilotInsights(twoPrs({ credits: 1 }))
 
       expect(awarded.superlatives[0]).toEqual({
-        id: 'token-heavyweight',
+        id: 'biggest-spender',
         model: 'solo',
-        metric: 'tokenShare',
+        metric: 'creditShare',
         value: 100
       })
     })
 
-    test('Should award cache-champion from 10,000 input tokens', () => {
-      const below = twoPrs({ inputTokens: 4999, cacheReadTokens: 4999 })
-      const at = twoPrs({ inputTokens: 5000, cacheReadTokens: 2500 })
+    test('Should award best-value from 5 requests with recorded credits', () => {
+      const below = twoPrs({ requests: 2, credits: 1 })
+      const unpriced = twoPrs({ requests: 3 })
+      const at = twoPrs({ requests: 3, credits: 1.5 })
 
-      expect(ids(selectCopilotInsights(below))).not.toContain('cache-champion')
+      expect(ids(selectCopilotInsights(below))).not.toContain('best-value')
+      expect(ids(selectCopilotInsights(unpriced))).not.toContain('best-value')
       expect(
         selectCopilotInsights(at).superlatives.find(
-          (s) => s.id === 'cache-champion'
+          (s) => s.id === 'best-value'
         )
-      ).toMatchObject({ model: 'solo', metric: 'cacheHitRate', value: 50 })
+      ).toMatchObject({ metric: 'creditsPerRequest', value: 0.5 })
     })
 
-    test('Should award token-economiser from 5 requests', () => {
-      const below = twoPrs({ requests: 2, inputTokens: 10 })
-      const at = twoPrs({ requests: 3, inputTokens: 10 })
-
-      expect(ids(selectCopilotInsights(below))).not.toContain(
-        'token-economiser'
-      )
-      expect(
-        selectCopilotInsights(at).superlatives.find(
-          (s) => s.id === 'token-economiser'
-        )
-      ).toMatchObject({ metric: 'tokensPerRequest', value: 3 })
-    })
-
-    test('Should pick the lowest tokens per request for token-economiser', () => {
-      const frugal = (name, tokens) => [
-        pr(
-          1,
-          usageCommit([usageModel(name, { requests: 5, inputTokens: tokens })])
-        ),
-        pr(
-          2,
-          usageCommit([usageModel(name, { requests: 5, inputTokens: tokens })])
-        )
+    test('Should pick the lowest credits per request for best-value', () => {
+      const priced = (name, credits) => [
+        pr(1, usageCommit([usageModel(name, { requests: 5, credits })])),
+        pr(2, usageCommit([usageModel(name, { requests: 5, credits })]))
       ]
       const insights = selectCopilotInsights([
-        ...frugal('thrifty', 10),
-        ...frugal('lavish', 1000)
+        ...priced('thrifty', 0.5),
+        ...priced('lavish', 50)
       ])
 
       expect(
-        insights.superlatives.find((s) => s.id === 'token-economiser').model
+        insights.superlatives.find((s) => s.id === 'best-value').model
       ).toBe('thrifty')
-    })
-
-    test('Should award deep-thinker from 1,000 output tokens with reasoning', () => {
-      const below = twoPrs({ outputTokens: 499, reasoningTokens: 100 })
-      const noReasoning = twoPrs({ outputTokens: 500 })
-      const at = twoPrs({ outputTokens: 500, reasoningTokens: 250 })
-
-      expect(ids(selectCopilotInsights(below))).not.toContain('deep-thinker')
-      expect(ids(selectCopilotInsights(noReasoning))).not.toContain(
-        'deep-thinker'
-      )
-      expect(
-        selectCopilotInsights(at).superlatives.find(
-          (s) => s.id === 'deep-thinker'
-        )
-      ).toMatchObject({ metric: 'reasoningShare', value: 50 })
     })
 
     test('Should award night-owl from 5 requests with some out-of-hours work', () => {
@@ -1378,7 +1319,7 @@ describe('selectCopilotInsights', () => {
 
     test('Should keep reserved models out of model awards', () => {
       const insights = selectCopilotInsights(
-        twoPrs({ inputTokens: 50_000 }, {}, 'other')
+        twoPrs({ credits: 50 }, {}, 'other')
       )
 
       expect(insights.superlatives).toEqual([])
@@ -1389,25 +1330,25 @@ describe('selectCopilotInsights', () => {
         pr(
           1,
           usageCommit([
-            usageModel('x', { requests: xRequests, inputTokens: 100 }),
-            usageModel('y', { requests: yRequests, inputTokens: 100 })
+            usageModel('x', { requests: xRequests, credits: 1 }),
+            usageModel('y', { requests: yRequests, credits: 1 })
           ])
         ),
         pr(
           2,
           usageCommit([
-            usageModel('x', { requests: xRequests, inputTokens: 100 }),
-            usageModel('y', { requests: yRequests, inputTokens: 100 })
+            usageModel('x', { requests: xRequests, credits: 1 }),
+            usageModel('y', { requests: yRequests, credits: 1 })
           ])
         )
       ]
-      const heavyweight = (payloads) =>
+      const spender = (payloads) =>
         selectCopilotInsights(payloads).superlatives.find(
-          (s) => s.id === 'token-heavyweight'
+          (s) => s.id === 'biggest-spender'
         ).model
 
-      expect(heavyweight(both(1, 1))).toBe('x')
-      expect(heavyweight(both(1, 2))).toBe('y')
+      expect(spender(both(1, 1))).toBe('x')
+      expect(spender(both(1, 2))).toBe('y')
     })
 
     test('Should list awards in a fixed order', () => {
@@ -1416,13 +1357,7 @@ describe('selectCopilotInsights', () => {
           1,
           usageCommit(
             [
-              usageModel('alpha', {
-                requests: 5,
-                inputTokens: 20_000,
-                outputTokens: 2000,
-                cacheReadTokens: 10_000,
-                reasoningTokens: 500
-              }),
+              usageModel('alpha', { requests: 5, credits: 10 }),
               usageModel('beta')
             ],
             { committedAt: '2026-01-15T23:00:00' }
@@ -1431,17 +1366,15 @@ describe('selectCopilotInsights', () => {
         pr(
           2,
           usageCommit([
-            usageModel('alpha', { requests: 5 }),
+            usageModel('alpha', { requests: 5, credits: 2 }),
             usageModel('beta')
           ])
         )
       ])
 
       expect(ids(insights)).toEqual([
-        'token-heavyweight',
-        'cache-champion',
-        'token-economiser',
-        'deep-thinker',
+        'biggest-spender',
+        'best-value',
         'night-owl',
         'prompt-polyglot'
       ])

@@ -1,29 +1,100 @@
-import { useId, useRef, useState } from 'react'
+import { useId, useState } from 'react'
 
 import { Panel, PanelState } from '../dashboard'
 import {
   Button,
-  ErrorMessage,
   ErrorSummary,
-  Hint,
   NotificationBanner,
-  Table
+  Table,
+  TextInput
 } from '../govuk'
 import { cx } from '../govuk/utils.js'
 import { jsonWrite } from '../../lib/api'
+import { isRepositoryName } from '../../lib/onboarding'
 import { ROLES } from '../../lib/roles'
 
-const REPOSITORY_PATTERN = /^[\w.-]+\/[\w.-]+$/
+// A list longer than this gets a search box, unless it always has one.
+const SEARCH_THRESHOLD = 5
 
 async function failure(res, fallback) {
   const body = await res.json().catch(() => null)
   return new Error(body?.message || fallback)
 }
 
+/** A repository table in a scrolling container, with a search box once it is long. */
+function SearchableTable({
+  noun,
+  items,
+  alwaysSearch = false,
+  caption,
+  head,
+  searchText,
+  toRow
+}) {
+  const [query, setQuery] = useState('')
+  const searchable = alwaysSearch || items.length > SEARCH_THRESHOLD
+  const needle = searchable ? query.trim().toLowerCase() : ''
+  const shown = needle
+    ? items.filter((item) => searchText(item).toLowerCase().includes(needle))
+    : items
+
+  let result = ''
+  if (needle) {
+    result =
+      shown.length === 0
+        ? `No ${noun} match “${query.trim()}”`
+        : `Showing ${shown.length} of ${items.length} ${noun}`
+  }
+
+  return (
+    <>
+      {searchable && (
+        <>
+          <TextInput
+            type="search"
+            label={`Search ${noun}`}
+            labelSize="s"
+            width="30"
+            spellCheck={false}
+            autoComplete="off"
+            formGroupClassName="govuk-!-margin-bottom-2"
+            value={query}
+            onChange={(event) => setQuery(event.target.value)}
+          />
+          <p
+            className={cx('govuk-hint', !needle && 'govuk-visually-hidden')}
+            role="status"
+          >
+            {result}
+          </p>
+        </>
+      )}
+      {shown.length > 0 && (
+        <div className="app-scroll-list">
+          <Table
+            className="govuk-!-margin-bottom-0"
+            caption={caption}
+            captionHidden
+            head={head}
+            rows={shown.map(toRow)}
+          />
+        </div>
+      )}
+    </>
+  )
+}
+
+const ACTIONS_HEAD = {
+  id: 'actions',
+  label: <span className="govuk-visually-hidden">Actions</span>
+}
+
 /**
- * Which repositories feed the active project. Project admins add repositories
- * nobody owns yet and remove their own; moving one between projects needs a
- * dashboard admin, so only they see the other projects' repositories.
+ * Which repositories feed the active project, in separate sections: those
+ * connected, a form to add one, those sending data with no project, and those
+ * in other projects. Project admins add repositories nobody owns yet and remove
+ * their own; moving one between projects needs a dashboard admin, so only they
+ * see the other projects' repositories.
  */
 export function RepositoryMappingPanel({
   project,
@@ -34,7 +105,6 @@ export function RepositoryMappingPanel({
   onChanged
 }) {
   const inputId = useId()
-  const inputRef = useRef(null)
   const [repository, setRepository] = useState('')
   const [error, setError] = useState(null)
   const [attempt, setAttempt] = useState(0)
@@ -45,6 +115,7 @@ export function RepositoryMappingPanel({
   const isDashboardAdmin = role === ROLES.dashboardAdmin
   const mine = repositories.filter((r) => r.projectSlug === project.slug)
   const elsewhere = repositories.filter((r) => r.projectSlug !== project.slug)
+  const suggestions = unassigned.filter(isRepositoryName)
 
   const fail = (message) => {
     setAttempt((n) => n + 1)
@@ -99,8 +170,21 @@ export function RepositoryMappingPanel({
   const submit = (event) => {
     event.preventDefault()
     const name = repository.trim()
-    if (!REPOSITORY_PATTERN.test(name)) {
+    if (!isRepositoryName(name)) {
       fail('Enter the repository as owner/name, like DEFRA/mmo-cr-pdf')
+      return
+    }
+    const key = name.toLowerCase()
+    if (mine.some((r) => r.fullName.toLowerCase() === key)) {
+      fail(`${name} is already in this project`)
+      return
+    }
+    if (elsewhere.some((r) => r.fullName.toLowerCase() === key)) {
+      fail(
+        isDashboardAdmin
+          ? `${name} is in another project. Use Move here to bring it into this one`
+          : `${name} is already mapped to a project`
+      )
       return
     }
     map(name, 'added to the project')
@@ -125,14 +209,10 @@ export function RepositoryMappingPanel({
     </button>
   )
 
+  const sectionGap = 'govuk-!-margin-bottom-6'
+
   return (
-    <Panel
-      title="Repositories in this project"
-      family="speed"
-      icon="repo"
-      headingLevel={2}
-      busy={state() === 'loading'}
-    >
+    <>
       {notice && (
         <NotificationBanner key={notice.id} type="success" autoFocus>
           {notice.text}
@@ -145,116 +225,127 @@ export function RepositoryMappingPanel({
         />
       )}
 
-      <PanelState
-        state={state()}
-        title="Repositories"
+      <Panel
+        title="Connected Repositories"
+        family="speed"
         icon="repo"
-        emptyTag="No repositories"
-        emptyMessage="No repository sends data to this project yet. Add one below."
-        errorMessage="We could not load the repositories. Try again later."
+        headingLevel={2}
+        busy={state() === 'loading'}
+        className={sectionGap}
       >
-        <Table
-          className="govuk-!-margin-bottom-4"
-          caption="Repositories in this project"
-          captionHidden
-          head={[
-            { id: 'repo', label: 'Repository' },
-            { id: 'sonar', label: 'Sonar project key' },
-            {
-              id: 'actions',
-              label: <span className="govuk-visually-hidden">Actions</span>
-            }
-          ]}
-          rows={mine.map((r) => ({
-            id: r.fullName,
-            cells: [
-              r.fullName,
-              r.sonarProjectKey ? (
-                <code key="k">{r.sonarProjectKey}</code>
-              ) : (
-                '—'
-              ),
-              confirming === r.fullName ? (
-                <span key="confirm">
-                  <Button
-                    variant="warning"
-                    disabled={pending === r.fullName}
-                    onClick={() => unmap(r.fullName)}
-                  >
-                    Confirm remove
-                  </Button>{' '}
-                  <button
-                    type="button"
-                    className="app-link-button"
-                    onClick={() => setConfirming(null)}
-                  >
-                    Cancel
-                  </button>
-                </span>
-              ) : (
-                linkButton('Remove', `${r.fullName} from this project`, () =>
-                  setConfirming(r.fullName)
-                )
-              )
-            ]
-          }))}
-        />
-      </PanelState>
-
-      <form onSubmit={submit} noValidate>
-        <div
-          className={cx('govuk-form-group', error && 'govuk-form-group--error')}
+        <p className="govuk-body-s">
+          Repositories that send data to this project.
+        </p>
+        <PanelState
+          state={state()}
+          title="Connected repositories"
+          icon="repo"
+          emptyTag="No repositories"
+          emptyMessage="No repository sends data to this project yet. Add one below."
+          errorMessage="We could not load the repositories. Try again later."
         >
-          <label className="govuk-label govuk-label--s" htmlFor={inputId}>
-            Add a repository
-          </label>
-          <Hint id={`${inputId}-hint`}>
-            As owner/name, like DEFRA/mmo-cr-pdf. Map a repository before adding
-            the analytics workflow to it, as data from an unmapped repository is
-            held back.
-          </Hint>
-          {error && (
-            <ErrorMessage id={`${inputId}-error`}>{error}</ErrorMessage>
-          )}
-          <input
-            ref={inputRef}
-            className={cx(
-              'govuk-input govuk-input--width-30',
-              error && 'govuk-input--error'
-            )}
-            id={inputId}
-            type="text"
-            spellCheck={false}
-            autoComplete="off"
-            aria-describedby={cx(
-              `${inputId}-hint`,
-              error && `${inputId}-error`
-            )}
-            value={repository}
-            onChange={(e) => setRepository(e.target.value)}
-          />
-        </div>
-        <Button type="submit" disabled={pending !== null}>
-          Add repository
-        </Button>
-      </form>
-
-      {unassigned.length > 0 && (
-        <>
-          <h3 className="govuk-heading-s govuk-!-margin-top-6">
-            Sending data, but not in a project
-          </h3>
-          <Table
-            caption="Repositories sending data that no project owns"
-            captionHidden
+          <SearchableTable
+            noun="connected repositories"
+            items={mine}
+            caption="Connected repositories"
             head={[
               { id: 'repo', label: 'Repository' },
-              {
-                id: 'actions',
-                label: <span className="govuk-visually-hidden">Actions</span>
-              }
+              { id: 'sonar', label: 'Sonar project key' },
+              ACTIONS_HEAD
             ]}
-            rows={unassigned.map((name) => ({
+            searchText={(r) => `${r.fullName} ${r.sonarProjectKey ?? ''}`}
+            toRow={(r) => ({
+              id: r.fullName,
+              cells: [
+                r.fullName,
+                r.sonarProjectKey ? (
+                  <code key="k" className="app-code">
+                    {r.sonarProjectKey}
+                  </code>
+                ) : (
+                  '—'
+                ),
+                confirming === r.fullName ? (
+                  <span key="confirm">
+                    <Button
+                      variant="warning"
+                      disabled={pending === r.fullName}
+                      onClick={() => unmap(r.fullName)}
+                    >
+                      Confirm remove
+                    </Button>{' '}
+                    <button
+                      type="button"
+                      className="app-link-button"
+                      onClick={() => setConfirming(null)}
+                    >
+                      Cancel
+                    </button>
+                  </span>
+                ) : (
+                  linkButton('Remove', `${r.fullName} from this project`, () =>
+                    setConfirming(r.fullName)
+                  )
+                )
+              ]
+            })}
+          />
+        </PanelState>
+      </Panel>
+
+      <Panel
+        title="Add a Repository"
+        family="speed"
+        icon="repo"
+        headingLevel={2}
+        className={sectionGap}
+      >
+        <form onSubmit={submit} noValidate>
+          <TextInput
+            id={inputId}
+            label="Repository name"
+            labelSize="s"
+            hint="As owner/name, like DEFRA/mmo-cr-pdf. Pick a discovered repository or type a new one. Map it before adding the analytics workflow, or its data is held back."
+            errorMessage={error ?? undefined}
+            width="30"
+            spellCheck={false}
+            autoComplete="off"
+            value={repository}
+            onChange={(e) => setRepository(e.target.value)}
+            list={suggestions.length > 0 ? `${inputId}-list` : undefined}
+          />
+          {suggestions.length > 0 && (
+            <datalist id={`${inputId}-list`}>
+              {suggestions.map((name) => (
+                <option key={name} value={name} />
+              ))}
+            </datalist>
+          )}
+          <Button type="submit" disabled={pending !== null}>
+            Add repository
+          </Button>
+        </form>
+      </Panel>
+
+      {unassigned.length > 0 && (
+        <Panel
+          title="Discovered Repositories"
+          family="speed"
+          icon="repo"
+          headingLevel={2}
+          className={sectionGap}
+        >
+          <p className="govuk-body-s">
+            Repositories sending telemetry that have not yet been assigned to a
+            project.
+          </p>
+          <SearchableTable
+            noun="discovered repositories"
+            items={unassigned}
+            caption="Discovered repositories"
+            head={[{ id: 'repo', label: 'Repository' }, ACTIONS_HEAD]}
+            searchText={(name) => name}
+            toRow={(name) => ({
               id: name,
               cells: [
                 name,
@@ -265,32 +356,40 @@ export function RepositoryMappingPanel({
                   pending === name
                 )
               ]
-            }))}
+            })}
           />
-        </>
+        </Panel>
       )}
 
       {isDashboardAdmin && elsewhere.length > 0 && (
-        <>
-          <h3 className="govuk-heading-s govuk-!-margin-top-6">
-            In other projects
-          </h3>
-          <Table
-            caption="Repositories in other projects"
-            captionHidden
+        <Panel
+          title="Repos Mapped"
+          family="speed"
+          icon="repo"
+          headingLevel={2}
+          className={sectionGap}
+        >
+          <p className="govuk-body-s">
+            Repositories currently assigned to other projects.
+          </p>
+          <SearchableTable
+            noun="mapped repositories"
+            items={elsewhere}
+            alwaysSearch
+            caption="Repositories mapped to other projects"
             head={[
               { id: 'repo', label: 'Repository' },
               { id: 'project', label: 'Project' },
-              {
-                id: 'actions',
-                label: <span className="govuk-visually-hidden">Actions</span>
-              }
+              ACTIONS_HEAD
             ]}
-            rows={elsewhere.map((r) => ({
+            searchText={(r) => `${r.fullName} ${r.projectSlug}`}
+            toRow={(r) => ({
               id: r.fullName,
               cells: [
                 r.fullName,
-                <code key="p">{r.projectSlug}</code>,
+                <code key="p" className="app-code">
+                  {r.projectSlug}
+                </code>,
                 linkButton(
                   'Move here',
                   `${r.fullName} to ${project.name}`,
@@ -298,10 +397,10 @@ export function RepositoryMappingPanel({
                   pending === r.fullName
                 )
               ]
-            }))}
+            })}
           />
-        </>
+        </Panel>
       )}
-    </Panel>
+    </>
   )
 }

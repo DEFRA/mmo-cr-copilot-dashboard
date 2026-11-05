@@ -101,6 +101,14 @@ const AdminProjectsView = lazy(() =>
     default: m.AdminProjectsView
   }))
 )
+const OnboardingView = lazy(() =>
+  import('./components/views/OnboardingView').then((m) => ({
+    default: m.OnboardingView
+  }))
+)
+const HelpView = lazy(() =>
+  import('./components/views/HelpView').then((m) => ({ default: m.HelpView }))
+)
 const CookiesView = lazy(() =>
   import('./components/views/CookiesView').then((m) => ({
     default: m.CookiesView
@@ -132,6 +140,8 @@ const PLAIN_PAGES = new Set([
   'accessibility',
   'adminProjects',
   'cookies',
+  'help',
+  'onboarding',
   'privacy'
 ])
 
@@ -146,6 +156,8 @@ const TOP_LEVEL = {
   contributors: { level: 'contributors' },
   delivery: { level: 'delivery' },
   settings: { level: 'settings' },
+  onboarding: { level: 'onboarding' },
+  help: { level: 'help' },
   accessibility: { level: 'accessibility' },
   cookies: { level: 'cookies' },
   privacy: { level: 'privacy' }
@@ -159,6 +171,8 @@ const NAV_LABELS = [
   ['delivery', 'Delivery'],
   ['settings', 'Settings']
 ]
+const ONBOARDING_LABEL = ['onboarding', 'Onboarding']
+const HELP_LABEL = ['help', 'Help']
 
 function activeNavId(nav) {
   if (nav.section === 'repositories') return 'repositories'
@@ -174,6 +188,10 @@ function activeNavId(nav) {
     case 'settings':
     case 'adminProjects':
       return 'settings'
+    case 'onboarding':
+      return 'onboarding'
+    case 'help':
+      return 'help'
     default:
       return PLAIN_PAGES.has(nav.level) ? null : 'overview'
   }
@@ -264,10 +282,11 @@ export default function App() {
     activeProject,
     selectProject,
     status: projectsStatus,
-    loading: projectsLoading
+    loading: projectsLoading,
+    refresh: refreshProjects
   } = useProjects()
   const activeSlug = activeProject?.slug
-  const { user, isAdmin } = useCurrentUser()
+  const { user, isAdmin, status: userStatus } = useCurrentUser()
   const { payloads, status, lastMessageAt, applyPayload } = useLiveFeed({
     projectSlug: activeProject?.slug
   })
@@ -510,15 +529,21 @@ export default function App() {
     [navigate]
   )
   const goHome = useCallback(() => navigate({ level: 'overview' }), [navigate])
+  const openOnboarding = useCallback(
+    () => navigate({ level: 'onboarding' }),
+    [navigate]
+  )
 
   const navItems = useMemo(
     () =>
-      NAV_LABELS.map(([id, label]) => ({
-        id,
-        label,
-        href: toHash(withProject(TOP_LEVEL[id], activeSlug))
-      })),
-    [activeSlug]
+      [...NAV_LABELS, ...(isAdmin ? [ONBOARDING_LABEL] : []), HELP_LABEL].map(
+        ([id, label]) => ({
+          id,
+          label,
+          href: toHash(withProject(TOP_LEVEL[id], activeSlug))
+        })
+      ),
+    [activeSlug, isAdmin]
   )
 
   const insightsHref = useMemo(
@@ -543,7 +568,35 @@ export default function App() {
           </Panel>
         )
       }
-      return <AdminProjectsView onNavigateHome={goHome} />
+      return (
+        <AdminProjectsView
+          onNavigateHome={goHome}
+          onOnboardProject={openOnboarding}
+        />
+      )
+    }
+    if (nav.level === 'help') {
+      return (
+        <HelpView
+          onBack={goHome}
+          isAdmin={isAdmin}
+          onOnboardProject={openOnboarding}
+        />
+      )
+    }
+    if (nav.level === 'onboarding') {
+      // Wait for the profile so an admin is not told they are refused.
+      if (userStatus === 'loading') return <ViewSkeleton />
+      return (
+        <OnboardingView
+          allowed={isAdmin}
+          step={nav.step}
+          onStepChange={(step) => navigate({ level: 'onboarding', step })}
+          onProjectCreated={refreshProjects}
+          onLaunch={(slug) => navigate({ level: 'overview', project: slug })}
+          onNavigateHome={goHome}
+        />
+      )
     }
     if (nav.level === 'cookies' || nav.level === 'privacy') {
       const Page = nav.level === 'cookies' ? CookiesView : PrivacyView
@@ -572,10 +625,10 @@ export default function App() {
           <p className="govuk-body">
             <a
               className="govuk-link"
-              href={toHash({ level: 'adminProjects' })}
+              href={toHash({ level: 'onboarding' })}
               onClick={(event) => {
                 event.preventDefault()
-                navigate({ level: 'adminProjects' })
+                openOnboarding()
               }}
             >
               Add a project
@@ -599,6 +652,8 @@ export default function App() {
           onSave={handleSaveMapping}
           onRemove={handleRemoveMapping}
           contributors={contributorHandles}
+          tab={nav.tab}
+          onTabChange={(tab) => navigate({ level: 'settings', tab })}
         />
       )
     }
@@ -814,6 +869,9 @@ export default function App() {
     openPR,
     openContributor,
     goHome,
+    openOnboarding,
+    refreshProjects,
+    userStatus,
     projectUnavailable,
     projects
   ])
@@ -833,6 +891,8 @@ export default function App() {
     settings: 'Settings',
     accessibility: 'Accessibility Statement',
     adminProjects: 'Manage Projects',
+    onboarding: 'Onboard a Project',
+    help: 'Help',
     cookies: 'Cookies',
     privacy: 'Privacy'
   }[nav.level]

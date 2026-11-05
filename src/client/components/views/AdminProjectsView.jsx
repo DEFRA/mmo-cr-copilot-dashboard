@@ -3,129 +3,18 @@ import { useCallback, useEffect, useId, useState } from 'react'
 import {
   BackLink,
   Button,
-  DateInput,
   ErrorSummary,
   NotificationBanner,
-  Radios,
   Select,
-  SummaryList,
   Table,
   Tag
 } from '../govuk'
-import { cx } from '../govuk/utils.js'
+import { cx, isPlainClick } from '../govuk/utils.js'
 import { apiFetch, jsonWrite } from '../../lib/api'
+import { formatDate, typeLabel } from '../../lib/onboarding'
+import { toHash } from '../../lib/routes'
 
-const SLUG_PATTERN = /^[A-Z][A-Z0-9]{2,3}$/
-const JIRA_KEY_PATTERN = /^[A-Z][A-Z0-9_]+$/
-
-const TYPE_ITEMS = [
-  {
-    value: 'ai-adopted',
-    text: 'AI-adopted',
-    hint: 'An existing team adopting GitHub Copilot.'
-  },
-  {
-    value: 'ai-native',
-    text: 'AI-native',
-    hint: 'A team building with an agentic delivery lifecycle from the start.'
-  }
-]
-
-const EMPTY_FORM = {
-  name: '',
-  slug: '',
-  type: '',
-  adoption: { day: '', month: '', year: '' },
-  jiraKeys: ''
-}
-
-const FIELD_IDS = {
-  name: 'project-name',
-  slug: 'project-slug',
-  type: 'project-type',
-  adoption: 'project-adoption',
-  jiraKeys: 'project-jira-keys'
-}
-
-const typeLabel = (type) => (type === 'ai-native' ? 'AI-native' : 'AI-adopted')
-
-const splitKeys = (value) =>
-  value
-    .split(',')
-    .map((key) => key.trim())
-    .filter(Boolean)
-
-function parseDate({ day, month, year }) {
-  const d = Number(day)
-  const m = Number(month)
-  const y = Number(year)
-  if (!Number.isInteger(d) || !Number.isInteger(m) || !/^\d{4}$/.test(year)) {
-    return null
-  }
-  const date = new Date(Date.UTC(y, m - 1, d))
-  const real =
-    date.getUTCFullYear() === y &&
-    date.getUTCMonth() === m - 1 &&
-    date.getUTCDate() === d
-  return real ? date : null
-}
-
-/** Field errors for the create-project form, keyed by field. */
-export function validateProject(form, now = new Date()) {
-  const errors = {}
-  const name = form.name.trim()
-  if (!name) errors.name = 'Enter a project name'
-  else if (name.length > 80) {
-    errors.name = 'Project name must be 80 characters or fewer'
-  }
-
-  if (!form.slug) errors.slug = 'Enter a project slug'
-  else if (!SLUG_PATTERN.test(form.slug)) {
-    errors.slug =
-      'Project slug must be 3 or 4 capital letters or numbers, starting with a letter, like CRAR'
-  }
-
-  if (!form.type) errors.type = 'Select the project type'
-
-  const { day, month, year } = form.adoption
-  const anyDate = day || month || year
-  if (form.type === 'ai-adopted' && !anyDate) {
-    errors.adoption = 'Enter the date the team adopted Copilot'
-  } else if (anyDate) {
-    const date = parseDate(form.adoption)
-    if (!date) errors.adoption = 'Adoption start date must be a real date'
-    else if (date > now) {
-      errors.adoption = 'Adoption start date must be today or in the past'
-    }
-  }
-
-  const keys = splitKeys(form.jiraKeys)
-  if (keys.some((key) => !JIRA_KEY_PATTERN.test(key))) {
-    errors.jiraKeys =
-      'Jira project keys must be capital letters, numbers or underscores, separated by commas, like MMOCR, FES'
-  }
-  return errors
-}
-
-function toRequest(form) {
-  const date = parseDate(form.adoption)
-  return {
-    name: form.name.trim(),
-    slug: form.slug,
-    type: form.type,
-    ...(date && { adoptionStartDate: date.toISOString() }),
-    jira: { projectKeys: splitKeys(form.jiraKeys) }
-  }
-}
-
-const formatDate = (iso) =>
-  iso
-    ? new Date(iso).toLocaleDateString('en-GB', {
-        day: 'numeric',
-        month: 'long',
-        year: 'numeric'
-      })
-    : 'Not set'
+export { validateProject } from '../../lib/onboarding'
 
 async function readList(res, key) {
   if (!res.ok) return []
@@ -169,165 +58,6 @@ function TextField({ id, label, hint, error, value, onChange, width, list }) {
         onChange={(event) => onChange(event.target.value)}
       />
     </div>
-  )
-}
-
-function CreateProject({ onCreated }) {
-  const [form, setForm] = useState(EMPTY_FORM)
-  const [errors, setErrors] = useState({})
-  const [attempt, setAttempt] = useState(0)
-  const [step, setStep] = useState('form')
-  const [submitError, setSubmitError] = useState(null)
-  const [saving, setSaving] = useState(false)
-
-  const set = (key) => (value) => setForm((f) => ({ ...f, [key]: value }))
-
-  const handleContinue = (event) => {
-    event.preventDefault()
-    const found = validateProject(form)
-    setErrors(found)
-    setAttempt((a) => a + 1)
-    if (Object.keys(found).length === 0) setStep('check')
-  }
-
-  const change = (fieldId) => (event) => {
-    event.preventDefault()
-    setStep('form')
-    requestAnimationFrame(() => document.getElementById(fieldId)?.focus())
-  }
-
-  const handleAdd = async () => {
-    setSaving(true)
-    setSubmitError(null)
-    try {
-      const res = await jsonWrite('/api/projects', 'POST', toRequest(form))
-      if (!res.ok) {
-        const body = await res.json().catch(() => null)
-        throw new Error(body?.message || 'The project could not be added')
-      }
-      onCreated(form.name.trim())
-      setForm(EMPTY_FORM)
-      setErrors({})
-      setStep('form')
-    } catch (err) {
-      setSubmitError(err.message)
-    } finally {
-      setSaving(false)
-    }
-  }
-
-  if (step === 'check') {
-    const date = parseDate(form.adoption)
-    const row = (key, label, value, fieldId) => ({
-      key: label,
-      id: key,
-      value,
-      actions: [
-        {
-          href: `#${fieldId}`,
-          text: 'Change',
-          visuallyHiddenText: label.toLowerCase(),
-          onClick: change(fieldId)
-        }
-      ]
-    })
-    return (
-      <>
-        <h3 className="govuk-heading-m">Check the project details</h3>
-        {submitError && (
-          <ErrorSummary errors={[{ text: submitError }]} key={submitError} />
-        )}
-        <SummaryList
-          rows={[
-            row('name', 'Project name', form.name.trim(), FIELD_IDS.name),
-            row('slug', 'Project slug', form.slug, FIELD_IDS.slug),
-            row('type', 'Project type', typeLabel(form.type), FIELD_IDS.type),
-            row(
-              'adoption',
-              'Adoption start date',
-              date ? formatDate(date.toISOString()) : 'Not set',
-              `${FIELD_IDS.adoption}-day`
-            ),
-            row(
-              'jira',
-              'Jira project keys',
-              splitKeys(form.jiraKeys).join(', ') || 'None',
-              FIELD_IDS.jiraKeys
-            )
-          ]}
-        />
-        <Button onClick={handleAdd} disabled={saving}>
-          Add project
-        </Button>
-      </>
-    )
-  }
-
-  const errorList = [
-    errors.name && { href: `#${FIELD_IDS.name}`, text: errors.name },
-    errors.slug && { href: `#${FIELD_IDS.slug}`, text: errors.slug },
-    errors.type && { href: `#${FIELD_IDS.type}`, text: errors.type },
-    errors.adoption && {
-      href: `#${FIELD_IDS.adoption}-day`,
-      text: errors.adoption
-    },
-    errors.jiraKeys && {
-      href: `#${FIELD_IDS.jiraKeys}`,
-      text: errors.jiraKeys
-    }
-  ].filter(Boolean)
-
-  return (
-    <form onSubmit={handleContinue} noValidate>
-      {errorList.length > 0 && (
-        <ErrorSummary key={attempt} errors={errorList} />
-      )}
-      <TextField
-        id={FIELD_IDS.name}
-        label="Project name"
-        error={errors.name}
-        value={form.name}
-        onChange={set('name')}
-      />
-      <TextField
-        id={FIELD_IDS.slug}
-        label="Project slug"
-        hint="Used in links. 3 or 4 capital letters or numbers, like CRAR."
-        error={errors.slug}
-        value={form.slug}
-        onChange={set('slug')}
-        width={20}
-      />
-      <Radios
-        idPrefix={FIELD_IDS.type}
-        name="project-type"
-        legend="Project type"
-        legendSize="s"
-        errorMessage={errors.type}
-        items={TYPE_ITEMS}
-        value={form.type}
-        onChange={set('type')}
-      />
-      <DateInput
-        id={FIELD_IDS.adoption}
-        legend="Adoption start date"
-        legendSize="s"
-        hint="The date the team started using Copilot. Required for AI-adopted projects. For example, 1 10 2025."
-        errorMessage={errors.adoption}
-        value={form.adoption}
-        onChange={set('adoption')}
-      />
-      <TextField
-        id={FIELD_IDS.jiraKeys}
-        label="Jira project keys (optional)"
-        hint="Separate keys with commas, like MMOCR, FES."
-        error={errors.jiraKeys}
-        value={form.jiraKeys}
-        onChange={set('jiraKeys')}
-        width={20}
-      />
-      <Button type="submit">Continue</Button>
-    </form>
   )
 }
 
@@ -554,7 +284,7 @@ function RecomputeComplexity({ onDone }) {
   )
 }
 
-export function AdminProjectsView({ onNavigateHome }) {
+export function AdminProjectsView({ onNavigateHome, onOnboardProject }) {
   const [projects, setProjects] = useState([])
   const [status, setStatus] = useState('loading')
   const [success, setSuccess] = useState(null)
@@ -571,11 +301,6 @@ export function AdminProjectsView({ onNavigateHome }) {
   useEffect(() => {
     loadData()
   }, [loadData])
-
-  const handleCreated = (name) => {
-    setSuccess(`Project ${name} added.`)
-    loadData()
-  }
 
   return (
     <div className="govuk-grid-row">
@@ -640,7 +365,20 @@ export function AdminProjectsView({ onNavigateHome }) {
           <h2 className="govuk-heading-l" id="admin-create">
             Add a project
           </h2>
-          <CreateProject onCreated={handleCreated} />
+          <p className="govuk-body">
+            Projects are added in steps: the project&apos;s details, then the
+            repositories that feed it.
+          </p>
+          <Button
+            href={toHash({ level: 'onboarding' })}
+            onClick={(event) => {
+              if (!onOnboardProject || !isPlainClick(event)) return
+              event.preventDefault()
+              onOnboardProject()
+            }}
+          >
+            Onboard a project
+          </Button>
         </section>
 
         <section

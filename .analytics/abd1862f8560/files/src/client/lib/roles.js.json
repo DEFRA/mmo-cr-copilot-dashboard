@@ -1,0 +1,28 @@
+{
+  "schema": "ai-attribution-file/2",
+  "path": "src/client/lib/roles.js",
+  "added": 9,
+  "counts": {
+    "aiCompletion": 0,
+    "aiChat": 0,
+    "aiAgent": 9,
+    "aiModified": 0,
+    "pasted": 0,
+    "typed": 0,
+    "untracked": 0
+  },
+  "ranges": {
+    "ai-agent": "14-19,25-27"
+  },
+  "ai": [
+    [14, "a", "9b6c3fb1", 0],
+    [15, "a", "8b63ab31", 0],
+    [16, "a", "121cec6b", 0],
+    [17, "a", "173f59a5", 0],
+    [18, "a", "64d93c5d", 0],
+    [19, "a", "9845a6a3", 0],
+    [25, "a", "fae8f28c", 0],
+    [26, "a", "42f66e29", 0],
+    [27, "a", "da251a61", 0]
+  ]
+}

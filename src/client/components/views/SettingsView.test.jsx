@@ -308,9 +308,15 @@ describe('#SettingsView', () => {
     ).toBeInTheDocument()
   })
 
+  test('Should have no detectable accessibility violations on the audit log tab', async () => {
+    const { container } = renderSettings({ tab: 'audit-log' })
+    await screen.findByText('No audited changes in this period.')
+
+    expect(await axeViolations(container)).toEqual([])
+  })
+
   test('Should have no detectable accessibility violations', async () => {
     const { container } = renderSettings()
-    await screen.findByText('No audited changes in this period.')
 
     expect(await axeViolations(container)).toEqual([])
   })
@@ -329,7 +335,7 @@ describe('#SettingsView', () => {
         screen.queryByRole('heading', { name: 'Role Mappings' })
       ).not.toBeInTheDocument()
       expect(
-        screen.queryByRole('heading', { name: 'Repositories in This Project' })
+        screen.queryByRole('heading', { name: 'Connected Repositories' })
       ).not.toBeInTheDocument()
       expect(
         screen.getByRole('heading', { name: /Audit Log/i })
@@ -345,28 +351,115 @@ describe('#SettingsView', () => {
       )
     })
 
-    test.each(['project-admin', 'dashboard-admin'])(
-      'Should show a %s every settings section',
-      async (role) => {
-        renderSettings({ role, isDashboardAdmin: role === 'dashboard-admin' })
+    test('Should open a project admin on persona mappings by default', () => {
+      renderSettings()
 
-        expect(
-          screen.queryByRole('heading', { name: 'Role Mappings' }) !== null
-        ).toBe(role === 'dashboard-admin')
-        expect(
-          screen.getByRole('heading', { name: 'Repositories in This Project' })
-        ).toBeInTheDocument()
-        expect(
-          screen.getByRole('button', { name: 'Save mapping' })
-        ).toBeInTheDocument()
-        expect(
-          screen.getByRole('heading', { name: /Audit Log/i })
-        ).toBeInTheDocument()
-        await waitFor(() =>
-          expect(fetchMock.mock.calls.length).toBeGreaterThan(1)
-        )
-      }
-    )
+      expect(
+        screen.getByRole('button', { name: 'Save mapping' })
+      ).toBeInTheDocument()
+      expect(
+        screen.getByRole('link', { name: 'Persona Mappings' })
+      ).toHaveAttribute('aria-current', 'page')
+      expect(
+        screen.queryByRole('heading', { name: 'Audit Log' })
+      ).not.toBeInTheDocument()
+    })
+
+    test('Should offer a project admin everything but role mappings', () => {
+      renderSettings({ tab: 'roles' })
+
+      expect(
+        screen.getAllByRole('link').map((link) => link.textContent)
+      ).toEqual(['Persona Mappings', 'Repositories', 'Audit Log'])
+      expect(
+        screen.getByRole('button', { name: 'Save mapping' })
+      ).toBeInTheDocument()
+    })
+
+    test('Should show the repositories tab', () => {
+      renderSettings({ tab: 'repositories' })
+
+      expect(
+        screen.getByRole('heading', { name: 'Connected Repositories' })
+      ).toBeInTheDocument()
+      expect(
+        screen.getByRole('heading', { name: 'Add a Repository' })
+      ).toBeInTheDocument()
+      expect(
+        screen.queryByRole('button', { name: 'Save mapping' })
+      ).not.toBeInTheDocument()
+    })
+
+    test('Should show the roles tab to a dashboard admin only', () => {
+      renderSettings({
+        role: 'dashboard-admin',
+        isDashboardAdmin: true,
+        tab: 'roles'
+      })
+
+      expect(
+        screen.getByRole('heading', { name: 'Role Mappings' })
+      ).toBeInTheDocument()
+      expect(
+        screen.getByRole('link', { name: 'Role Mappings' })
+      ).toHaveAttribute('aria-current', 'page')
+    })
+
+    test('Should show the audit log tab', async () => {
+      renderSettings({ tab: 'audit-log' })
+
+      expect(
+        screen.getByRole('heading', { name: /Audit Log/i })
+      ).toBeInTheDocument()
+      await screen.findByText('No audited changes in this period.')
+    })
+
+    test('Should ask the page to change tab when a section is chosen', async () => {
+      const onTabChange = vi.fn()
+      renderSettings({ onTabChange })
+
+      await userEvent.click(screen.getByRole('link', { name: 'Repositories' }))
+
+      expect(onTabChange).toHaveBeenCalledWith('repositories')
+    })
+
+    test('Should show the caller’s role at the top right', () => {
+      const { container } = renderSettings()
+
+      const head = container.querySelector('.app-settings__head')
+      expect(within(head).getByText('Your role')).toBeInTheDocument()
+      expect(within(head).getByText('Project Admin')).toHaveClass(
+        'govuk-tag--teal'
+      )
+    })
+
+    test('Should treat a dashboard admin as one whatever the project role', () => {
+      renderSettings({ role: 'project-user', isDashboardAdmin: true })
+
+      expect(screen.getByText('Dashboard Admin')).toHaveClass(
+        'govuk-tag--magenta'
+      )
+      expect(
+        screen.getByRole('button', { name: 'Save mapping' })
+      ).toBeInTheDocument()
+      expect(
+        screen.getByRole('link', { name: 'Role Mappings' })
+      ).toBeInTheDocument()
+    })
+
+    test('Should give a project user only the audit log tab, whatever tab is asked for', () => {
+      renderSettings({ role: 'project-user', tab: 'personas' })
+
+      expect(screen.getAllByRole('link')).toHaveLength(1)
+      expect(screen.getByRole('link', { name: 'Audit Log' })).toHaveAttribute(
+        'aria-current',
+        'page'
+      )
+      expect(screen.getByText('Project User')).toHaveClass('govuk-tag--grey')
+      expect(
+        screen.queryByRole('button', { name: 'Save mapping' })
+      ).not.toBeInTheDocument()
+    })
 
     test('Should treat a missing role as no administration rights', () => {
       renderSettings({ role: null })

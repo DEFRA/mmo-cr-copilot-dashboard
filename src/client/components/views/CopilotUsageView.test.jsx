@@ -36,12 +36,14 @@ const gpt = model('gpt-5', {
   requests: 5,
   inputTokens: 1000,
   outputTokens: 250,
-  cacheReadTokens: 500
+  cacheReadTokens: 500,
+  credits: 2.5
 })
 const claude = model('claude-sonnet', {
   requests: 2,
   inputTokens: 500,
-  outputTokens: 100
+  outputTokens: 100,
+  credits: 3
 })
 
 const PAYLOADS = [1, 2].map((prNumber) =>
@@ -56,14 +58,17 @@ describe('#CopilotUsageView', () => {
     const { container } = render(<CopilotUsageView payloads={PAYLOADS} />)
 
     expect(
-      screen.getByRole('heading', { name: 'Model and Token Usage', level: 2 })
+      screen.getByRole('heading', {
+        name: 'Model Usage and AI Credits',
+        level: 2
+      })
     ).toBeInTheDocument()
     expect(screen.getByText(/2 pull requests with usage/)).toBeInTheDocument()
     for (const label of [
       'Team Favourite Model',
       'Model Requests',
-      'Tokens Used',
-      'Cache Hit Rate'
+      'AI Credits Used',
+      'AI Credits per Pull Request'
     ]) {
       expect(screen.getByText(label)).toBeInTheDocument()
     }
@@ -74,11 +79,15 @@ describe('#CopilotUsageView', () => {
       screen.getByText('71.4% of model requests · 2 pull requests')
     ).toBeInTheDocument()
     expect(screen.getByText('Across 2 models')).toBeInTheDocument()
-    expect(screen.getAllByText('3.7k').length).toBeGreaterThan(0)
-    expect(screen.getByText('3,000 input · 700 output')).toBeInTheDocument()
+    expect(screen.getAllByText('11.00').length).toBeGreaterThan(0)
     expect(
-      screen.getByText('1,000 of 3,000 input tokens from cache')
+      screen.getByText('0.79 per request · 2 pull requests with credits')
     ).toBeInTheDocument()
+    expect(screen.getAllByText('5.50').length).toBeGreaterThan(0)
+    expect(
+      screen.getByText('Median across 2 pull requests')
+    ).toBeInTheDocument()
+    expect(container.textContent).not.toMatch(/token/i)
 
     expect(
       screen.getByRole('heading', { name: 'Team Superlatives', level: 3 })
@@ -91,43 +100,32 @@ describe('#CopilotUsageView', () => {
       screen.getByRole('heading', { name: 'Requests by Model', level: 4 })
     ).toBeInTheDocument()
     expect(
-      screen.getByRole('heading', {
-        name: 'Tokens by Model and Type',
-        level: 4
-      })
+      screen.getByRole('heading', { name: 'AI Credits by Model', level: 4 })
     ).toBeInTheDocument()
     expect(
-      screen.getByRole('columnheader', { name: /Tokens per request/ })
+      screen.getByRole('columnheader', { name: /Credits per request/ })
     ).toBeInTheDocument()
     expect(
       screen.getAllByRole('rowheader', { name: /claude-sonnet/ }).length
     ).toBeGreaterThan(0)
     expect(
-      screen.getByText(/Inline completions do not report tokens/)
+      screen.getByText(/inline completions\s+use none/)
     ).toBeInTheDocument()
   })
 
-  test('Should chart requests and token types per model', () => {
+  test('Should chart requests and AI credits per model', () => {
     render(<CopilotUsageView payloads={PAYLOADS} />)
 
     const requests = chartOptions().findLast(
       (o) => o?.series?.[0]?.name === 'Requests'
     )
-    const tokens = chartOptions().findLast(
-      (o) => o?.series?.[0]?.name === 'Uncached input'
+    const credits = chartOptions().findLast(
+      (o) => o?.series?.[0]?.name === 'AI credits'
     )
 
     expect(requests.series[0].data).toEqual([10, 4])
-    expect(tokens.series.map((s) => s.name)).toEqual([
-      'Uncached input',
-      'Cache read',
-      'Output'
-    ])
-    expect(tokens.series.map((s) => s.data)).toEqual([
-      [1, 1],
-      [1, 0],
-      [0.5, 0.2]
-    ])
+    expect(credits.series).toHaveLength(1)
+    expect(credits.series[0].data).toEqual([6, 5])
   })
 
   test('Should not expose any author', () => {
@@ -149,8 +147,8 @@ describe('#CopilotUsageView', () => {
     expect(container.querySelectorAll('figure')).toHaveLength(0)
   })
 
-  test('Should report the cache as not reported when no input is cached', () => {
-    render(
+  test('Should show credits as not recorded for usage from before credits were recorded', () => {
+    const { container } = render(
       <CopilotUsageView
         payloads={[
           buildPayloadV2({
@@ -161,7 +159,9 @@ describe('#CopilotUsageView', () => {
       />
     )
 
-    expect(screen.getAllByText('Not reported').length).toBeGreaterThan(0)
+    expect(screen.getAllByText('Not recorded').length).toBeGreaterThan(0)
+    expect(screen.getByText('No AI credits recorded')).toBeInTheDocument()
+    expect(container.querySelectorAll('figure')).toHaveLength(1)
   })
 
   test('Should have no accessibility violations when empty or populated', async () => {

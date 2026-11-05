@@ -62,7 +62,8 @@ const usagePayload = () =>
                 model: 'gpt-5',
                 requests: 3,
                 inputTokens: 1000,
-                outputTokens: 100
+                outputTokens: 100,
+                credits: 0.42
               }
             ],
             sessions: 1,
@@ -171,8 +172,9 @@ describe('#AiNativeOverviewView', () => {
       screen.getByRole('heading', { name: 'Copilot Model Usage' })
     ).toBeInTheDocument()
     expect(screen.getByText('gpt-5')).toBeInTheDocument()
+    expect(screen.getAllByText('0.42').length).toBeGreaterThan(0)
     expect(
-      screen.getByText(/Inline completions do not report tokens/)
+      screen.getByText(/inline completions\s+use none/)
     ).toBeInTheDocument()
   })
 

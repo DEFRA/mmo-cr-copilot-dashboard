@@ -12,6 +12,16 @@ export const lines = (n) => n.toLocaleString('en-GB')
 export const plural = (n, one, many = `${one}s`) =>
   `${n} ${n === 1 ? one : many}`
 
+/** GitHub AI credits to 2 decimals; a non-zero amount below 0.01 is not shown as 0. */
+export function formatCredits(value) {
+  if (value === null || value === undefined) return 'Not recorded'
+  if (value > 0 && value < 0.01) return 'Under 0.01'
+  return value.toLocaleString('en-GB', {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2
+  })
+}
+
 /** Scope header shared by every cascade level (docs/design-system.md §8.4). */
 export function ScopeHeader({ id, level, icon, title, meta }) {
   return (

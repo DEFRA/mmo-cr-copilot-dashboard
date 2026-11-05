@@ -5,10 +5,26 @@
 
 const GLOBAL_PATHS = {
   settings: 'settings',
+  onboarding: 'onboarding',
+  help: 'help',
   adminProjects: 'admin/projects',
   accessibility: 'accessibility',
   cookies: 'cookies',
   privacy: 'privacy'
+}
+
+export const SETTINGS_TABS = ['personas', 'repositories', 'roles', 'audit-log']
+export const ONBOARDING_STEPS = [
+  'details',
+  'repositories',
+  'check',
+  'confirmation'
+]
+
+// A global page that has sub pages: the nav field carrying it and its values.
+const SUB_PATHS = {
+  settings: { key: 'tab', values: new Set(SETTINGS_TABS) },
+  onboarding: { key: 'step', values: new Set(ONBOARDING_STEPS) }
 }
 
 const LIST_PATHS = {
@@ -55,8 +71,27 @@ function projectPath(nav) {
   }
 }
 
+function globalHash(nav) {
+  const base = `#/${GLOBAL_PATHS[nav.level]}`
+  const sub = SUB_PATHS[nav.level]
+  return sub?.values.has(nav[sub.key]) ? `${base}/${nav[sub.key]}` : base
+}
+
+function parseGlobal(path) {
+  for (const level of Object.keys(GLOBAL_PATHS)) {
+    const base = GLOBAL_PATHS[level]
+    if (path === base) return { level }
+    const sub = SUB_PATHS[level]
+    if (sub && path.startsWith(`${base}/`)) {
+      const value = path.slice(base.length + 1)
+      return sub.values.has(value) ? { level, [sub.key]: value } : { level }
+    }
+  }
+  return null
+}
+
 export function toHash(nav) {
-  if (isGlobalLevel(nav.level)) return `#/${GLOBAL_PATHS[nav.level]}`
+  if (isGlobalLevel(nav.level)) return globalHash(nav)
   const prefix = nav.project ? `#/projects/${enc(nav.project)}` : '#'
   return `${prefix}/${projectPath(nav)}`
 }
@@ -103,10 +138,8 @@ export function fromHash(hash = '') {
   if (/^%2F/i.test(raw)) raw = safeDecode(raw)
   const path = raw.replace(/^\/+/, '').replace(/\/+$/, '')
 
-  const global = Object.keys(GLOBAL_PATHS).find(
-    (level) => GLOBAL_PATHS[level] === path
-  )
-  if (global) return { level: global }
+  const global = parseGlobal(path)
+  if (global) return global
 
   let segments = path === '' ? [] : path.split('/').map(safeDecode)
   let project

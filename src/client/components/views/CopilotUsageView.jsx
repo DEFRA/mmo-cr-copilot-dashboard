@@ -1,54 +1,29 @@
 import { useId, useMemo } from 'react'
 
-import {
-  ChartFigure,
-  KpiCard,
-  Panel,
-  PanelState,
-  ProgressRing
-} from '../dashboard'
+import { ChartFigure, KpiCard, Panel, PanelState } from '../dashboard'
 import { CategoryBar } from '../charts/CategoryBar'
-import { StackedBar } from '../charts/StackedBar'
 import { CopilotSuperlatives } from '../CopilotSuperlatives.jsx'
 import { ModelLeaderboardPanel } from '../ModelLeaderboardPanel.jsx'
 import { foldModels, round, selectCopilotInsights } from '../../lib/selectors'
-import { lines, plural, ScopeHeader, Subsection } from './scope.jsx'
-
-const sumOf = (rows, key) => rows.reduce((s, m) => s + m[key], 0)
-
-function compactTokens(value) {
-  if (value >= 1e6) return `${(value / 1e6).toFixed(1)}M`
-  if (value >= 1e3) return `${(value / 1e3).toFixed(1)}k`
-  return String(value)
-}
-
-// foldModels collapses the tail into one entry that only carries the sort key.
-function withTokenSplit(folded, all) {
-  const kept = new Set(folded.map((m) => m.model))
-  const rest = all.filter((m) => !kept.has(m.model))
-  return folded.map((m) =>
-    m.inputTokens === undefined
-      ? {
-          ...m,
-          inputTokens: sumOf(rest, 'inputTokens'),
-          cacheReadTokens: sumOf(rest, 'cacheReadTokens'),
-          outputTokens: sumOf(rest, 'outputTokens')
-        }
-      : m
-  )
-}
-
-const thousands = (v) => round(v / 1000, 1)
+import {
+  formatCredits,
+  lines,
+  plural,
+  ScopeHeader,
+  Subsection
+} from './scope.jsx'
 
 function Caveat({ insights }) {
   return (
     <p className="govuk-body-s app-muted govuk-!-margin-top-5">
       Requests are model calls made by Copilot Chat agent and chat sessions, not
-      prompts typed. Token counts come from Copilot Chat&apos;s local usage log
-      for developers who opted in. Inline completions do not report tokens.
-      Shown per team and model only, never per person. Coverage:{' '}
+      prompts typed. AI credits are GitHub&apos;s list-price credits recorded by
+      the attribution extension for developers who opted in; inline completions
+      use none, and pull requests from before credits were recorded show them as
+      not recorded. Shown per team and model only, never per person. Coverage:{' '}
       {insights.coverage.prsWithUsage} of {insights.coverage.assistedPrs} pull
-      requests with Copilot-written lines.{' '}
+      requests with Copilot-written lines have usage,{' '}
+      {insights.coverage.prsWithCredits} with credits.{' '}
       <a className="govuk-link" href="#metric-copilot-usage-insights">
         Metric definition
         <span className="govuk-visually-hidden">: Copilot usage insights</span>
@@ -57,7 +32,7 @@ function Caveat({ insights }) {
   )
 }
 
-/** Team and model level Copilot usage: requests, tokens and cache reuse. */
+/** Team and model level Copilot usage: requests and recorded AI credits. */
 export function CopilotUsageView({ payloads }) {
   const headingId = useId()
   const insights = useMemo(() => selectCopilotInsights(payloads), [payloads])
@@ -65,11 +40,12 @@ export function CopilotUsageView({ payloads }) {
     () => foldModels(insights.models, 8, 'requests'),
     [insights.models]
   )
-  const tokensData = useMemo(
+  const creditsData = useMemo(
     () =>
-      withTokenSplit(
-        foldModels(insights.models, 6, 'totalTokens'),
-        insights.models
+      foldModels(
+        insights.models.filter((m) => m.credits !== null),
+        8,
+        'credits'
       ),
     [insights.models]
   )
@@ -79,7 +55,7 @@ export function CopilotUsageView({ payloads }) {
       id={headingId}
       level="Copilot usage"
       icon="sparkle"
-      title="Model and Token Usage"
+      title="Model Usage and AI Credits"
       meta={`${plural(insights.coverage.prsWithUsage, 'pull request')} with usage`}
     />
   )
@@ -102,7 +78,7 @@ export function CopilotUsageView({ payloads }) {
   }
 
   const { totals, favourite, variety } = insights
-  const cacheRate = totals.cacheHitRate
+  const { prsWithCredits } = insights.coverage
 
   return (
     <section className="app-scope" aria-labelledby={headingId}>
@@ -130,23 +106,29 @@ export function CopilotUsageView({ payloads }) {
           index={1}
         />
         <KpiCard
-          label="Tokens Used"
-          value={compactTokens(totals.totalTokens)}
-          sub={`${lines(totals.inputTokens)} input · ${lines(totals.outputTokens)} output`}
+          label="AI Credits Used"
+          value={totals.credits === null ? '–' : formatCredits(totals.credits)}
+          sub={
+            totals.credits === null
+              ? 'Not recorded'
+              : `${formatCredits(totals.creditsPerRequest)} per request · ${plural(prsWithCredits, 'pull request')} with credits`
+          }
           family="risk"
           showFamily={false}
           icon="layers"
           index={2}
         />
         <KpiCard
-          label="Cache Hit Rate"
-          value={`${cacheRate ?? '–'}`}
-          unit={cacheRate === null ? '' : '%'}
-          chart={cacheRate === null ? null : <ProgressRing value={cacheRate} />}
+          label="AI Credits per Pull Request"
+          value={
+            insights.medianCreditsPerPr === null
+              ? '–'
+              : formatCredits(insights.medianCreditsPerPr)
+          }
           sub={
-            cacheRate === null
-              ? 'Not reported'
-              : `${lines(totals.cacheReadTokens)} of ${lines(totals.inputTokens)} input tokens from cache`
+            insights.medianCreditsPerPr === null
+              ? 'Not recorded'
+              : `Median across ${plural(prsWithCredits, 'pull request')}`
           }
           family="quality"
           showFamily={false}
@@ -195,50 +177,52 @@ export function CopilotUsageView({ payloads }) {
               seriesName="Requests"
             />
           </ChartFigure>
-          <ChartFigure
-            number={2}
-            title="Tokens by Model and Type"
-            subtitle="Tokens by model in thousands. Cached input is served from prompt cache."
-            family="leverage"
-            icon="layers"
-            headingLevel={4}
-            className="app-span-6"
-            columns={[
-              { id: 'model', label: 'Model' },
-              { id: 'uncached', label: 'Uncached input (k)', numeric: true },
-              { id: 'cache', label: 'Cache read (k)', numeric: true },
-              { id: 'output', label: 'Output (k)', numeric: true }
-            ]}
-            rows={tokensData.map((m) => [
-              m.model,
-              thousands(Math.max(0, m.inputTokens - m.cacheReadTokens)),
-              thousands(m.cacheReadTokens),
-              thousands(m.outputTokens)
-            ])}
-          >
-            <StackedBar
-              horizontal
-              title="Tokens by model and type"
-              categories={tokensData.map((m) => m.model)}
-              unit="k"
-              series={[
-                {
-                  name: 'Uncached input',
-                  data: tokensData.map((m) =>
-                    thousands(Math.max(0, m.inputTokens - m.cacheReadTokens))
-                  )
-                },
-                {
-                  name: 'Cache read',
-                  data: tokensData.map((m) => thousands(m.cacheReadTokens))
-                },
-                {
-                  name: 'Output',
-                  data: tokensData.map((m) => thousands(m.outputTokens))
-                }
+          {creditsData.length > 0 ? (
+            <ChartFigure
+              number={2}
+              title="AI Credits by Model"
+              subtitle="GitHub AI credits recorded for each model, selected period."
+              family="leverage"
+              icon="layers"
+              headingLevel={4}
+              className="app-span-6"
+              columns={[
+                { id: 'model', label: 'Model' },
+                { id: 'credits', label: 'AI credits', numeric: true },
+                { id: 'share', label: 'Share of credits (%)', numeric: true }
               ]}
-            />
-          </ChartFigure>
+              rows={creditsData.map((m) => [
+                m.model,
+                round(m.credits, 2),
+                totals.credits > 0
+                  ? round((m.credits / totals.credits) * 100, 1)
+                  : 0
+              ])}
+            >
+              <CategoryBar
+                horizontal
+                title="AI credits by model"
+                categories={creditsData.map((m) => m.model)}
+                values={creditsData.map((m) => round(m.credits, 2))}
+                seriesName="AI credits"
+              />
+            </ChartFigure>
+          ) : (
+            <Panel
+              title="AI Credits by Model"
+              family="leverage"
+              icon="layers"
+              headingLevel={4}
+              className="app-span-6"
+            >
+              <PanelState
+                state="empty"
+                icon="layers"
+                emptyTag="No AI credits recorded"
+                emptyMessage="Credits appear for pull requests whose commits were made with attribution extension 0.5.0 or later and usage capture turned on."
+              />
+            </Panel>
+          )}
         </div>
         <div className="govuk-!-margin-top-5">
           <ModelLeaderboardPanel

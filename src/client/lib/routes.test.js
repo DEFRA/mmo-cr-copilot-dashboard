@@ -1,4 +1,10 @@
-import { fromHash, isGlobalLevel, toHash } from './routes.js'
+import {
+  ONBOARDING_STEPS,
+  SETTINGS_TABS,
+  fromHash,
+  isGlobalLevel,
+  toHash
+} from './routes.js'
 
 const REPO = 'DEFRA/mmo-cr-pdf'
 const PROJECT = 'mmo-catch-recording'
@@ -21,6 +27,10 @@ const PROJECT_NAVS = [
 
 const GLOBAL_NAVS = [
   { level: 'settings' },
+  ...SETTINGS_TABS.map((tab) => ({ level: 'settings', tab })),
+  { level: 'onboarding' },
+  ...ONBOARDING_STEPS.map((step) => ({ level: 'onboarding', step })),
+  { level: 'help' },
   { level: 'adminProjects' },
   { level: 'accessibility' },
   { level: 'cookies' },
@@ -54,7 +64,14 @@ describe('#toHash', () => {
       '#/projects/mmo-catch-recording/ticket/MMO-12'
     ],
     [{ level: 'adminProjects', project: PROJECT }, '#/admin/projects'],
-    [{ level: 'settings' }, '#/settings']
+    [{ level: 'settings' }, '#/settings'],
+    [{ level: 'settings', tab: 'audit-log' }, '#/settings/audit-log'],
+    [{ level: 'settings', tab: 'nowhere' }, '#/settings'],
+    [{ level: 'onboarding' }, '#/onboarding'],
+    [{ level: 'onboarding', step: 'check' }, '#/onboarding/check'],
+    [{ level: 'onboarding', step: 'personas' }, '#/onboarding'],
+    [{ level: 'help', project: PROJECT }, '#/help'],
+    [{ level: 'help', tab: 'personas' }, '#/help']
   ])('Should build the hash for %o', (nav, hash) => {
     expect(toHash(nav)).toBe(hash)
   })
@@ -91,6 +108,21 @@ describe('#fromHash', () => {
     ['#overview', { level: 'overview' }],
     ['', { level: 'overview' }]
   ])('Should accept the legacy hash %s', (hash, nav) => {
+    expect(fromHash(hash)).toStrictEqual(nav)
+  })
+
+  test.each([
+    ['#/settings/roles', { level: 'settings', tab: 'roles' }],
+    [
+      '#/onboarding/confirmation',
+      { level: 'onboarding', step: 'confirmation' }
+    ],
+    ['#/settings/unknown', { level: 'settings' }],
+    ['#/onboarding/unknown', { level: 'onboarding' }],
+    ['#/settings/personas/extra', { level: 'settings' }],
+    ['#/help', { level: 'help' }],
+    ['#/help/extra', { level: 'overview' }]
+  ])('Should parse the sub page hash %s', (hash, nav) => {
     expect(fromHash(hash)).toStrictEqual(nav)
   })
 

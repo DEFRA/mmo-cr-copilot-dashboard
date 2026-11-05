@@ -5,10 +5,8 @@ import { reducedMotion } from '#/test-helpers/motion.js'
 import { CopilotSuperlatives } from './CopilotSuperlatives.jsx'
 
 const SUPERLATIVES = [
-  { id: 'token-heavyweight', model: 'gpt-5', value: 42.5 },
-  { id: 'cache-champion', model: 'claude-sonnet', value: 71 },
-  { id: 'token-economiser', model: 'gpt-mini', value: 1234 },
-  { id: 'deep-thinker', model: 'o-series', value: 18 },
+  { id: 'biggest-spender', model: 'gpt-5', value: 42.5 },
+  { id: 'best-value', model: 'gpt-mini', value: 0.1234 },
   { id: 'night-owl', model: 'gemini', value: 9 },
   { id: 'prompt-polyglot', value: 4, multiModelPrShare: 35 }
 ]
@@ -46,22 +44,13 @@ describe('#CopilotSuperlatives', () => {
         .className.match(/app-family--(\w+)/)[1]
 
     const families = [
-      'Token Heavyweight',
-      'Cache Champion',
-      'Token Economiser',
-      'Deep Thinker',
+      'Biggest Spender',
+      'Best Value',
       'Night Owl Model',
       'Prompt Polyglot'
     ].map(familyOf)
 
-    expect(families).toEqual([
-      'output',
-      'quality',
-      'adoption',
-      'leverage',
-      'speed',
-      'risk'
-    ])
+    expect(families).toEqual(['output', 'adoption', 'speed', 'risk'])
     expect(new Set(families).size).toBe(families.length)
   })
 
@@ -69,24 +58,17 @@ describe('#CopilotSuperlatives', () => {
     render(<CopilotSuperlatives superlatives={SUPERLATIVES} />)
 
     const cases = [
-      ['Token Heavyweight', 'gpt-5', 'Most tokens', '42.5% of all tokens'],
       [
-        'Cache Champion',
-        'claude-sonnet',
-        'Best cache reuse',
-        '71% of input tokens served from cache'
+        'Biggest Spender',
+        'gpt-5',
+        'Most AI credits',
+        '42.5% of all recorded AI credits'
       ],
       [
-        'Token Economiser',
+        'Best Value',
         'gpt-mini',
-        'Fewest tokens per call',
-        '1,234 tokens per request on average'
-      ],
-      [
-        'Deep Thinker',
-        'o-series',
-        'Most reasoning',
-        '18% of output tokens spent reasoning'
+        'Fewest credits per call',
+        '0.12 AI credits per request on average'
       ],
       [
         'Night Owl Model',
@@ -120,15 +102,27 @@ describe('#CopilotSuperlatives', () => {
     render(
       <CopilotSuperlatives
         headingLevel={3}
-        superlatives={[{ id: 'cache-champion', model: 'gpt-5', metric: 50 }]}
+        superlatives={[{ id: 'biggest-spender', model: 'gpt-5', metric: 50 }]}
       />
     )
 
     expect(
-      screen.getByRole('heading', { level: 3, name: 'Cache Champion' })
+      screen.getByRole('heading', { level: 3, name: 'Biggest Spender' })
     ).toBeInTheDocument()
     expect(
-      screen.getByText('50% of input tokens served from cache')
+      screen.getByText('50% of all recorded AI credits')
+    ).toBeInTheDocument()
+  })
+
+  test('Should show a tiny best-value rate as under 0.01 credits', () => {
+    render(
+      <CopilotSuperlatives
+        superlatives={[{ id: 'best-value', model: 'gpt-mini', value: 0.004 }]}
+      />
+    )
+
+    expect(
+      screen.getByText('Under 0.01 AI credits per request on average')
     ).toBeInTheDocument()
   })
 

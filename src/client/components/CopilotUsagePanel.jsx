@@ -1,12 +1,11 @@
 import { Panel, PanelState } from './dashboard'
 import { Table } from './govuk'
-
-const tokens = (n) => n.toLocaleString('en-GB')
+import { formatCredits, lines } from './views/scope.jsx'
 
 /**
- * Copilot model and token usage for a pull request or a project. Counts come
- * from Copilot Chat's local usage log on developers' machines, so the caveat
- * and the coverage figure are always shown beside the numbers.
+ * Copilot model requests and GitHub AI credits for a pull request or a project.
+ * Credits are recorded on developers' machines by the attribution extension, so
+ * the caveat and the coverage figures are always shown beside the numbers.
  */
 export function CopilotUsagePanel({ usage, headingLevel = 4, insightsHref }) {
   const title = 'Copilot Model Usage'
@@ -22,12 +21,12 @@ export function CopilotUsagePanel({ usage, headingLevel = 4, insightsHref }) {
     >
       {hasUsage ? (
         <>
-          {usage.medianTokensPerPr !== null && (
+          {usage.medianCreditsPerPr !== null && (
             <p className="govuk-body-s govuk-!-margin-bottom-2">
               <span className="app-muted">
-                Tokens per pull request with usage (median)
+                AI credits per pull request with credits (median)
               </span>{' '}
-              <strong>{tokens(usage.medianTokensPerPr)}</strong>
+              <strong>{formatCredits(usage.medianCreditsPerPr)}</strong>
             </p>
           )}
           <Table
@@ -36,19 +35,11 @@ export function CopilotUsagePanel({ usage, headingLevel = 4, insightsHref }) {
             head={[
               { id: 'model', label: 'Model' },
               { id: 'requests', label: 'Requests', numeric: true },
-              { id: 'input', label: 'Input tokens', numeric: true },
-              { id: 'output', label: 'Output tokens', numeric: true },
-              { id: 'cached', label: 'Cached tokens', numeric: true }
+              { id: 'credits', label: 'AI credits', numeric: true }
             ]}
             rows={usage.models.map((m) => ({
               id: m.model,
-              cells: [
-                m.model,
-                tokens(m.requests),
-                tokens(m.inputTokens),
-                tokens(m.outputTokens),
-                tokens(m.cachedTokens)
-              ]
+              cells: [m.model, lines(m.requests), formatCredits(m.credits)]
             }))}
           />
         </>
@@ -61,14 +52,16 @@ export function CopilotUsagePanel({ usage, headingLevel = 4, insightsHref }) {
         />
       )}
       <p className="govuk-body-s app-muted">
-        Token counts come from Copilot Chat&apos;s local usage log on
-        developers&apos; machines, for agent and chat sessions only. Inline
-        completions do not report tokens.
+        AI credits are GitHub&apos;s list-price credits recorded by the
+        attribution extension for agent and chat sessions; inline completions
+        use none. Pull requests from before credits were recorded show them as
+        not recorded.
         {usage.assistedPrs > 0 && (
           <>
             {' '}
             Coverage: {usage.prsWithUsage} of {usage.assistedPrs} pull requests
-            with Copilot-written lines.
+            with Copilot-written lines have usage, {usage.prsWithCredits} with
+            credits.
           </>
         )}
       </p>

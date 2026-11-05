@@ -11,6 +11,17 @@ export const ROLE_LABEL = {
   [ROLES.dashboardAdmin]: 'Dashboard admin'
 }
 
+/** Text and GOV.UK tag colour for each role. */
+export const ROLE_TAG = {
+  [ROLES.dashboardAdmin]: { text: 'Dashboard Admin', colour: 'magenta' },
+  [ROLES.admin]: { text: 'Project Admin', colour: 'teal' },
+  [ROLES.user]: { text: 'Project User', colour: 'grey' }
+}
+
 /** Project admins and dashboard admins may change a project's settings. */
 export const canAdministerProject = (role) =>
   role === ROLES.admin || role === ROLES.dashboardAdmin
+
+/** A dashboard admin outranks whatever role the project grants. */
+export const effectiveRole = (role, isDashboardAdmin = false) =>
+  isDashboardAdmin ? ROLES.dashboardAdmin : role

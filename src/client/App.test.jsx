@@ -270,7 +270,7 @@ describe('#App navigation', () => {
     expect(
       await screen.findByRole(
         'heading',
-        { level: 2, name: 'Model and Token Usage' },
+        { level: 2, name: 'Model Usage and AI Credits' },
         LAZY_VIEW
       )
     ).toBeInTheDocument()
@@ -663,7 +663,10 @@ describe('#App access by role', () => {
   })
 
   test('Should show a project user only the audit log in Settings', async () => {
-    backend({ projects: [{ ...PROJECT, role: 'project-user' }] })
+    backend({
+      projects: [{ ...PROJECT, role: 'project-user' }],
+      me: { name: 'Pat', roles: [] }
+    })
 
     await openSettings()
 
@@ -693,7 +696,7 @@ describe('#App access by role', () => {
         await screen.findByRole('button', { name: 'Save mapping' })
       ).toBeInTheDocument()
       expect(
-        screen.queryByRole('heading', { name: 'Role Mappings' }) !== null
+        screen.queryByRole('link', { name: 'Role Mappings' }) !== null
       ).toBe(role === 'dashboard-admin')
     }
   )
@@ -710,6 +713,324 @@ describe('#App access by role', () => {
 
     expect(
       screen.queryByRole('link', { name: 'Manage projects' })
+    ).not.toBeInTheDocument()
+  })
+})
+
+describe('#App onboarding and help', () => {
+  const LAZY_VIEW = { timeout: 10000 }
+  const PROJECT_USER = { ...PROJECT, role: 'project-user' }
+
+  const open = (hash) => {
+    window.history.replaceState(null, '', hash)
+    render(<App />)
+  }
+
+  const menu = () => screen.getByRole('navigation', { name: 'Menu' })
+
+  test('Should show an admin the Onboarding and Help links', async () => {
+    backend()
+
+    render(<App />)
+    await screen.findByRole('heading', { level: 1, name: 'Project Overview' })
+
+    expect(
+      within(menu()).getByRole('link', { name: 'Onboarding' })
+    ).toHaveAttribute('href', '#/onboarding')
+    expect(within(menu()).getByRole('link', { name: 'Help' })).toHaveAttribute(
+      'href',
+      '#/help'
+    )
+  })
+
+  test('Should show everyone else Help but not Onboarding', async () => {
+    backend({ projects: [PROJECT_USER], me: { name: 'Pat', roles: [] } })
+
+    render(<App />)
+    await screen.findByRole('heading', { level: 1, name: 'Project Overview' })
+
+    expect(within(menu()).getByRole('link', { name: 'Help' })).toBeVisible()
+    expect(
+      within(menu()).queryByRole('link', { name: 'Onboarding' })
+    ).not.toBeInTheDocument()
+  })
+
+  test('Should open the onboarding task list from the navigation', async () => {
+    backend()
+    render(<App />)
+    await screen.findByRole('heading', { level: 1, name: 'Project Overview' })
+
+    await userEvent.click(
+      within(menu()).getByRole('link', { name: 'Onboarding' })
+    )
+
+    expect(
+      await screen.findByRole(
+        'heading',
+        { level: 1, name: 'Onboard a Project' },
+        LAZY_VIEW
+      )
+    ).toBeInTheDocument()
+    expect(window.location.hash).toBe('#/onboarding')
+    expect(
+      within(menu()).getByRole('link', { name: 'Onboarding' })
+    ).toHaveAttribute('aria-current', 'page')
+    expect(
+      screen.queryByRole('heading', { name: 'Project Overview' })
+    ).not.toBeInTheDocument()
+  })
+
+  test('Should open a task from the URL', async () => {
+    backend()
+
+    open('/#/onboarding/details')
+
+    expect(
+      await screen.findByRole(
+        'heading',
+        { level: 1, name: 'Project Details' },
+        LAZY_VIEW
+      )
+    ).toBeInTheDocument()
+  })
+
+  test('Should send a task that cannot start yet back to the task list', async () => {
+    backend()
+
+    open('/#/onboarding/check')
+
+    expect(
+      await screen.findByRole(
+        'heading',
+        { level: 1, name: 'Onboard a Project' },
+        LAZY_VIEW
+      )
+    ).toBeInTheDocument()
+  })
+
+  test('Should refuse onboarding to a user who is not a dashboard admin', async () => {
+    backend({ projects: [PROJECT_USER], me: { name: 'Pat', roles: [] } })
+
+    open('/#/onboarding')
+
+    expect(
+      await screen.findByRole(
+        'heading',
+        { level: 1, name: 'You Cannot Onboard Projects' },
+        LAZY_VIEW
+      )
+    ).toBeInTheDocument()
+    expect(screen.queryByLabelText('Project name')).not.toBeInTheDocument()
+    expect(
+      within(menu()).queryByRole('link', { name: 'Onboarding' })
+    ).not.toBeInTheDocument()
+    expect(await axeViolations(document.body)).toStrictEqual([])
+  })
+
+  test('Should not refuse an admin while the profile is still loading', async () => {
+    backend()
+
+    open('/#/onboarding')
+
+    expect(
+      await screen.findByRole(
+        'heading',
+        { level: 1, name: 'Onboard a Project' },
+        LAZY_VIEW
+      )
+    ).toBeInTheDocument()
+    expect(
+      screen.queryByRole('heading', { name: 'You Cannot Onboard Projects' })
+    ).not.toBeInTheDocument()
+  })
+
+  test('Should refuse onboarding to a user with no project and no navigation', async () => {
+    backend({ projects: [], me: { name: 'Grace', roles: [] } })
+
+    open('/#/onboarding')
+
+    expect(
+      await screen.findByRole(
+        'heading',
+        { level: 1, name: 'You Cannot Onboard Projects' },
+        LAZY_VIEW
+      )
+    ).toBeInTheDocument()
+    expect(screen.queryByRole('navigation', { name: 'Menu' })).toBeNull()
+  })
+
+  test('Should send an admin with no projects to onboard the first one', async () => {
+    backend({ projects: [] })
+    render(<App />)
+
+    await userEvent.click(
+      await screen.findByRole('link', { name: 'Add a project' }, LAZY_VIEW)
+    )
+
+    expect(
+      await screen.findByRole(
+        'heading',
+        { level: 1, name: 'Onboard a Project' },
+        LAZY_VIEW
+      )
+    ).toBeInTheDocument()
+    expect(window.location.hash).toBe('#/onboarding')
+  })
+
+  test('Should send project creation from Manage projects to the wizard', async () => {
+    backend()
+    open('/#/admin/projects')
+
+    await userEvent.click(
+      await screen.findByRole(
+        'button',
+        { name: 'Onboard a project' },
+        LAZY_VIEW
+      )
+    )
+
+    expect(
+      await screen.findByRole(
+        'heading',
+        { level: 1, name: 'Onboard a Project' },
+        LAZY_VIEW
+      )
+    ).toBeInTheDocument()
+  })
+
+  test('Should open the help page with no hero and a way back', async () => {
+    backend({ projects: [PROJECT_USER], me: { name: 'Pat', roles: [] } })
+    render(<App />)
+    await screen.findByRole('heading', { level: 1, name: 'Project Overview' })
+
+    await userEvent.click(within(menu()).getByRole('link', { name: 'Help' }))
+
+    expect(
+      await screen.findByRole('heading', { level: 1, name: 'Help' }, LAZY_VIEW)
+    ).toBeInTheDocument()
+    expect(document.title).toBe('Help – Copilot Delivery Insights')
+    expect(within(menu()).getByRole('link', { name: 'Help' })).toHaveAttribute(
+      'aria-current',
+      'page'
+    )
+    expect(
+      screen.queryByRole('link', { name: 'Onboard a project' })
+    ).not.toBeInTheDocument()
+
+    await userEvent.click(screen.getByRole('link', { name: 'Back' }))
+
+    expect(
+      await screen.findByRole(
+        'heading',
+        { level: 1, name: 'Project Overview' },
+        LAZY_VIEW
+      )
+    ).toBeInTheDocument()
+  })
+
+  test('Should link an admin from Help to onboarding', async () => {
+    backend()
+    open('/#/help')
+
+    await userEvent.click(
+      await screen.findByRole('link', { name: 'Onboard a project' }, LAZY_VIEW)
+    )
+
+    expect(
+      await screen.findByRole(
+        'heading',
+        { level: 1, name: 'Onboard a Project' },
+        LAZY_VIEW
+      )
+    ).toBeInTheDocument()
+  })
+
+  test('Should have no accessibility violations on the help page', async () => {
+    backend()
+    open('/#/help')
+    await screen.findByRole('heading', { level: 1, name: 'Help' }, LAZY_VIEW)
+
+    expect(await axeViolations(document.body)).toStrictEqual([])
+  })
+
+  test('Should onboard a project end to end and launch its overview', async () => {
+    const projects = [PROJECT]
+    fetchMock.mockResponse(async (request) => {
+      const path = new URL(request.url, 'http://localhost').pathname
+      if (path === '/api/me') {
+        return JSON.stringify({ name: 'Ada', roles: ['Dashboard.Admin'] })
+      }
+      if (path === '/api/projects' && request.method === 'POST') {
+        projects.push({
+          slug: 'NSVC',
+          name: 'New Service',
+          type: 'ai-native',
+          role: 'dashboard-admin'
+        })
+        return JSON.stringify({})
+      }
+      if (path === '/api/projects') return JSON.stringify({ projects })
+      if (path === '/api/repositories/unassigned') {
+        return JSON.stringify({ repositories: ['DEFRA/new-a'] })
+      }
+      if (path.startsWith('/api/repositories')) {
+        return JSON.stringify({ repositories: [] })
+      }
+      if (path.startsWith('/api/sonar')) {
+        return JSON.stringify({ configured: false })
+      }
+      return JSON.stringify({ payloads: [] })
+    })
+    open('/#/onboarding')
+
+    await userEvent.click(
+      await screen.findByRole('link', { name: 'Project Details' }, LAZY_VIEW)
+    )
+    await userEvent.type(screen.getByLabelText('Project name'), 'New Service')
+    await userEvent.type(screen.getByLabelText(/^Project slug/), 'NSVC')
+    await userEvent.click(screen.getByLabelText('AI-native'))
+    await userEvent.click(
+      screen.getByRole('button', { name: 'Save and continue' })
+    )
+    expect(window.location.hash).toBe('#/onboarding')
+    await userEvent.click(
+      await screen.findByRole('link', { name: 'Connect Repositories' })
+    )
+    await userEvent.click(
+      await screen.findByRole('checkbox', { name: 'DEFRA/new-a' })
+    )
+    await userEvent.click(
+      screen.getByRole('button', { name: 'Save and continue' })
+    )
+    await userEvent.click(
+      await screen.findByRole('link', { name: 'Review and Onboard Project' })
+    )
+    await userEvent.click(
+      await screen.findByRole('button', { name: 'Onboard project' })
+    )
+
+    expect(
+      await screen.findByRole('heading', {
+        level: 1,
+        name: 'Project Onboarded'
+      })
+    ).toBeInTheDocument()
+    expect(window.location.hash).toBe('#/onboarding/confirmation')
+
+    await userEvent.click(
+      screen.getByRole('button', { name: 'Launch project overview' })
+    )
+
+    expect(
+      await screen.findByRole(
+        'heading',
+        { level: 1, name: 'Project Overview' },
+        LAZY_VIEW
+      )
+    ).toBeInTheDocument()
+    expect(window.location.hash).toBe('#/projects/NSVC/overview')
+    expect(
+      screen.queryByRole('heading', { name: /Do Not Have Access/ })
     ).not.toBeInTheDocument()
   })
 })

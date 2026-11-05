@@ -43,24 +43,57 @@ describe('#RepositoryMappingPanel', () => {
     renderPanel()
 
     const mine = screen.getByRole('table', {
-      name: 'Repositories in this project'
+      name: 'Connected repositories'
     })
     expect(mine).toHaveTextContent('DEFRA/mine')
     expect(mine).toHaveTextContent('DEFRA_mine')
     expect(mine).not.toHaveTextContent('DEFRA/theirs')
     expect(
-      screen.getByRole('table', {
-        name: 'Repositories sending data that no project owns'
-      })
+      screen.getByRole('table', { name: 'Discovered repositories' })
     ).toHaveTextContent('DEFRA/loose')
+  })
+
+  test('Should give each group of repositories its own section', () => {
+    renderPanel({ role: 'dashboard-admin' })
+
+    for (const name of [
+      'Connected Repositories',
+      'Add a Repository',
+      'Discovered Repositories',
+      'Repos Mapped'
+    ]) {
+      expect(screen.getByRole('region', { name })).toBeInTheDocument()
+    }
+    expect(screen.getAllByRole('region')).toHaveLength(4)
+    expect(
+      screen.getByText(
+        'Repositories sending telemetry that have not yet been assigned to a project.'
+      )
+    ).toBeVisible()
+    expect(
+      screen.getByText('Repositories currently assigned to other projects.')
+    ).toBeVisible()
+    expect(screen.queryByText(/Sending data, but not in a project/)).toBeNull()
+    expect(screen.queryByText('In other projects')).toBeNull()
+  })
+
+  test('Should omit the discovered section when nothing is unassigned', () => {
+    renderPanel({ unassigned: [] })
+
+    expect(
+      screen.queryByRole('region', { name: 'Discovered Repositories' })
+    ).toBeNull()
   })
 
   test('Should hide other projects’ repositories from a project admin', () => {
     renderPanel()
 
     expect(
-      screen.queryByRole('table', { name: 'Repositories in other projects' })
+      screen.queryByRole('table', {
+        name: 'Repositories mapped to other projects'
+      })
     ).toBeNull()
+    expect(screen.queryByRole('region', { name: 'Repos Mapped' })).toBeNull()
     expect(screen.queryByText('DEFRA/theirs')).toBeNull()
   })
 
@@ -68,7 +101,7 @@ describe('#RepositoryMappingPanel', () => {
     renderPanel({ role: 'dashboard-admin' })
 
     const others = screen.getByRole('table', {
-      name: 'Repositories in other projects'
+      name: 'Repositories mapped to other projects'
     })
     await userEvent.click(
       within(others).getByRole('button', { name: /Move here/ })
@@ -101,7 +134,7 @@ describe('#RepositoryMappingPanel', () => {
     renderPanel()
 
     await userEvent.type(
-      screen.getByLabelText('Add a repository'),
+      screen.getByLabelText('Repository name'),
       'DEFRA/new-repo'
     )
     await userEvent.click(
@@ -112,11 +145,80 @@ describe('#RepositoryMappingPanel', () => {
     expect(lastCall().url).toBe('/api/repositories/DEFRA%2Fnew-repo')
   })
 
+  test('Should offer only unassigned owner/name repositories as suggestions', () => {
+    renderPanel({
+      unassigned: ['DEFRA/loose', 'not-a-repo', 'DEFRA/another']
+    })
+
+    const input = screen.getByLabelText('Repository name')
+    const list = document.getElementById(input.getAttribute('list'))
+    expect([...list.options].map((o) => o.value)).toEqual([
+      'DEFRA/loose',
+      'DEFRA/another'
+    ])
+  })
+
+  test('Should offer no suggestion list when nothing is unassigned', () => {
+    renderPanel({ unassigned: [] })
+
+    expect(screen.getByLabelText('Repository name')).not.toHaveAttribute('list')
+  })
+
+  test('Should refuse a repository already in this project', async () => {
+    renderPanel()
+
+    await userEvent.type(screen.getByLabelText('Repository name'), 'defra/MINE')
+    await userEvent.click(
+      screen.getByRole('button', { name: 'Add repository' })
+    )
+
+    expect(await screen.findByRole('alert')).toHaveTextContent(
+      'defra/MINE is already in this project'
+    )
+    expect(fetchMock).not.toHaveBeenCalled()
+  })
+
+  test('Should refuse a repository mapped elsewhere without naming the project', async () => {
+    renderPanel()
+
+    await userEvent.type(
+      screen.getByLabelText('Repository name'),
+      'DEFRA/theirs'
+    )
+    await userEvent.click(
+      screen.getByRole('button', { name: 'Add repository' })
+    )
+
+    const alert = await screen.findByRole('alert')
+    expect(alert).toHaveTextContent(
+      'DEFRA/theirs is already mapped to a project'
+    )
+    expect(alert).not.toHaveTextContent('beta')
+    expect(fetchMock).not.toHaveBeenCalled()
+  })
+
+  test('Should point a dashboard admin to Move here for a repository elsewhere', async () => {
+    renderPanel({ role: 'dashboard-admin' })
+
+    await userEvent.type(
+      screen.getByLabelText('Repository name'),
+      'DEFRA/theirs'
+    )
+    await userEvent.click(
+      screen.getByRole('button', { name: 'Add repository' })
+    )
+
+    expect(await screen.findByRole('alert')).toHaveTextContent(
+      'DEFRA/theirs is in another project. Use Move here'
+    )
+    expect(fetchMock).not.toHaveBeenCalled()
+  })
+
   test('Should refuse a repository that is not owner/name', async () => {
     renderPanel()
 
     await userEvent.type(
-      screen.getByLabelText('Add a repository'),
+      screen.getByLabelText('Repository name'),
       'just-a-name'
     )
     await userEvent.click(
@@ -201,6 +303,145 @@ describe('#RepositoryMappingPanel', () => {
     expect(
       screen.getByText(/No repository sends data to this project yet/)
     ).toBeVisible()
+  })
+
+  describe('Searching', () => {
+    const many = (prefix, count, projectSlug) =>
+      Array.from({ length: count }, (_, i) => ({
+        fullName: `DEFRA/${prefix}-${i}`,
+        projectSlug,
+        sonarProjectKey: `KEY_${prefix}_${i}`
+      }))
+
+    test('Should offer no search on a short list of connected repositories', () => {
+      renderPanel()
+
+      expect(screen.queryByLabelText(/^Search connected/)).toBeNull()
+      expect(screen.queryByLabelText(/^Search discovered/)).toBeNull()
+    })
+
+    test('Should filter a long list of connected repositories', async () => {
+      renderPanel({ repositories: many('mine', 6, 'alpha') })
+
+      const search = screen.getByLabelText('Search connected repositories')
+      expect(search).toHaveAttribute('type', 'search')
+      const table = screen.getByRole('table', {
+        name: 'Connected repositories'
+      })
+      expect(within(table).getAllByRole('row')).toHaveLength(7)
+
+      await userEvent.type(search, 'mine-3')
+
+      expect(within(table).getAllByRole('row')).toHaveLength(2)
+      expect(table).toHaveTextContent('DEFRA/mine-3')
+      expect(screen.getByRole('status')).toHaveTextContent(
+        'Showing 1 of 6 connected repositories'
+      )
+    })
+
+    test('Should match a connected repository by its Sonar key', async () => {
+      renderPanel({ repositories: many('mine', 6, 'alpha') })
+
+      await userEvent.type(
+        screen.getByLabelText('Search connected repositories'),
+        'key_mine_5'
+      )
+
+      expect(
+        screen.getByRole('table', { name: 'Connected repositories' })
+      ).toHaveTextContent('DEFRA/mine-5')
+    })
+
+    test('Should say when nothing matches and keep the search box', async () => {
+      renderPanel({ repositories: many('mine', 6, 'alpha') })
+
+      await userEvent.type(
+        screen.getByLabelText('Search connected repositories'),
+        'zzz'
+      )
+
+      expect(
+        screen.queryByRole('table', { name: 'Connected repositories' })
+      ).toBeNull()
+      expect(screen.getByRole('status')).toHaveTextContent(
+        'No connected repositories match “zzz”'
+      )
+      expect(
+        screen.getByLabelText('Search connected repositories')
+      ).toBeVisible()
+    })
+
+    test('Should filter a long list of discovered repositories', async () => {
+      renderPanel({
+        unassigned: Array.from({ length: 7 }, (_, i) => `DEFRA/loose-${i}`)
+      })
+
+      await userEvent.type(
+        screen.getByLabelText('Search discovered repositories'),
+        'loose-6'
+      )
+
+      const table = screen.getByRole('table', {
+        name: 'Discovered repositories'
+      })
+      expect(within(table).getAllByRole('row')).toHaveLength(2)
+      await userEvent.click(
+        within(table).getByRole('button', { name: /Add\s?DEFRA\/loose-6/ })
+      )
+      await waitFor(() => expect(onChanged).toHaveBeenCalled())
+      expect(lastCall().url).toBe('/api/repositories/DEFRA%2Floose-6')
+    })
+
+    test('Should always offer a dashboard admin a search of the mapped repositories', async () => {
+      renderPanel({ role: 'dashboard-admin' })
+
+      const search = screen.getByLabelText('Search mapped repositories')
+      const table = screen.getByRole('table', {
+        name: 'Repositories mapped to other projects'
+      })
+
+      await userEvent.type(search, 'BETA')
+      expect(table).toHaveTextContent('DEFRA/theirs')
+
+      await userEvent.clear(search)
+      await userEvent.type(search, 'nothing')
+      expect(
+        screen.queryByRole('table', {
+          name: 'Repositories mapped to other projects'
+        })
+      ).toBeNull()
+    })
+
+    test('Should ignore a blank search', async () => {
+      renderPanel({ repositories: many('mine', 6, 'alpha') })
+
+      await userEvent.type(
+        screen.getByLabelText('Search connected repositories'),
+        '   '
+      )
+
+      expect(
+        within(
+          screen.getByRole('table', { name: 'Connected repositories' })
+        ).getAllByRole('row')
+      ).toHaveLength(7)
+    })
+
+    test('Should have no detectable accessibility violations while filtering', async () => {
+      const { container } = renderPanel({
+        role: 'dashboard-admin',
+        repositories: [
+          ...many('mine', 6, 'alpha'),
+          ...many('theirs', 2, 'beta')
+        ]
+      })
+      await userEvent.type(
+        screen.getByLabelText('Search connected repositories'),
+        'mine-1'
+      )
+
+      expect(await axeViolations(container)).toStrictEqual([])
+    })
   })
 
   test('Should have no detectable accessibility violations', async () => {

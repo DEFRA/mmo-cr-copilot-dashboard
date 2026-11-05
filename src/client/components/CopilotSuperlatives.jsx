@@ -1,41 +1,26 @@
 import { KpiCard, PanelState } from './dashboard'
+import { formatCredits } from './views/scope.jsx'
 
 const metric = (item) => item.value ?? item.metric
 
-// Six visually distinct families (Assist and Quality share a teal), so no two cards match however the grid wraps.
+// Four visually distinct families, so no two cards match however the grid wraps.
 const DEFINITIONS = {
-  'token-heavyweight': {
-    label: 'Token Heavyweight',
+  'biggest-spender': {
+    label: 'Biggest Spender',
     family: 'output',
     icon: 'box',
-    badge: 'Most tokens',
+    badge: 'Most AI credits',
     value: (item) => item.model,
-    sub: (item) => `${metric(item)}% of all tokens`
+    sub: (item) => `${metric(item)}% of all recorded AI credits`
   },
-  'cache-champion': {
-    label: 'Cache Champion',
-    family: 'quality',
-    icon: 'layers',
-    badge: 'Best cache reuse',
-    value: (item) => item.model,
-    sub: (item) => `${metric(item)}% of input tokens served from cache`
-  },
-  'token-economiser': {
-    label: 'Token Economiser',
+  'best-value': {
+    label: 'Best Value',
     family: 'adoption',
     icon: 'gauge',
-    badge: 'Fewest tokens per call',
+    badge: 'Fewest credits per call',
     value: (item) => item.model,
     sub: (item) =>
-      `${metric(item).toLocaleString('en-GB')} tokens per request on average`
-  },
-  'deep-thinker': {
-    label: 'Deep Thinker',
-    family: 'leverage',
-    icon: 'radar',
-    badge: 'Most reasoning',
-    value: (item) => item.model,
-    sub: (item) => `${metric(item)}% of output tokens spent reasoning`
+      `${formatCredits(metric(item))} AI credits per request on average`
   },
   'night-owl': {
     label: 'Night Owl Model',

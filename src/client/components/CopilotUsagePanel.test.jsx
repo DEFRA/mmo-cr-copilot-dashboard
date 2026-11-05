@@ -5,25 +5,15 @@ import { CopilotUsagePanel } from './CopilotUsagePanel'
 
 const usage = (overrides = {}) => ({
   models: [
-    {
-      model: 'claude-sonnet-4.5',
-      requests: 9,
-      inputTokens: 48211,
-      outputTokens: 3112,
-      cachedTokens: 30120
-    },
-    {
-      model: 'gpt-5',
-      requests: 2,
-      inputTokens: 500,
-      outputTokens: 50,
-      cachedTokens: 0
-    }
+    { model: 'claude-sonnet-4.5', requests: 9.5, credits: 12.3456 },
+    { model: 'gpt-5', requests: 2, credits: null }
   ],
   prsWithUsage: 2,
+  prsWithCredits: 1,
   assistedPrs: 5,
   coveragePercent: 40,
-  medianTokensPerPr: 25000,
+  totalCredits: 12.3456,
+  medianCreditsPerPr: 1234.5,
   ...overrides
 })
 
@@ -38,15 +28,18 @@ describe('#CopilotUsagePanel', () => {
       name: 'Copilot model usage by model'
     })
     const row = within(table).getByRole('row', { name: /claude-sonnet-4\.5/ })
-    expect(within(row).getByText('48,211')).toBeInTheDocument()
-    expect(within(row).getByText('30,120')).toBeInTheDocument()
-    expect(screen.getByText('25,000')).toBeInTheDocument()
+    expect(within(row).getByText('9.5')).toBeInTheDocument()
+    expect(within(row).getByText('12.35')).toBeInTheDocument()
+    const legacy = within(table).getByRole('row', { name: /gpt-5/ })
+    expect(within(legacy).getByText('Not recorded')).toBeInTheDocument()
+    expect(screen.getByText('1,234.50')).toBeInTheDocument()
+    expect(screen.queryByText(/tokens/i)).not.toBeInTheDocument()
     expect(
-      screen.getByText(/Inline completions do not report tokens/)
+      screen.getByText(/inline completions\s+use none/)
     ).toBeInTheDocument()
     expect(
       screen.getByText(
-        /Coverage: 2 of 5 pull requests with Copilot-written lines/
+        /Coverage: 2 of 5 pull requests with Copilot-written lines have usage, 1 with\s+credits/
       )
     ).toBeInTheDocument()
   })
@@ -57,7 +50,9 @@ describe('#CopilotUsagePanel', () => {
         usage={usage({
           models: [],
           prsWithUsage: 0,
-          medianTokensPerPr: null,
+          prsWithCredits: 0,
+          totalCredits: null,
+          medianCreditsPerPr: null,
           assistedPrs: 0
         })}
       />
@@ -68,11 +63,11 @@ describe('#CopilotUsagePanel', () => {
     expect(screen.queryByText(/Coverage:/)).not.toBeInTheDocument()
   })
 
-  test('Should omit the median when it cannot be computed', () => {
-    render(<CopilotUsagePanel usage={usage({ medianTokensPerPr: null })} />)
+  test('Should omit the median when no pull request recorded credits', () => {
+    render(<CopilotUsagePanel usage={usage({ medianCreditsPerPr: null })} />)
 
     expect(
-      screen.queryByText(/Tokens per pull request with usage/)
+      screen.queryByText(/AI credits per pull request/)
     ).not.toBeInTheDocument()
   })
 
@@ -98,7 +93,7 @@ describe('#CopilotUsagePanel', () => {
   test('Should not link to the insights when no usage is recorded', () => {
     render(
       <CopilotUsagePanel
-        usage={usage({ models: [], medianTokensPerPr: null })}
+        usage={usage({ models: [], medianCreditsPerPr: null })}
         insightsHref="#/projects/p/copilot-usage"
       />
     )
