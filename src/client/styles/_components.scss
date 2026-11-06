@@ -17,6 +17,12 @@
   margin-inline: auto;
 }
 
+// A centred measure for text-led pages such as Help.
+.app-reading {
+  max-width: var(--app-reading-max-width);
+  margin-inline: auto;
+}
+
 // The listbox sits in the flow under the input, so no ancestor can clip it.
 .app-combobox {
   max-width: min(100%, var(--app-input-max-width));

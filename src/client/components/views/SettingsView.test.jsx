@@ -57,20 +57,29 @@ describe('#SettingsView', () => {
       screen.getByRole('table', { name: 'Persona mappings by GitHub handle' })
     )
 
-  test('Should suggest unmapped project contributors for the handle', () => {
+  test('Should suggest unmapped project contributors in a GOV.UK combobox', async () => {
     renderSettings({
-      contributors: ['ada', 'sarathk06', 'grace']
+      contributors: ['ada', 'sarathk06', 'Jeevan K R']
     })
 
-    const input = screen.getByLabelText('GitHub handle')
-    const list = document.getElementById(input.getAttribute('list'))
-    expect([...list.options].map((o) => o.value)).toEqual(['ada', 'grace'])
+    const input = screen.getByRole('combobox', { name: 'GitHub handle' })
+    expect(input).not.toHaveAttribute('list')
+    await userEvent.click(input)
+
+    const options = within(screen.getByRole('listbox')).getAllByRole('option')
+    expect(options.map((o) => o.textContent)).toEqual(['ada', 'Jeevan K R'])
+
+    await userEvent.click(options[1])
+    expect(input).toHaveValue('Jeevan K R')
   })
 
-  test('Should offer no suggestion list when there are no contributors', () => {
+  test('Should offer no suggestion list when there are no contributors', async () => {
     renderSettings()
 
-    expect(screen.getByLabelText('GitHub handle')).not.toHaveAttribute('list')
+    await userEvent.click(screen.getByLabelText('GitHub handle'))
+
+    expect(screen.queryByRole('listbox')).not.toBeInTheDocument()
+    expect(document.querySelector('datalist')).toBeNull()
   })
 
   const fillForm = async (handle, persona) => {
@@ -181,18 +190,35 @@ describe('#SettingsView', () => {
     expect(onSave).not.toHaveBeenCalled()
   })
 
-  test('Should reject an invalid handle without calling onSave', async () => {
+  test('Should reject a handle with a slash without calling onSave', async () => {
     const onSave = vi.fn()
     renderSettings({ onSave })
 
-    await fillForm('-bad', 'Developers')
+    await fillForm('team/bad', 'Developers')
+
+    expect(screen.getAllByText(/must not include \/ or \\/)).toHaveLength(2)
+    expect(onSave).not.toHaveBeenCalled()
+  })
+
+  test('Should reject a handle over 100 characters', async () => {
+    const onSave = vi.fn()
+    renderSettings({ onSave })
+
+    await fillForm('a'.repeat(101), 'Developers')
 
     expect(
-      screen.getAllByText(
-        /must only include letters, numbers and single hyphens/
-      )
+      screen.getAllByText('GitHub handle must be 100 characters or fewer')
     ).toHaveLength(2)
     expect(onSave).not.toHaveBeenCalled()
+  })
+
+  test('Should save a git config name with spaces and accents', async () => {
+    const onSave = vi.fn().mockResolvedValue({})
+    renderSettings({ onSave })
+
+    await fillForm('  Zoë O’Brien-Smith ', 'QA Engineers')
+
+    expect(onSave).toHaveBeenCalledWith('Zoë O’Brien-Smith', 'qa')
   })
 
   test('Should move focus to the field from the error summary', async () => {

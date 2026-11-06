@@ -3,19 +3,18 @@ import { useEffect, useRef, useState } from 'react'
 import { Panel, PanelState } from '../dashboard'
 import {
   Button,
-  ErrorMessage,
+  Combobox,
   ErrorSummary,
-  Hint,
   NotificationBanner,
   Radios,
   Table,
   Tag
 } from '../govuk'
-import { cx } from '../govuk/utils.js'
 import { PERSONAS, personaMeta } from '../../lib/personas'
 
-// Mirrors GitHub's own username rules: alphanumeric, single hyphens, no leading/trailing hyphen.
-const GITHUB_HANDLE_PATTERN = /^[a-zA-Z\d](?:[a-zA-Z\d]|-(?=[a-zA-Z\d])){0,38}$/
+// The git config author name, so free text; it is a URL path segment, hence no slashes or dot segments.
+const HANDLE_MAX_LENGTH = 100
+const HANDLE_PATTERN = /^(?!\.{1,2}$)[^/\\\p{Cc}]+$/u
 
 const HANDLE_ID = 'github-handle'
 const PERSONA_ID = 'persona'
@@ -30,9 +29,11 @@ function validate(handle, persona) {
   const errors = {}
   if (!handle) {
     errors.handle = 'Enter a GitHub handle'
-  } else if (!GITHUB_HANDLE_PATTERN.test(handle)) {
+  } else if (handle.length > HANDLE_MAX_LENGTH) {
+    errors.handle = `GitHub handle must be ${HANDLE_MAX_LENGTH} characters or fewer`
+  } else if (!HANDLE_PATTERN.test(handle)) {
     errors.handle =
-      'GitHub handle must only include letters, numbers and single hyphens, like octocat'
+      'GitHub handle must not include / or \\, and must not be . or ..'
   }
   if (!PERSONA_IDS.has(persona)) errors.persona = 'Select a persona'
   return errors
@@ -188,54 +189,20 @@ export function PersonaMappingsSection({
             headingLevel={2}
           >
             <form onSubmit={submit} noValidate>
-              <div
-                className={cx(
-                  'govuk-form-group',
-                  errors.handle && 'govuk-form-group--error'
-                )}
-              >
-                <label className="govuk-label" htmlFor={HANDLE_ID}>
-                  GitHub handle
-                </label>
-                <Hint id={`${HANDLE_ID}-hint`}>
-                  Choose a contributor from this project or type a new handle,
-                  for example octocat. Handles without a mapping count as
-                  Developers.
-                </Hint>
-                {errors.handle && (
-                  <ErrorMessage id={`${HANDLE_ID}-error`}>
-                    {errors.handle}
-                  </ErrorMessage>
-                )}
-                <input
-                  ref={handleRef}
-                  className={cx(
-                    'govuk-input govuk-input--width-20',
-                    errors.handle && 'govuk-input--error'
-                  )}
-                  id={HANDLE_ID}
-                  name="githubHandle"
-                  type="text"
-                  spellCheck={false}
-                  autoComplete="off"
-                  aria-describedby={cx(
-                    `${HANDLE_ID}-hint`,
-                    errors.handle && `${HANDLE_ID}-error`
-                  )}
-                  value={handle}
-                  onChange={(e) => setHandle(e.target.value)}
-                  list={
-                    suggestions.length > 0 ? `${HANDLE_ID}-list` : undefined
-                  }
-                />
-                {suggestions.length > 0 && (
-                  <datalist id={`${HANDLE_ID}-list`}>
-                    {suggestions.map((name) => (
-                      <option key={name} value={name} />
-                    ))}
-                  </datalist>
-                )}
-              </div>
+              <Combobox
+                id={HANDLE_ID}
+                label="GitHub handle"
+                hint="Choose a contributor from this project or type the name they commit with, as set in their git config. Names without a mapping count as Developers."
+                errorMessage={errors.handle}
+                className="govuk-input--width-20"
+                inputRef={handleRef}
+                value={handle}
+                onChange={setHandle}
+                onSelect={setHandle}
+                options={suggestions}
+                itemName="contributor"
+                itemNamePlural="contributors"
+              />
               <Radios
                 idPrefix={PERSONA_ID}
                 name="persona"

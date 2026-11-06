@@ -814,6 +814,7 @@ export default function App() {
         if (isNative) {
           return (
             <AiNativeOverviewView
+              projectSlug={activeSlug}
               payloads={visiblePayloads}
               windowKey={windowKey}
               window={activeWindow}
@@ -833,6 +834,7 @@ export default function App() {
         }
         return (
           <OverviewView
+            projectSlug={activeSlug}
             payloads={visiblePayloads}
             allPayloads={allPayloads}
             windowKey={windowKey}

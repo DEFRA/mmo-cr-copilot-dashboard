@@ -300,124 +300,155 @@ export function JiraWorkflowPanel({ project, onDirtyChange }) {
         <ErrorSummary key={attempt} errors={errorList} />
       )}
 
-      <Panel
-        title="Jira Workflow"
-        family="speed"
-        icon="ticket"
-        headingLevel={2}
-      >
-        {status === 'error' && (
-          <NotificationBanner headingLevel={3}>
-            We could not refresh the Jira workflow. Showing the last version
-            loaded.
-          </NotificationBanner>
-        )}
-        <p className="govuk-body">
-          Put each of your Jira statuses into a stage. A ticket starts when it
-          first moves out of a To Do status and is delivered when it moves into
-          a Done status. Every delivery metric uses these stages.
-        </p>
-        <InsetText>{workflowSourceText(workflow)}</InsetText>
-
-        <form onSubmit={submit} noValidate>
-          {stages.map((stage) => (
-            <fieldset
-              key={stage.id}
-              className="govuk-fieldset govuk-!-margin-bottom-6"
-              aria-describedby={`stage-${stage.id}-hint`}
-            >
-              <legend className="govuk-fieldset__legend govuk-fieldset__legend--s">
-                <h3 className="govuk-fieldset__heading">{stage.label}</h3>
-              </legend>
-              <Hint id={`stage-${stage.id}-hint`}>
-                {STAGE_HINT[stage.kind]}
-              </Hint>
-              {stage.statuses.length === 0 ? (
-                <p className="govuk-body-s">No statuses in this stage.</p>
-              ) : (
-                <ul
-                  className="app-repo-list"
-                  aria-label={`Statuses in ${stage.label}`}
-                >
-                  {stage.statuses.map((name) => (
-                    <li className="app-repo-list__item" key={name}>
-                      {name}
-                      <button
-                        type="button"
-                        className="app-link-button app-repo-list__remove"
-                        onClick={() => remove(stage, name)}
-                      >
-                        Remove{' '}
-                        <span className="govuk-visually-hidden">
-                          {name} from {stage.label}
-                        </span>
-                      </button>
-                    </li>
-                  ))}
-                </ul>
-              )}
-              <Combobox
-                id={inputId(stage.id)}
-                label={`Add a status to ${stage.label}`}
-                errorMessage={errors[stage.id]}
-                value={queries[stage.id] ?? ''}
-                onChange={(text) => {
-                  setQueries((q) => ({ ...q, [stage.id]: text }))
-                }}
-                options={statusOptions(
-                  stages,
-                  stage.id,
-                  workflow.suggestions,
-                  detected
-                )}
-                onSelect={(text) => add(stage, text)}
-                allowCustom
-                addText={(text) => `Add ‘${text}’`}
-                itemName="status"
-                itemNamePlural="statuses"
-                formGroupClassName="govuk-!-margin-bottom-0"
-                inputRef={(el) => {
-                  if (el) inputs.current.set(stage.id, el)
-                  else inputs.current.delete(stage.id)
-                }}
-              />
-            </fieldset>
-          ))}
-
-          {dirty && (
-            <WarningText>
-              You have unsaved changes. Save the workflow before you leave this
-              page.
-            </WarningText>
+      <div className="app-grid">
+        <Panel
+          title="Jira Workflow"
+          family="speed"
+          icon="ticket"
+          headingLevel={2}
+          className="app-span-12"
+        >
+          {status === 'error' && (
+            <NotificationBanner headingLevel={3}>
+              We could not refresh the Jira workflow. Showing the last version
+              loaded.
+            </NotificationBanner>
           )}
-          <div className="govuk-button-group">
-            <Button type="submit" disabled={pending}>
-              {pending ? 'Saving…' : 'Save workflow'}
-            </Button>
-            {conflict && (
-              <Button variant="secondary" onClick={reloadLatest}>
-                Reload the workflow
-              </Button>
-            )}
-            {dirty && (
-              <Button
-                variant="secondary"
-                onClick={() => resetTo(workflow.stages, 'Changes cancelled')}
+          <p className="govuk-body">
+            Put each of your Jira statuses into a stage. A ticket starts when it
+            first moves out of a To Do status and is delivered when it moves
+            into a Done status. Every delivery metric uses these stages.
+          </p>
+          <InsetText className="govuk-!-margin-bottom-0">
+            {workflowSourceText(workflow)}
+          </InsetText>
+        </Panel>
+
+        <form className="app-span-12" onSubmit={submit} noValidate>
+          <div className="app-grid">
+            {stages.map((stage) => (
+              <Panel
+                key={stage.id}
+                title={stage.label}
+                family="speed"
+                icon="flow"
+                className="app-span-6"
+                aside={
+                  <span className="app-mini-tag">
+                    {stage.statuses.length}{' '}
+                    {stage.statuses.length === 1 ? 'status' : 'statuses'}
+                  </span>
+                }
               >
-                Cancel changes
-              </Button>
-            )}
-            <Button variant="secondary" onClick={applySuggested}>
-              Use suggested statuses
-            </Button>
-          </div>
-          <div className="govuk-visually-hidden" aria-live="polite">
-            {announce}
+                <fieldset
+                  className="govuk-fieldset"
+                  aria-describedby={`stage-${stage.id}-hint`}
+                >
+                  <legend className="govuk-visually-hidden">
+                    {stage.label}
+                  </legend>
+                  <Hint id={`stage-${stage.id}-hint`}>
+                    {STAGE_HINT[stage.kind]}
+                  </Hint>
+                  {stage.statuses.length === 0 ? (
+                    <p className="govuk-body-s">No statuses in this stage.</p>
+                  ) : (
+                    <ul
+                      className="app-repo-list"
+                      aria-label={`Statuses in ${stage.label}`}
+                    >
+                      {stage.statuses.map((name) => (
+                        <li className="app-repo-list__item" key={name}>
+                          {name}
+                          <button
+                            type="button"
+                            className="app-link-button app-repo-list__remove"
+                            onClick={() => remove(stage, name)}
+                          >
+                            Remove{' '}
+                            <span className="govuk-visually-hidden">
+                              {name} from {stage.label}
+                            </span>
+                          </button>
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                  <Combobox
+                    id={inputId(stage.id)}
+                    label={`Add a status to ${stage.label}`}
+                    errorMessage={errors[stage.id]}
+                    value={queries[stage.id] ?? ''}
+                    onChange={(text) => {
+                      setQueries((q) => ({ ...q, [stage.id]: text }))
+                    }}
+                    options={statusOptions(
+                      stages,
+                      stage.id,
+                      workflow.suggestions,
+                      detected
+                    )}
+                    onSelect={(text) => add(stage, text)}
+                    allowCustom
+                    addText={(text) => `Add ‘${text}’`}
+                    itemName="status"
+                    itemNamePlural="statuses"
+                    formGroupClassName="govuk-!-margin-bottom-0"
+                    inputRef={(el) => {
+                      if (el) inputs.current.set(stage.id, el)
+                      else inputs.current.delete(stage.id)
+                    }}
+                  />
+                </fieldset>
+              </Panel>
+            ))}
+
+            <Panel
+              title="Save Your Changes"
+              family="speed"
+              icon="check"
+              className="app-span-12"
+            >
+              {dirty && (
+                <WarningText>
+                  You have unsaved changes. Save the workflow before you leave
+                  this page.
+                </WarningText>
+              )}
+              <div className="govuk-button-group govuk-!-margin-bottom-0">
+                <Button type="submit" disabled={pending}>
+                  {pending ? 'Saving…' : 'Save workflow'}
+                </Button>
+                {conflict && (
+                  <Button variant="secondary" onClick={reloadLatest}>
+                    Reload the workflow
+                  </Button>
+                )}
+                {dirty && (
+                  <Button
+                    variant="secondary"
+                    onClick={() =>
+                      resetTo(workflow.stages, 'Changes cancelled')
+                    }
+                  >
+                    Cancel changes
+                  </Button>
+                )}
+                <Button variant="secondary" onClick={applySuggested}>
+                  Use suggested statuses
+                </Button>
+              </div>
+              <div className="govuk-visually-hidden" aria-live="polite">
+                {announce}
+              </div>
+            </Panel>
           </div>
         </form>
-      </Panel>
 
-      <StatusesFound found={found} stages={stages} />
+        <div className="app-span-12">
+          <StatusesFound found={found} stages={stages} />
+        </div>
+      </div>
     </>
   )
 }

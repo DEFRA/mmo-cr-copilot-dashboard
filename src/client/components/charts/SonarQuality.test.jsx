@@ -200,13 +200,14 @@ describe('#SonarPortfolioPanel', () => {
   test('Should show a card per repository with its gate and headline measures', async () => {
     respond(overview)
 
-    render(<SonarPortfolioPanel onOpenRepo={() => {}} />)
+    render(<SonarPortfolioPanel projectSlug="ALPH" onOpenRepo={() => {}} />)
 
     expect(
       await screen.findByRole('heading', {
         name: 'Code Quality Across Repositories'
       })
     ).toBeInTheDocument()
+    expect(fetchMock.mock.calls[0][0]).toBe('/api/sonar/overview?project=ALPH')
     const passed = screen.getByRole('article', { name: /^repo-one/ })
     expect(passed).toHaveClass('app-gate--passed')
     expect(within(passed).getByText('Passed')).toBeInTheDocument()
@@ -225,7 +226,7 @@ describe('#SonarPortfolioPanel', () => {
     respond(overview)
     const onOpenRepo = vi.fn()
 
-    render(<SonarPortfolioPanel onOpenRepo={onOpenRepo} />)
+    render(<SonarPortfolioPanel projectSlug="ALPH" onOpenRepo={onOpenRepo} />)
 
     await userEvent.click(
       await screen.findByRole('button', {
@@ -246,6 +247,7 @@ describe('#SonarPortfolioPanel', () => {
 
     render(
       <SonarPortfolioPanel
+        projectSlug="ALPH"
         onOpenRepo={() => {}}
         asOf="2026-01-21T23:59:59.000Z"
       />
@@ -256,8 +258,15 @@ describe('#SonarPortfolioPanel', () => {
       screen.getByText('Latest analysis 19 January 2026')
     ).toBeInTheDocument()
     expect(fetchMock.mock.calls[0][0]).toBe(
-      '/api/sonar/overview?asOf=2026-01-21T23%3A59%3A59.000Z'
+      '/api/sonar/overview?project=ALPH&asOf=2026-01-21T23%3A59%3A59.000Z'
     )
+  })
+
+  test('Should not request every repository when no project is selected', () => {
+    const { container } = render(<SonarPortfolioPanel onOpenRepo={() => {}} />)
+
+    expect(container).toBeEmptyDOMElement()
+    expect(fetchMock).not.toHaveBeenCalled()
   })
 
   test.each([
@@ -266,7 +275,9 @@ describe('#SonarPortfolioPanel', () => {
   ])('Should hide itself when %s', async (_, body) => {
     respond(body)
 
-    const { container } = render(<SonarPortfolioPanel onOpenRepo={() => {}} />)
+    const { container } = render(
+      <SonarPortfolioPanel projectSlug="ALPH" onOpenRepo={() => {}} />
+    )
 
     await waitFor(() => expect(container).toBeEmptyDOMElement())
   })
@@ -274,7 +285,7 @@ describe('#SonarPortfolioPanel', () => {
   test('Should show the error state when SonarCloud cannot be reached', async () => {
     fetchMock.mockResponse('boom', { status: 502 })
 
-    render(<SonarPortfolioPanel onOpenRepo={() => {}} />)
+    render(<SonarPortfolioPanel projectSlug="ALPH" onOpenRepo={() => {}} />)
 
     expect(
       await screen.findByText(/could not load SonarCloud data/)
@@ -309,7 +320,7 @@ describe('#SonarSprintTrend', () => {
       )
     )
 
-    render(<SonarSprintTrend sprints={sprints} number={7} />)
+    render(<SonarSprintTrend projectSlug="ALPH" sprints={sprints} number={7} />)
 
     expect(
       await screen.findByRole('table', {
@@ -319,7 +330,7 @@ describe('#SonarSprintTrend', () => {
     const line = chartOptions().findLast((o) => o?.series?.[0]?.type === 'line')
     expect(line.series[0].data).toEqual([50, 100])
     expect(fetchMock.mock.calls[0][0]).toContain(
-      'asOf=2026-07-21T23%3A59%3A59.000Z'
+      'project=ALPH&asOf=2026-07-21T23%3A59%3A59.000Z'
     )
   })
 
@@ -327,7 +338,7 @@ describe('#SonarSprintTrend', () => {
     respond({ configured: false })
 
     const { container } = render(
-      <SonarSprintTrend sprints={sprints} number={7} />
+      <SonarSprintTrend projectSlug="ALPH" sprints={sprints} number={7} />
     )
 
     await waitFor(() => expect(container).toBeEmptyDOMElement())

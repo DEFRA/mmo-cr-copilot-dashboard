@@ -121,9 +121,11 @@ const repositoryQuery = Joi.object({
   asOf: Joi.date().iso().optional()
 })
 
+// The git config author name; free text except slashes, dot segments and control characters.
 const githubHandleParams = Joi.object({
   githubHandle: Joi.string()
-    .pattern(/^[a-z\d](?:[a-z\d-]{0,37}[a-z\d])?$/i)
+    .max(100)
+    .pattern(/^(?!\.{1,2}$)(?!\s)(?!.*\s$)[^/\\\p{Cc}]+$/u)
     .required()
 })
 
@@ -404,17 +406,22 @@ export const apiProxyRoutes = [
     options: {
       validate: {
         query: Joi.object({
-          asOf: Joi.date().iso().optional()
+          asOf: Joi.date().iso().optional(),
+          project: Joi.string().pattern(PROJECT_SLUG_PATTERN).optional()
         })
       }
     },
-    handler: (request, h) =>
-      forward(request, h, {
+    handler: (request, h) => {
+      const { asOf, project } = request.query
+      const query = {
+        ...(asOf && { asOf: asOf.toISOString() }),
+        ...(project && { project })
+      }
+      return forward(request, h, {
         path: '/api/sonar/overview',
-        query: request.query.asOf
-          ? { asOf: request.query.asOf.toISOString() }
-          : undefined
+        query: Object.keys(query).length > 0 ? query : undefined
       })
+    }
   },
   {
     method: 'GET',

@@ -119,4 +119,11 @@ describe('#text control max width', () => {
       /\.app-onboarding\s*{\s*max-width: var\(--app-onboarding-max-width\);\s*margin-inline: auto;/
     )
   })
+
+  test('Should centre the reading column using a width token', () => {
+    expect(SOURCE).toContain('--app-reading-max-width: 48rem;')
+    expect(COMPONENTS).toMatch(
+      /\.app-reading\s*{\s*max-width: var\(--app-reading-max-width\);\s*margin-inline: auto;/
+    )
+  })
 })

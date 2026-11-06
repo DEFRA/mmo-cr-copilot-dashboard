@@ -83,6 +83,7 @@ const pctOrDash = (n) => (n === null || n === undefined ? '–' : `${n}%`)
  * Done, with no adoption, assist-rate or classification measures.
  */
 export function AiNativeOverviewView({
+  projectSlug,
   payloads,
   windowKey,
   window,
@@ -234,10 +235,15 @@ export function AiNativeOverviewView({
           family="quality"
           icon="shield"
         >
-          <SonarPortfolioPanel onOpenRepo={onOpenRepo} asOf={sonarAsOf} />
+          <SonarPortfolioPanel
+            projectSlug={projectSlug}
+            onOpenRepo={onOpenRepo}
+            asOf={sonarAsOf}
+          />
           {sprintWindows?.length > 0 && (
             <div className="govuk-!-margin-top-5">
               <SonarSprintTrend
+                projectSlug={projectSlug}
                 sprints={sprintWindows}
                 number={3 + figureShift}
               />

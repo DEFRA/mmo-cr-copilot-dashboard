@@ -149,6 +149,7 @@ const personaPanelState = (status) => {
  * repository comparison one scope down (docs/design-system.md §7).
  */
 export function OverviewView({
+  projectSlug,
   projectType = 'ai-adopted',
   payloads,
   allPayloads,
@@ -786,11 +787,19 @@ export function OverviewView({
         </div>
 
         <div className="govuk-!-margin-top-6">
-          <SonarPortfolioPanel onOpenRepo={onOpenRepo} asOf={sonarAsOf} />
+          <SonarPortfolioPanel
+            projectSlug={projectSlug}
+            onOpenRepo={onOpenRepo}
+            asOf={sonarAsOf}
+          />
         </div>
         {sprintWindows?.length > 0 && (
           <div className="govuk-!-margin-top-6">
-            <SonarSprintTrend sprints={sprintWindows} number={7} />
+            <SonarSprintTrend
+              projectSlug={projectSlug}
+              sprints={sprintWindows}
+              number={7}
+            />
           </div>
         )}
       </section>

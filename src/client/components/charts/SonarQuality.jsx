@@ -160,17 +160,27 @@ function fmt(value, { pct = false } = {}) {
   return pct ? `${n}%` : `${n}`
 }
 
+/** The overview for one project's repositories, optionally as at a moment. */
+export function sonarOverviewPath(projectSlug, asOf) {
+  const query = new URLSearchParams()
+  if (projectSlug) query.set('project', projectSlug)
+  if (asOf) query.set('asOf', asOf)
+  const search = query.toString()
+  return `/api/sonar/overview${search ? `?${search}` : ''}`
+}
+
 /**
- * Portfolio view: one card per linked repository with its main-branch quality
- * gate and headline measures, each opening that repository. Hides itself when
- * SonarCloud is not configured or nothing is linked.
+ * Portfolio view: one card per linked repository in the project with its
+ * main-branch quality gate and headline measures, each opening that
+ * repository. Hides itself when SonarCloud is not configured or nothing is linked.
  */
-export function SonarPortfolioPanel({ onOpenRepo, asOf }) {
+export function SonarPortfolioPanel({ projectSlug, onOpenRepo, asOf }) {
   const { data, status } = useSonarMetrics(
-    `/api/sonar/overview${asOf ? `?asOf=${encodeURIComponent(asOf)}` : ''}`
+    projectSlug ? sonarOverviewPath(projectSlug, asOf) : null
   )
   const title = 'Code Quality Across Repositories'
 
+  if (!projectSlug) return null
   if (status === 'success' && (!Array.isArray(data) || data.length === 0)) {
     return null
   }
@@ -272,7 +282,7 @@ function SonarRepoCard({ repo, onOpen }) {
  * Repositories passing the quality gate at the end of each recent sprint.
  * Hidden when SonarCloud is not configured. `sprints` is newest first.
  */
-export function SonarSprintTrend({ sprints, number }) {
+export function SonarSprintTrend({ projectSlug, sprints, number }) {
   const ends = useMemo(
     () =>
       [...sprints].reverse().map((s) => ({
@@ -281,7 +291,7 @@ export function SonarSprintTrend({ sprints, number }) {
       })),
     [sprints]
   )
-  const { points, status } = useSonarTrend(ends)
+  const { points, status } = useSonarTrend(projectSlug, ends)
 
   if (status === 'unconfigured') return null
 
@@ -324,21 +334,22 @@ export function SonarSprintTrend({ sprints, number }) {
   )
 }
 
-function useSonarTrend(ends) {
+function useSonarTrend(projectSlug, ends) {
   const [state, setState] = useState({ points: [], status: 'loading' })
 
   useEffect(() => {
+    if (!projectSlug) {
+      setState({ points: [], status: 'unconfigured' })
+      return undefined
+    }
     const controller = new AbortController()
     setState({ points: [], status: 'loading' })
     Promise.all(
       ends.map(({ asOf }) =>
-        apiFetch(
-          apiUrl(`/api/sonar/overview?asOf=${encodeURIComponent(asOf)}`),
-          {
-            signal: controller.signal,
-            headers: { Accept: 'application/json' }
-          }
-        ).then((res) => {
+        apiFetch(apiUrl(sonarOverviewPath(projectSlug, asOf)), {
+          signal: controller.signal,
+          headers: { Accept: 'application/json' }
+        }).then((res) => {
           if (!res.ok) throw new Error(`Request failed (${res.status})`)
           return res.json()
         })
@@ -363,7 +374,7 @@ function useSonarTrend(ends) {
         setState({ points: [], status: 'error' })
       })
     return () => controller.abort()
-  }, [ends])
+  }, [projectSlug, ends])
 
   return state
 }

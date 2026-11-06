@@ -360,32 +360,42 @@ describe('#api proxy routes', () => {
       )
     })
 
-    test.each([['-octocat'], ['octocat-'], ['a'.repeat(40)], ['octo_cat']])(
-      'Should reject the GitHub handle %s',
-      async (handle) => {
-        const { statusCode } = await write({
-          method: 'DELETE',
-          url: `/api/projects/ALPH/persona-mappings/${handle}`
-        })
+    test.each([
+      ['a slash', 'a%2Fb'],
+      ['a backslash', 'a%5Cb'],
+      ['a leading space', '%20octocat'],
+      ['a control character', 'octo%0Acat'],
+      ['over 100 characters', 'a'.repeat(101)]
+    ])('Should reject the GitHub handle with %s', async (_, handle) => {
+      const { statusCode } = await write({
+        method: 'DELETE',
+        url: `/api/projects/ALPH/persona-mappings/${handle}`
+      })
 
-        expect(statusCode).toBe(statusCodes.badRequest)
-        expect(fetchMock).not.toHaveBeenCalled()
-      }
-    )
+      expect(statusCode).toBe(statusCodes.badRequest)
+      expect(fetchMock).not.toHaveBeenCalled()
+    })
 
-    test.each([['octocat'], ['Octo-Cat-2'], ['a'.repeat(39)]])(
-      'Should accept the GitHub handle %s',
-      async (handle) => {
-        fetchMock.mockResponse(null, { status: 204 })
+    test.each([
+      ['octocat', 'octocat'],
+      ['-octocat', '-octocat'],
+      ['octo_cat', 'octo_cat'],
+      ['Jeevan K R', 'Jeevan%20K%20R'],
+      ['Zoë', 'Zo%C3%AB'],
+      ['100 characters', 'a'.repeat(100)]
+    ])('Should accept the GitHub handle %s', async (_, handle) => {
+      fetchMock.mockResponse(null, { status: 204 })
 
-        const { statusCode } = await write({
-          method: 'DELETE',
-          url: `/api/projects/ALPH/persona-mappings/${handle}`
-        })
+      const { statusCode } = await write({
+        method: 'DELETE',
+        url: `/api/projects/ALPH/persona-mappings/${handle}`
+      })
 
-        expect(statusCode).toBe(204)
-      }
-    )
+      expect(statusCode).toBe(204)
+      expect(upstreamUrl()).toBe(
+        `${BACKEND}/api/projects/ALPH/persona-mappings/${handle}`
+      )
+    })
   })
 
   describe('Project persona mappings', () => {

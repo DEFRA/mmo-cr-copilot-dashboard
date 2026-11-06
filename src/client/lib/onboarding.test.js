@@ -38,6 +38,8 @@ describe('#patterns', () => {
     [SLUG_PATTERN, 'AB', false],
     [SLUG_PATTERN, 'ABCDE', false],
     [JIRA_KEY_PATTERN, 'MMO_CR', true],
+    [JIRA_KEY_PATTERN, 'FI0', true],
+    [JIRA_KEY_PATTERN, '0FI', false],
     [JIRA_KEY_PATTERN, 'mmo', false],
     [REPOSITORY_PATTERN, 'DEFRA/mmo-cr-pdf', true],
     [REPOSITORY_PATTERN, 'no-owner', false],

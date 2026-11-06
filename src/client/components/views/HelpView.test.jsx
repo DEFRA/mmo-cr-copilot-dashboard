@@ -151,6 +151,12 @@ describe('#HelpView', () => {
     expect(onBack).toHaveBeenCalledTimes(1)
   })
 
+  test('Should lay the page out in the centred reading column', () => {
+    const { container } = render(<HelpView />)
+
+    expect(container.firstElementChild).toHaveClass('app-reading')
+  })
+
   test('Should have no detectable accessibility violations', async () => {
     const { container } = render(<HelpView isAdmin />)
 
