@@ -5,8 +5,8 @@ applyTo: 'src/client/**/*.jsx'
 
 # Accessibility Rules — WCAG 2.2 AA
 
-Accessibility is a **legal requirement**, not a polish item. This service is not a GOV.UK Design
-System service, so there are no GDS component defaults to inherit it from — every control and chart
+Accessibility is a **legal requirement**, not a polish item. GOV.UK and MOJ Frontend
+components supply tested defaults, but React re-implements their behaviour — every control and chart
 has to earn it explicitly.
 
 ## Structure

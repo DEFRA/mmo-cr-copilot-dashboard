@@ -1,103 +1,72 @@
 import { useMemo } from 'react'
 import { Chart } from './Chart'
-import { getPalette } from '../../lib/palette'
+import { getAppPalette } from '../../lib/palette'
+import {
+  categoryAxis,
+  decal,
+  legend,
+  textStyle,
+  tooltip,
+  valueAxis
+} from '../../lib/chart-style'
 
-/** Parse an `rgb()/rgba()` string into `[r, g, b]`. */
-function parseRgb(str) {
-  const m = /rgba?\(([^)]+)\)/i.exec(str)
-  if (!m) return [0, 0, 0]
-  const [r, g, b] = m[1].split(',').map((n) => parseFloat(n))
-  return [r, g, b]
-}
-
-/** Linear interpolation between two rgb-string colours (t in 0..1). */
-function lerpColor(a, b, t) {
-  const [ar, ag, ab] = parseRgb(a)
-  const [br, bg, bb] = parseRgb(b)
-  const mix = (x, y) => Math.round(x + (y - x) * t)
-  return `rgb(${mix(ar, br)}, ${mix(ag, bg)}, ${mix(ab, bb)})`
-}
+const formatMerged = (iso) =>
+  new Date(iso).toLocaleString(undefined, {
+    dateStyle: 'medium',
+    timeStyle: 'short'
+  })
 
 /**
- * Delivery-time bar chart with status-aware colouring:
- *  • Completed PRs (valid merge date) → green.
- *  • In-progress PRs → yellow (shortest cycle) → orange (longest cycle).
- * Status is also surfaced in the tooltip and data table, so meaning never
- * relies on colour alone.
+ * Delivery-time bar chart. Completed PRs are solid green; in-progress PRs are
+ * hatched orange. Status is also in the legend, tooltip and data table, and
+ * each bar is labelled with its hours, so meaning never relies on colour.
  */
 export function DeliveryTimeBar({ items, title, height = 340, onSelect }) {
   // items: [{ prNumber, cycleHours, completed, prMergedAt }]
   const option = useMemo(() => {
-    const p = getPalette()
-    const inProgress = items
-      .filter((it) => !it.completed)
-      .map((it) => it.cycleHours)
-    const minC = inProgress.length ? Math.min(...inProgress) : 0
-    const maxC = inProgress.length ? Math.max(...inProgress) : 1
-    const span = maxC - minC || 1
-
-    const colorFor = (it) => {
-      if (it.completed) return p.success
-      const t = Math.max(0, Math.min(1, (it.cycleHours - minC) / span))
-      return lerpColor(p.statusFast, p.statusSlow, t)
-    }
+    const p = getAppPalette()
+    const statusSeries = (name, completed, itemStyle) => ({
+      name,
+      type: 'bar',
+      stack: 'status',
+      barMaxWidth: 44,
+      cursor: onSelect ? 'pointer' : 'default',
+      itemStyle,
+      label: textStyle(p, { show: true, position: 'top', formatter: '{c}h' }),
+      emphasis: { itemStyle: { opacity: 0.85 } },
+      data: items.map((it) =>
+        it.completed === completed ? it.cycleHours : null
+      )
+    })
 
     return {
-      grid: { left: 56, right: 24, top: 40, bottom: 56 },
-      tooltip: {
+      grid: { left: 8, right: 16, top: 48, bottom: 8, containLabel: true },
+      legend: legend(p),
+      tooltip: tooltip(p, {
         trigger: 'item',
-        backgroundColor: p.surface2,
-        borderColor: p.border,
-        textStyle: { color: p.text },
         formatter: (params) => {
           const it = items[params.dataIndex]
           const status = it.completed ? 'Completed' : 'In progress'
           const merged =
             it.completed && it.prMergedAt
-              ? `<br/>Merged: ${new Date(it.prMergedAt).toLocaleString(
-                  undefined,
-                  {
-                    dateStyle: 'medium',
-                    timeStyle: 'short'
-                  }
-                )}`
+              ? `<br/>Merged: ${formatMerged(it.prMergedAt)}`
               : ''
           return `<b>PR #${it.prNumber}</b><br/>Cycle time: <b>${it.cycleHours}h</b><br/>Status: ${status}${merged}`
         }
-      },
-      xAxis: {
-        type: 'category',
-        data: items.map((it) => `#${it.prNumber}`),
-        axisLabel: {
-          color: p.text,
-          interval: 0,
-          rotate: items.length > 6 ? 30 : 0,
-          hideOverlap: true,
-          fontSize: 11
-        },
-        axisLine: { lineStyle: { color: p.borderStrong } },
-        axisTick: { show: false }
-      },
-      yAxis: {
-        type: 'value',
-        name: 'Cycle time (h)',
-        nameLocation: 'end',
-        nameGap: 16,
-        nameTextStyle: { color: p.textMuted, fontSize: 11, align: 'left' },
-        axisLabel: { color: p.textMuted, formatter: '{value}h', fontSize: 11 },
-        splitLine: { lineStyle: { color: p.border, opacity: 0.6 } }
-      },
+      }),
+      xAxis: categoryAxis(
+        p,
+        items.map((it) => `#${it.prNumber}`)
+      ),
+      yAxis: valueAxis(p, 'Cycle time (h)', {
+        axisLabel: textStyle(p, { color: p.muted, formatter: '{value}h' })
+      }),
       series: [
-        {
-          type: 'bar',
-          barMaxWidth: 44,
-          cursor: onSelect ? 'pointer' : 'default',
-          emphasis: { itemStyle: { opacity: 0.85 } },
-          data: items.map((it) => ({
-            value: it.cycleHours,
-            itemStyle: { color: colorFor(it), borderRadius: [6, 6, 0, 0] }
-          }))
-        }
+        statusSeries('Completed', true, { color: p.family.adoption.band }),
+        statusSeries('In progress', false, {
+          color: p.family.risk.band,
+          decal: decal(p)
+        })
       ]
     }
   }, [items, onSelect])

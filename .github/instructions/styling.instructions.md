@@ -5,7 +5,11 @@ applyTo: 'src/client/**/*.{jsx,css}'
 
 # Styling Rules — Tailwind CSS v4 + Design Tokens
 
-This is **not** a GOV.UK Design System service. There is no `govuk-frontend` and no GDS SCSS.
+> [docs/design-system.md](../../docs/design-system.md) is the source of truth for visual design and
+> takes precedence over this file on look-and-feel.
+
+The UI uses **GOV.UK Frontend + MOJ Frontend** with non-GOV.UK branding (Arial, no crown). Tailwind
+is legacy, being removed by E1-S12 — write no new Tailwind; the rules below apply to legacy code only.
 
 ## Token-first: never hardcode a value
 

@@ -37,12 +37,14 @@ describe('#useCommitClassification', () => {
     await expect(result.current(ARGS)).rejects.toThrow('is not merged')
   })
 
-  test('Should fall back to the status code when there is no message', async () => {
+  test('Should use a generic message for a server failure', async () => {
     fetchMock.mockResponse('', { status: 500 })
 
     const { result } = renderHook(() => useCommitClassification(vi.fn()))
 
-    await expect(result.current(ARGS)).rejects.toThrow('Request failed (500)')
+    await expect(result.current(ARGS)).rejects.toThrow(
+      'The classification could not be saved'
+    )
   })
 
   test('Should tolerate a response without a payload', async () => {

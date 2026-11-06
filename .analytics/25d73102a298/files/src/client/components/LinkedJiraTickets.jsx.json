@@ -1,0 +1,24 @@
+{
+  "schema": "ai-attribution-file/2",
+  "path": "src/client/components/LinkedJiraTickets.jsx",
+  "added": 5,
+  "counts": {
+    "aiCompletion": 0,
+    "aiChat": 0,
+    "aiAgent": 5,
+    "aiModified": 0,
+    "pasted": 0,
+    "typed": 0,
+    "untracked": 0
+  },
+  "ranges": {
+    "ai-agent": "7,100-103"
+  },
+  "ai": [
+    [7, "a", "35530018", 0],
+    [100, "a", "367e227c", 0],
+    [101, "a", "0ca0098b", 0],
+    [102, "a", "e15f5c64", 0],
+    [103, "a", "a31996cd", 0]
+  ]
+}

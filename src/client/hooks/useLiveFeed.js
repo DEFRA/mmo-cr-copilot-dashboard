@@ -24,7 +24,7 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react'
 
-import { apiUrl } from '../lib/api'
+import { apiFetch } from '../lib/api'
 import { readRuntimeConfig } from '../lib/runtime-config'
 
 const MIN_BACKOFF_MS = 1_000
@@ -75,7 +75,8 @@ export function collectPayloads(body) {
   return [...latest.values()]
 }
 
-export function useLiveFeed({ pollIntervalMs } = readRuntimeConfig()) {
+export function useLiveFeed({ projectSlug, pollIntervalMs } = {}) {
+  const interval = pollIntervalMs ?? readRuntimeConfig().pollIntervalMs
   const [payloads, setPayloads] = useState([])
   const [status, setStatus] = useState('connecting')
   const [lastMessageAt, setLastMessageAt] = useState(null)
@@ -87,65 +88,78 @@ export function useLiveFeed({ pollIntervalMs } = readRuntimeConfig()) {
   /** Whether at least one poll has succeeded — drives error vs reconnecting. */
   const hasDataRef = useRef(false)
 
-  const poll = useCallback(async () => {
-    if (!mountedRef.current) {
-      return
-    }
-
-    const controller = new AbortController()
-    controllerRef.current = controller
-
-    let delay = pollIntervalMs
-
-    try {
-      const response = await fetch(apiUrl('/api/payloads'), {
-        signal: controller.signal,
-        headers: { Accept: 'application/json' }
-      })
-
-      if (!response.ok) {
-        throw new Error(`Request failed (${response.status})`)
-      }
-
-      const collected = collectPayloads(await response.json())
-      if (collected === null) {
-        throw new Error('Malformed response')
-      }
-
+  const poll = useCallback(
+    async (background = false) => {
       if (!mountedRef.current) {
         return
       }
 
-      backoffRef.current = MIN_BACKOFF_MS
-      hasDataRef.current = true
-      setPayloads(collected)
-      setLastMessageAt(new Date())
-      setStatus('open')
-    } catch (error) {
-      if (controller.signal.aborted || !mountedRef.current) {
-        return
+      const controller = new AbortController()
+      controllerRef.current = controller
+
+      let delay = interval
+
+      try {
+        const path = `/api/projects/${encodeURIComponent(projectSlug)}/payloads`
+        const response = await apiFetch(path, {
+          signal: controller.signal,
+          headers: {
+            Accept: 'application/json',
+            // Timer polls must not keep an idle session alive
+            ...(background ? { 'x-background-poll': '1' } : {})
+          }
+        })
+
+        if (!response.ok) {
+          throw new Error(`Request failed (${response.status})`)
+        }
+
+        const collected = collectPayloads(await response.json())
+        if (collected === null) {
+          throw new Error('Malformed response')
+        }
+
+        if (!mountedRef.current) {
+          return
+        }
+
+        backoffRef.current = MIN_BACKOFF_MS
+        hasDataRef.current = true
+        setPayloads(collected)
+        setLastMessageAt(new Date())
+        setStatus('open')
+      } catch (error) {
+        if (controller.signal.aborted || !mountedRef.current) {
+          return
+        }
+
+        setStatus(hasDataRef.current ? 'reconnecting' : 'error')
+        delay = jitter(backoffRef.current)
+        backoffRef.current = Math.min(backoffRef.current * 2, MAX_BACKOFF_MS)
       }
 
-      setStatus(hasDataRef.current ? 'reconnecting' : 'error')
-      delay = jitter(backoffRef.current)
-      backoffRef.current = Math.min(backoffRef.current * 2, MAX_BACKOFF_MS)
-    }
-
-    if (mountedRef.current) {
-      timerRef.current = setTimeout(poll, delay)
-    }
-  }, [pollIntervalMs])
+      if (mountedRef.current) {
+        timerRef.current = setTimeout(() => poll(true), delay)
+      }
+    },
+    [interval, projectSlug]
+  )
 
   useEffect(() => {
+    setPayloads([])
+    setStatus('connecting')
+    hasDataRef.current = false
+    backoffRef.current = MIN_BACKOFF_MS
     mountedRef.current = true
-    poll()
+    // No project yet (still loading, or no access): there is nothing to poll.
+    if (projectSlug) poll()
 
     return () => {
       mountedRef.current = false
       clearTimeout(timerRef.current)
       controllerRef.current?.abort()
     }
-  }, [poll])
+  }, [poll, projectSlug])
 
   const applyPayload = useCallback((payload) => {
     if (!isValidPayload(payload)) {

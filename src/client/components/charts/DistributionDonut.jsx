@@ -1,59 +1,43 @@
 import { useMemo } from 'react'
 import { Chart } from './Chart'
-import { getPalette } from '../../lib/palette'
+import { getAppPalette } from '../../lib/palette'
+import { decal, textStyle, tooltip } from '../../lib/chart-style'
 
 /**
- * Donut showing part-to-whole composition (e.g. Copilot vs manual). Segments
- * carry text labels so meaning never relies on colour alone.
+ * Donut showing part-to-whole composition (Copilot vs human). Segments carry
+ * direct labels and Human is hatched, so meaning never relies on colour alone.
  */
-export function DistributionDonut({ data, title, theme, height = 260 }) {
+export function DistributionDonut({ data, title, height = 260 }) {
   const option = useMemo(() => {
-    const p = getPalette()
-    // Donut segments are always 'Copilot-assisted' vs 'Human-authored', so a
-    // single check suffices: Copilot → copilot colour, otherwise → manual.
-    const colorFor = (name) =>
-      name.toLowerCase().includes('copilot') ? p.copilot : p.manual
+    const p = getAppPalette()
+    const isCopilot = (name) => name.toLowerCase().includes('copilot')
     return {
-      tooltip: {
-        trigger: 'item',
-        formatter: '{b}: {c} ({d}%)',
-        backgroundColor: p.surface2,
-        borderColor: p.border,
-        textStyle: { color: p.text }
-      },
-      legend: {
-        bottom: 0,
-        textStyle: { color: p.textMuted },
-        icon: 'roundRect'
-      },
+      tooltip: tooltip(p, { trigger: 'item', formatter: '{b}: {c} ({d}%)' }),
       series: [
         {
           type: 'pie',
-          radius: ['52%', '74%'],
-          center: ['50%', '44%'],
+          radius: ['50%', '72%'],
+          center: ['50%', '50%'],
           avoidLabelOverlap: true,
-          itemStyle: {
-            borderColor: p.surface,
-            borderWidth: 2,
-            borderRadius: 6
-          },
-          label: {
+          itemStyle: { borderColor: p.white, borderWidth: 2 },
+          label: textStyle(p, {
             show: true,
-            formatter: '{d}%',
-            color: p.text,
-            fontWeight: 600
-          },
-          labelLine: { length: 8, length2: 8, lineStyle: { color: p.border } },
+            formatter: '{b}\n{d}%',
+            fontWeight: 'bold',
+            lineHeight: 18
+          }),
+          labelLine: { length: 8, length2: 8, lineStyle: { color: p.muted } },
           data: data.map((d) => ({
             name: d.name,
             value: d.value,
-            itemStyle: { color: colorFor(d.name) }
+            itemStyle: isCopilot(d.name)
+              ? { color: p.copilot }
+              : { color: p.human, decal: decal(p) }
           }))
         }
       ]
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [data, theme])
+  }, [data])
 
   const total = data.reduce((s, d) => s + d.value, 0)
   return (

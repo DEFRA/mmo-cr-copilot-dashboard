@@ -13,6 +13,18 @@ import { config } from '#/config/config.js'
 
 const JSON_HEADERS = { Accept: 'application/json' }
 
+// Callers may set only these; a browser header can never reach the backend.
+const ALLOWED_HEADERS = ['authorization', 'x-ingest-token']
+
+function allowedHeaders(headers = {}) {
+  return Object.fromEntries(
+    Object.entries(headers).filter(
+      ([name, value]) =>
+        value !== undefined && ALLOWED_HEADERS.includes(name.toLowerCase())
+    )
+  )
+}
+
 function buildUrl(baseUrl, path, query) {
   const url = new URL(`${baseUrl.replace(/\/+$/, '')}${path}`)
 
@@ -41,7 +53,7 @@ export async function backendRequest(
       headers: {
         ...JSON_HEADERS,
         ...(body ? { 'Content-Type': 'application/json' } : {}),
-        ...headers
+        ...allowedHeaders(headers)
       },
       ...(body ? { body: JSON.stringify(body) } : {}),
       signal: AbortSignal.timeout(timeoutMs)

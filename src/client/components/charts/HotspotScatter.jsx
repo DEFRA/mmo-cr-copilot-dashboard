@@ -1,71 +1,60 @@
 import { useMemo } from 'react'
 import { Chart } from './Chart'
-import { getPalette } from '../../lib/palette'
+import { getAppPalette } from '../../lib/palette'
 import { classificationLabel } from '../../lib/selectors'
+import {
+  escapeHtml,
+  legend,
+  textStyle,
+  tooltip,
+  valueAxis
+} from '../../lib/chart-style'
+
+const GROUPS = [
+  { category: 'Copilot-assisted', token: 'copilot', symbol: 'circle' },
+  { category: 'Human-authored', token: 'human', symbol: 'diamond' }
+]
 
 /**
  * Scatter "hotspot" plot. Each point is a commit: x = lines added, y = lines
- * deleted, bubble size = total lines touched, colour = classification. Reveals
- * large/risky changes and where Copilot vs manual effort concentrates.
+ * deleted, bubble size = total lines touched. Copilot is a purple circle and
+ * Human an orange diamond, so shape carries the classification as well.
  */
-export function HotspotScatter({
-  points,
-  title,
-  xName,
-  yName,
-  theme,
-  height = 340
-}) {
+export function HotspotScatter({ points, title, xName, yName, height = 340 }) {
   // points: [{ x, y, size, category, label }]
   const option = useMemo(() => {
-    const p = getPalette()
-    const colorFor = (cat) =>
-      cat?.toLowerCase().includes('copilot') ? p.copilot : p.manual
-    const sizes = points.map((pt) => pt.size)
-    const maxSize = Math.max(1, ...sizes)
-    const groups = ['Copilot-assisted', 'Human-authored']
+    const p = getAppPalette()
+    const maxSize = Math.max(1, ...points.map((pt) => pt.size))
 
     return {
-      grid: { left: 52, right: 24, top: 24, bottom: 52 },
-      legend: { top: 0, textStyle: { color: p.textMuted }, icon: 'circle' },
-      tooltip: {
-        backgroundColor: p.surface2,
-        borderColor: p.border,
-        textStyle: { color: p.text },
+      grid: { left: 8, right: 32, top: 48, bottom: 40, containLabel: true },
+      legend: legend(p),
+      tooltip: tooltip(p, {
         formatter: (params) => {
           const d = params.data
-          return `<b>${d.label}</b><br/>${xName}: ${d.value[0]}<br/>${yName}: ${d.value[1]}<br/>Total touched: ${d.size}`
+          return `<b>${escapeHtml(d.label)}</b><br/>${escapeHtml(xName)}: ${d.value[0]}<br/>${escapeHtml(yName)}: ${d.value[1]}<br/>Total touched: ${d.size}`
         }
-      },
-      xAxis: {
-        type: 'value',
-        name: xName,
-        nameTextStyle: { color: p.textMuted, fontSize: 11 },
-        axisLabel: { color: p.textMuted, fontSize: 11 },
-        axisLine: { lineStyle: { color: p.borderStrong } },
-        splitLine: { lineStyle: { color: p.border, opacity: 0.6 } }
-      },
-      yAxis: {
-        type: 'value',
-        name: yName,
-        nameTextStyle: { color: p.textMuted, fontSize: 11 },
-        axisLabel: { color: p.textMuted, fontSize: 11 },
-        axisLine: { lineStyle: { color: p.borderStrong } },
-        splitLine: { lineStyle: { color: p.border, opacity: 0.6 } }
-      },
-      series: groups.map((g) => ({
-        name: classificationLabel(g),
+      }),
+      xAxis: valueAxis(p, xName, {
+        nameLocation: 'middle',
+        nameGap: 32,
+        nameTextStyle: textStyle(p, { color: p.muted })
+      }),
+      yAxis: valueAxis(p, yName),
+      series: GROUPS.map((g) => ({
+        name: classificationLabel(g.category),
         type: 'scatter',
+        symbol: g.symbol,
         symbolSize: (data) => 10 + (data.size / maxSize) * 42,
         itemStyle: {
-          color: colorFor(g),
-          opacity: 0.78,
-          borderColor: p.surface,
+          color: p[g.token],
+          opacity: 0.8,
+          borderColor: p.white,
           borderWidth: 1
         },
         emphasis: { focus: 'series', itemStyle: { opacity: 1 } },
         data: points
-          .filter((pt) => pt.category === g)
+          .filter((pt) => pt.category === g.category)
           .map((pt) => ({
             value: [pt.x, pt.y],
             size: pt.size,
@@ -73,8 +62,7 @@ export function HotspotScatter({
           }))
       }))
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [points, xName, yName, theme])
+  }, [points, xName, yName])
 
   return (
     <Chart

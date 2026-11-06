@@ -10,19 +10,9 @@
  * `usePersonaMappings`) and pass it through as `mappingsByHandle`.
  */
 export const PERSONAS = [
-  {
-    id: 'developer',
-    label: 'Developers',
-    icon: '{ }',
-    accent: 'var(--color-copilot)'
-  },
-  {
-    id: 'devops',
-    label: 'DevOps Engineers',
-    icon: '⚙',
-    accent: 'var(--color-info)'
-  },
-  { id: 'qa', label: 'QA Engineers', icon: '✔', accent: 'var(--color-success)' }
+  { id: 'developer', label: 'Developers', icon: '{ }' },
+  { id: 'devops', label: 'DevOps Engineers', icon: '⚙' },
+  { id: 'qa', label: 'QA Engineers', icon: '✔' }
 ]
 
 /** Unmapped GitHub handles default to Developers (the majority delivery role). */

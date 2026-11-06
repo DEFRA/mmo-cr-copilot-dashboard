@@ -1,0 +1,17 @@
+{
+  "schema": "ai-attribution-file/2",
+  "path": "src/client/components/govuk/Radios.test.jsx",
+  "added": 11,
+  "counts": {
+    "aiCompletion": 0,
+    "aiChat": 0,
+    "aiAgent": 0,
+    "aiModified": 0,
+    "pasted": 0,
+    "typed": 0,
+    "untracked": 11
+  },
+  "ranges": {
+    "untracked": "8-9,23,38,40,43,50,55,79,83,88"
+  }
+}

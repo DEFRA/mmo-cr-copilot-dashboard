@@ -1,0 +1,21 @@
+{
+  "schema": "ai-attribution-file/2",
+  "path": "src/client/lib/jira.test.js",
+  "added": 57,
+  "counts": {
+    "aiCompletion": 0,
+    "aiChat": 0,
+    "aiAgent": 1,
+    "aiModified": 0,
+    "pasted": 0,
+    "typed": 0,
+    "untracked": 56
+  },
+  "ranges": {
+    "ai-agent": "12",
+    "untracked": "1-7,9-11,14-25,27-33,35-40,42-51,53-63"
+  },
+  "ai": [
+    [12, "a", "ee44a98c", 0]
+  ]
+}

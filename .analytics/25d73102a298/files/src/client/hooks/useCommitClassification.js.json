@@ -1,0 +1,30 @@
+{
+  "schema": "ai-attribution-file/2",
+  "path": "src/client/hooks/useCommitClassification.js",
+  "added": 11,
+  "counts": {
+    "aiCompletion": 0,
+    "aiChat": 0,
+    "aiAgent": 11,
+    "aiModified": 0,
+    "pasted": 0,
+    "typed": 0,
+    "untracked": 0
+  },
+  "ranges": {
+    "ai-agent": "12,17-26"
+  },
+  "ai": [
+    [12, "a", "35530018", 0],
+    [17, "a", "367e227c", 0],
+    [18, "a", "fafd515b", 0],
+    [19, "a", "54724b29", 0],
+    [20, "a", "7da723fd", 0],
+    [21, "a", "0a2ef6ee", 0],
+    [22, "a", "ce68cc55", 0],
+    [23, "a", "2c944dad", 0],
+    [24, "a", "e9e37d09", 0],
+    [25, "a", "f0de937d", 0],
+    [26, "a", "9845a6a3", 0]
+  ]
+}

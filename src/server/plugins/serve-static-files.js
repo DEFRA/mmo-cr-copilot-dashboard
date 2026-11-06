@@ -1,5 +1,4 @@
 import { config } from '#/config/config.js'
-import { statusCodes } from '../common/constants/status-codes.js'
 
 export const serveStaticFiles = {
   plugin: {
@@ -9,6 +8,7 @@ export const serveStaticFiles = {
         {
           options: {
             auth: false,
+            app: { public: true },
             cache: {
               expiresIn: config.get('staticCacheTimeout'),
               privacy: 'private'
@@ -17,12 +17,15 @@ export const serveStaticFiles = {
           method: 'GET',
           path: '/favicon.ico',
           handler(_request, h) {
-            return h.response().code(statusCodes.noContent).type('image/x-icon')
+            return h
+              .redirect(`${config.get('assetPath')}/images/favicon.ico`)
+              .permanent()
           }
         },
         {
           options: {
             auth: false,
+            app: { public: true },
             cache: {
               expiresIn: config.get('staticCacheTimeout'),
               privacy: 'private'

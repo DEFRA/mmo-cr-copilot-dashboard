@@ -8,31 +8,26 @@
  * reflects the correction immediately rather than waiting for the next poll.
  */
 import { useCallback } from 'react'
-import { apiUrl } from '../lib/api'
+import { jsonWrite } from '../lib/api'
+import { checkedWrite } from '../lib/api-errors'
 
 export function useCommitClassification(onUpdated) {
   return useCallback(
     async ({ repository, prNumber, commit, classification }) => {
-      const res = await fetch(
-        apiUrl(
-          `/api/payloads/${encodeURIComponent(repository)}/${prNumber}/commits/${encodeURIComponent(commit)}`
+      const res = await checkedWrite(
+        jsonWrite(
+          `/api/payloads/${encodeURIComponent(repository)}/${prNumber}/commits/${encodeURIComponent(commit)}`,
+          'PATCH',
+          { classification }
         ),
         {
-          method: 'PATCH',
-          headers: {
-            'Content-Type': 'application/json',
-            Accept: 'application/json'
-          },
-          body: JSON.stringify({ classification })
+          fallback: 'The classification could not be saved',
+          notFound: 'That commit no longer exists'
         }
       )
 
       const text = await res.text()
       const body = text ? JSON.parse(text) : null
-
-      if (!res.ok) {
-        throw new Error(body?.message || `Request failed (${res.status})`)
-      }
 
       if (body?.payload) {
         onUpdated?.(body.payload)

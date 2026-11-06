@@ -76,6 +76,34 @@ export function buildCommit(overrides = {}) {
   }
 }
 
+/** A contract v2 commit; mirrors the backend fixture. */
+export function buildCommitV2(overrides = {}) {
+  return buildCommit({
+    attribution: { source: 'legacy-trailer' },
+    ...overrides
+  })
+}
+
+/** A contract v2 payload (backend ADR 0001); `buildPayload` stays v1. */
+export function buildPayloadV2(overrides = {}) {
+  return buildPayload({
+    schemaVersion: 2,
+    source: 'live',
+    prTitle: 'MMO-123 Add cycle time scatter',
+    jiraKeys: ['MMO-123'],
+    files: {
+      changed: 3,
+      linesTouched: 180,
+      testFilesChanged: 1,
+      testLinesTouched: 40,
+      modulesTouched: 2,
+      excluded: { filesChanged: 1, linesTouched: 20 }
+    },
+    commitBreakdown: [buildCommitV2()],
+    ...overrides
+  })
+}
+
 /**
  * Builds a payload whose summary and contributor breakdown are derived from the
  * supplied commits, so selector maths has a self-consistent input.

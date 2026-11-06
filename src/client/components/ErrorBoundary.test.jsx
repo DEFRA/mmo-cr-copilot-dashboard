@@ -30,8 +30,9 @@ describe('#ErrorBoundary', () => {
     )
 
     expect(
-      screen.getByText('This section failed to render.')
+      screen.getByRole('heading', { name: 'This Section Failed to Render.' })
     ).toBeInTheDocument()
+    expect(screen.getByText('Try refreshing the page.')).toBeInTheDocument()
   })
 
   test('Should not leak the error message to the page', () => {

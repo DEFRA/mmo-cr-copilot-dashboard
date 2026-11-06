@@ -1,79 +1,180 @@
-import { useMemo, useState } from 'react'
-import { Panel } from '../Panel'
-import { KpiCard } from '../charts/KpiCard'
-import { DistributionDonut } from '../charts/DistributionDonut'
-import { CategoryBar } from '../charts/CategoryBar'
-import { ActivityHeatmap } from '../charts/ActivityHeatmap'
-import { ProfileRadar } from '../charts/ProfileRadar'
-import { LiveCommitStream } from '../charts/LiveCommitStream'
-import { SonarPortfolioPanel } from '../charts/SonarQuality'
+import { useId, useMemo } from 'react'
+
 import {
-  selectGlobalSummary,
-  selectRepoSummaries,
-  selectContributorSummaries,
-  selectContributorRepoMatrix,
-  selectDeliverySummary,
-  selectDeliveryMetrics,
+  ChartFigure,
+  LiveStreamControls,
+  MiniBars,
+  Panel,
+  PanelState,
+  PeriodChip,
+  ProgressRing,
+  useLiveStreamPaused
+} from '../dashboard'
+import { Table } from '../govuk'
+import { CopilotUsagePanel } from '../CopilotUsagePanel'
+import { ActivityHeatmap } from '../charts/ActivityHeatmap'
+import { CategoryBar } from '../charts/CategoryBar'
+import { DistributionDonut } from '../charts/DistributionDonut'
+import { LiveCommitStream } from '../charts/LiveCommitStream'
+import { ProfileRadar } from '../charts/ProfileRadar'
+import { SonarPortfolioPanel, SonarSprintTrend } from '../charts/SonarQuality'
+import { PERSONAS } from '../../lib/personas'
+import {
+  formatDuration,
   selectCommitTimeline,
+  selectContributorRepoMatrix,
+  selectContributorSummaries,
+  selectCopilotLeverage,
+  selectCopilotUsage,
+  selectDeliverySummary,
+  selectGlobalSummary,
+  selectPersonaSummaries,
+  selectRepoCycleTimes,
   selectRepoProfiles,
   selectRepoRework,
-  selectCopilotLeverage,
-  selectPersonaSummaries,
-  formatDuration
+  selectRepoSummaries
 } from '../../lib/selectors'
+import {
+  KpiDrillGrid,
+  JiraHiddenNotice,
+  Meter,
+  OpenButton,
+  PERIOD_CHIP,
+  ScopeHeader,
+  Subsection,
+  lines,
+  plural
+} from './scope.jsx'
+import { DeliverySnapshot } from './DeliverySnapshot.jsx'
 
-function SectionHeading({ children, hint }) {
+const DRILL_ID = 'overview-drill'
+
+const PERSONA_STYLE = {
+  developer: { family: 'leverage', icon: 'code' },
+  devops: { family: 'speed', icon: 'merge' },
+  qa: { family: 'assist', icon: 'check' }
+}
+
+function PersonaPanel({ persona, state }) {
+  const style = PERSONA_STYLE[persona.id]
+  const idle = persona.totalCommits === 0
+  const panelState = state === 'populated' && idle ? 'empty' : state
+
   return (
-    <div className="mt-2 flex flex-wrap items-baseline gap-x-3 gap-y-1">
-      <h2 className="m-0 text-sm font-semibold uppercase tracking-wide text-[var(--color-text)]">
-        {children}
-      </h2>
-      {hint && (
-        <span className="text-xs text-[var(--color-text-faint)]">{hint}</span>
-      )}
-    </div>
+    <Panel
+      title={persona.label}
+      family={style.family}
+      icon={style.icon}
+      headingLevel={4}
+      busy={state === 'loading'}
+      aside={
+        state === 'populated' && (
+          <span className="app-mini-tag">
+            {plural(persona.contributorCount, 'person', 'people')}
+          </span>
+        )
+      }
+    >
+      <PanelState
+        state={panelState}
+        title={persona.label}
+        icon="users"
+        emptyMessage="No activity from this role in the selected period."
+        errorMessage="We could not load the persona mappings. Try again later."
+      >
+        <dl className="app-stat-list">
+          <div className="app-stat-list__row">
+            <dt>Copilot adoption</dt>
+            <dd>{persona.adoptionPct}%</dd>
+            <Meter value={persona.adoptionPct} />
+          </div>
+          <div className="app-stat-list__row">
+            <dt>Commit assist rate</dt>
+            <dd>{persona.copilotAssistedRate}%</dd>
+            <Meter value={persona.copilotAssistedRate} />
+          </div>
+          <div className="app-stat-list__row">
+            <dt>Line assist rate</dt>
+            <dd>{persona.copilotAssistedLineRate}%</dd>
+          </div>
+          <div className="app-stat-list__row">
+            <dt>Contributors (adopters)</dt>
+            <dd>
+              {persona.contributorCount} ({persona.adopters})
+            </dd>
+          </div>
+          <div className="app-stat-list__row">
+            <dt>Pull requests</dt>
+            <dd>{persona.prCount}</dd>
+          </div>
+          <div className="app-stat-list__row">
+            <dt>Copilot commits</dt>
+            <dd>
+              {persona.copilotAssistedCommits} of {persona.totalCommits}
+            </dd>
+          </div>
+          <div className="app-stat-list__row">
+            <dt>Net lines delivered</dt>
+            <dd>{lines(persona.netLines)}</dd>
+          </div>
+          <div className="app-stat-list__row">
+            <dt>PR coding cycle time</dt>
+            <dd>{formatDuration(persona.avgCycleHours)}</dd>
+          </div>
+        </dl>
+        <details className="govuk-details govuk-!-margin-top-3 govuk-!-margin-bottom-0">
+          <summary className="govuk-details__summary">
+            <span className="govuk-details__summary-text">
+              Repositories ({persona.repoNames.length})
+            </span>
+          </summary>
+          <div className="govuk-details__text">
+            {persona.repoNames.join(' · ')}
+          </div>
+        </details>
+      </PanelState>
+    </Panel>
   )
 }
 
-/** Reusable collapsible breakdown panel below a KPI card. */
-function AccordionSection({ id, title, subtitle, children, className = '' }) {
-  return (
-    <section
-      id={id}
-      className={`accordion-panel ${className}`.trim()}
-      aria-label={title}
-    >
-      <div className="border-b border-[var(--color-border)] px-5 py-3">
-        <h3 className="m-0 text-sm font-semibold text-[var(--color-text)]">
-          {title}
-        </h3>
-        {subtitle && (
-          <p className="m-0 text-xs text-[var(--color-text-muted)]">
-            {subtitle}
-          </p>
-        )}
-      </div>
-      <div className="p-5">{children}</div>
-    </section>
-  )
+const personaPanelState = (status) => {
+  if (status === 'loading' || status === 'idle') return 'loading'
+  if (status === 'error') return 'error'
+  return 'populated'
 }
 
 /**
- * Level 1 — Global overview. Sections are ordered so insight widens then
- * narrows: portfolio (all repos) → per-repository → per-contributor → the live
- * commit stream → the contributor × repository heatmap. Pull-request detail is
- * intentionally deferred to the repository drill-down. Clicking a Copilot KPI
- * card reveals a per-repository breakdown accordion.
+ * Project overview: the project's KPI cards with a by-repository drill panel,
+ * the live commit stream, adoption and persona subsections, then the
+ * repository comparison one scope down (docs/design-system.md §7).
  */
 export function OverviewView({
+  projectSlug,
+  projectType = 'ai-adopted',
   payloads,
   allPayloads,
   windowKey,
   mappingsByHandle,
+  personaStatus = 'success',
   onOpenRepo,
   onOpenRepoCycle,
-  onOpenContributor
+  onOpenContributor,
+  onOpenLeverage,
+  leverageData,
+  sonarAsOf,
+  sprintWindows,
+  jiraConnected = false,
+  canAdminister = false,
+  jiraDelivery,
+  deliveryWindow,
+  deliveryHref,
+  onOpenTicket,
+  onOpenPR,
+  insightsHref
 }) {
+  const projectId = useId()
+  const reposId = useId()
+  const [streamPaused, toggleStreamPaused] = useLiveStreamPaused()
   const history = allPayloads ?? payloads
   const summary = useMemo(() => selectGlobalSummary(payloads), [payloads])
   const delivery = useMemo(
@@ -81,6 +182,10 @@ export function OverviewView({
     [payloads, history]
   )
   const repos = useMemo(() => selectRepoSummaries(payloads), [payloads])
+  const repoByName = useMemo(
+    () => new Map(repos.map((r) => [r.name, r.repository])),
+    [repos]
+  )
   const contributors = useMemo(
     () => selectContributorSummaries(payloads),
     [payloads]
@@ -90,833 +195,614 @@ export function OverviewView({
     [payloads]
   )
   const timeline = useMemo(() => selectCommitTimeline(payloads), [payloads])
-  const deliveryByPr = useMemo(
-    () => selectDeliveryMetrics(payloads),
-    [payloads]
-  )
   const repoProfiles = useMemo(() => selectRepoProfiles(payloads), [payloads])
   const rework = useMemo(() => selectRepoRework(payloads), [payloads])
+  const repoCycle = useMemo(() => selectRepoCycleTimes(payloads), [payloads])
   const leverage = useMemo(
     () => selectCopilotLeverage(payloads, history),
     [payloads, history]
   )
+  const v2Available = Boolean(leverageData)
+  const usage = useMemo(() => selectCopilotUsage(payloads), [payloads])
   const personas = useMemo(
-    () => selectPersonaSummaries(payloads, mappingsByHandle),
+    () =>
+      selectPersonaSummaries(payloads, mappingsByHandle).filter((persona) =>
+        PERSONAS.some((p) => p.id === persona.id)
+      ),
     [payloads, mappingsByHandle]
   )
 
-  // Average cycle time per repository (portfolio → repo, never per-PR here;
-  // per-PR detail lives on the dedicated repo cycle-time page).
-  const repoCycle = useMemo(() => {
-    const byRepo = new Map()
-    for (const m of deliveryByPr) {
-      if (!byRepo.has(m.repository)) {
-        byRepo.set(m.repository, {
-          repository: m.repository,
-          name: m.repoName,
-          cycles: [],
-          prCount: 0
-        })
-      }
-      const r = byRepo.get(m.repository)
-      if (m.cycleHours > 0) r.cycles.push(m.cycleHours)
-      r.prCount += 1
-    }
-    return Array.from(byRepo.values())
-      .map((r) => ({
-        repository: r.repository,
-        name: r.name,
-        prCount: r.prCount,
-        avgCycleHours: r.cycles.length
-          ? r.cycles.reduce((a, b) => a + b, 0) / r.cycles.length
-          : 0,
-        fastest: r.cycles.length ? Math.min(...r.cycles) : 0,
-        slowest: r.cycles.length ? Math.max(...r.cycles) : 0
-      }))
-      .sort((a, b) => a.avgCycleHours - b.avgCycleHours)
-  }, [deliveryByPr])
+  const comparison = useMemo(() => {
+    const cycleBy = new Map(repoCycle.map((r) => [r.repository, r]))
+    const reworkBy = new Map(rework.repos.map((r) => [r.repository, r]))
+    return repos.map((r) => ({
+      ...r,
+      avgCycleHours: cycleBy.get(r.repository)?.avgCycleHours ?? 0,
+      reworkRatio: reworkBy.get(r.repository)?.reworkRatio ?? 0
+    }))
+  }, [repos, repoCycle, rework])
 
-  const [openPanel, setOpenPanel] = useState(null)
-  const toggle = (id) => setOpenPanel((v) => (v === id ? null : id))
-  // A card is dimmed/disabled whenever a different card's breakdown is open.
-  const dim = (id) => openPanel !== null && openPanel !== id
+  const heatmapRows = useMemo(() => {
+    const cells = new Map(matrix.data.map(([x, y, v]) => [`${x}|${y}`, v]))
+    return matrix.contributors.map((contributor, y) => [
+      contributor,
+      ...matrix.repos.map((_, x) => cells.get(`${x}|${y}`) ?? 'No commits')
+    ])
+  }, [matrix])
+
+  const openRepo = (repository) => () => onOpenRepo(repository)
+  const scope = 'show breakdown by repository'
+
+  const cards = [
+    {
+      id: 'adoption',
+      label: 'Copilot adoption',
+      anchor: 'metric-copilot-adoption',
+      family: 'adoption',
+      icon: 'users',
+      value: String(delivery.adoptionPct),
+      unit: '%',
+      sub: `${delivery.adopters} of ${delivery.contributorTotal} contributors`,
+      chart: <ProgressRing value={delivery.adoptionPct} />,
+      drill: {
+        title: 'Copilot adoption by repository',
+        items: repos.map((r) => ({
+          key: r.repository,
+          name: r.name,
+          value: plural(r.contributorCount, 'contributor'),
+          sub: `${r.copilotAssistedCommits} of ${r.totalCommits} commits Copilot-assisted · ${plural(r.prCount, 'pull request')}`,
+          onOpen: openRepo(r.repository)
+        }))
+      }
+    },
+    {
+      id: 'assist',
+      label: 'Commit assist rate',
+      anchor: 'metric-copilot-assist-rate',
+      family: 'assist',
+      icon: 'sparkle',
+      value: String(summary.copilotAssistedRate),
+      unit: '%',
+      sub: `${summary.copilotAssistedCommits} of ${summary.totalCommits} commits`,
+      chart: <ProgressRing value={summary.copilotAssistedRate} />,
+      drill: {
+        title: 'Commit assist rate by repository',
+        items: repos.map((r) => ({
+          key: r.repository,
+          name: r.name,
+          value: `${r.copilotAssistedRate}%`,
+          sub: `${r.copilotAssistedCommits} of ${r.totalCommits} commits · line assist ${r.copilotAssistedLineRate}% · ${plural(r.prCount, 'pull request')}`,
+          pct: r.copilotAssistedRate,
+          onOpen: openRepo(r.repository)
+        }))
+      }
+    },
+    {
+      id: 'linerate',
+      label: 'Line assist rate',
+      anchor: 'metric-copilot-line-rate',
+      family: 'assist',
+      icon: 'code',
+      value: String(summary.copilotAssistedLineRate),
+      unit: '%',
+      sub: `${lines(summary.copilotAssistedLines)} of ${lines(summary.totalLinesTouched)} lines`,
+      chart: <ProgressRing value={summary.copilotAssistedLineRate} />,
+      drill: {
+        title: 'Line assist rate by repository',
+        items: repos.map((r) => ({
+          key: r.repository,
+          name: r.name,
+          value: `${r.copilotAssistedLineRate}%`,
+          sub: `${lines(r.copilotAssistedLines)} Copilot and ${lines(r.humanAuthoredLines)} human-authored of ${lines(r.totalLinesTouched)} lines`,
+          pct: r.copilotAssistedLineRate,
+          onOpen: openRepo(r.repository)
+        }))
+      }
+    },
+    {
+      id: 'leverage',
+      label: 'Copilot Leverage',
+      anchor: 'metric-copilot-leverage',
+      family: 'leverage',
+      icon: 'rocket',
+      ...(leverageData
+        ? {
+            value: leverageData.enoughData
+              ? String(leverageData.overallLeverageScore)
+              : '–',
+            unit: leverageData.enoughData ? '×' : undefined,
+            sub: leverageData.enoughData
+              ? `${leverageData.comparableBands} comparable ${leverageData.comparableBands === 1 ? 'band' : 'bands'} · ${leverageData.sampleSize.adopted} adopted PRs`
+              : 'Not enough comparable pull requests yet'
+          }
+        : {
+            value: String(delivery.copilotLeverage),
+            unit: '%',
+            sub: delivery.leverageFlowAvailable
+              ? `Coverage ${delivery.leverageCoverage}% · adoption ${delivery.leverageAdoption}% · ${delivery.leverageFlowRatio}× faster than baseline`
+              : `Coverage ${delivery.leverageCoverage}% · adoption ${delivery.leverageAdoption}% · no speed baseline yet`
+          }),
+      chart: v2Available ? undefined : (
+        <ProgressRing value={delivery.copilotLeverage} />
+      ),
+      drill: leverageData
+        ? {
+            title: 'Copilot Leverage by repository',
+            ...(onOpenLeverage && {
+              more: { text: 'How this is calculated', onOpen: onOpenLeverage }
+            }),
+            intro: `Compares median PR coding cycle times within each complexity band against the pre-adoption baseline, standardised on the current period’s mix. Read with PR rework ratio: ${delivery.reworkRatio}.`,
+            items: Object.entries(leverageData.bandComparison ?? {}).map(
+              ([band, b]) => ({
+                key: band,
+                name: `Band ${band}`,
+                value: b.comparable ? `${b.speedup}×` : 'Not comparable',
+                sub: `${b.baselineCount} baseline PRs vs ${b.adoptedCount} adopted · median ${b.baselineMedianCycleHours}h vs ${b.adoptedMedianCycleHours}h`,
+                onOpen: onOpenLeverage
+              })
+            )
+          }
+        : {
+            title: 'Copilot Leverage by repository',
+            ...(onOpenLeverage && {
+              more: { text: 'How this is calculated', onOpen: onOpenLeverage }
+            }),
+            intro: `Geometric mean of coverage, efficiency (current Copilot speed against a historical manually-led baseline) and adoption, 0 to 100. Read with PR rework ratio: ${delivery.reworkRatio}.`,
+            items: leverage.repos.map((r) => ({
+              key: r.repository,
+              name: r.name,
+              value: `${r.leveragePct}%`,
+              sub: [
+                `Coverage ${r.coverage}% · efficiency ${r.efficiency}% · adoption ${r.adoption}%`,
+                r.flowAvailable
+                  ? `${r.flowRatio}× faster: median ${formatDuration(r.copilotMedianCycleHours)} now against ${formatDuration(r.baselineMedianCycleHours)} baseline (${r.baselineLocal ? `this repository, ${r.baselineCount} historical PRs` : `portfolio-wide, ${r.baselineCount} PRs`})`
+                  : 'No speed baseline yet'
+              ].join(' · '),
+              pct: r.leveragePct,
+              onOpen: openRepo(r.repository)
+            }))
+          }
+    },
+    {
+      id: 'cycletime',
+      label: 'PR coding cycle time',
+      anchor: 'metric-pr-coding-cycle-time',
+      family: 'speed',
+      icon: 'clock',
+      value: formatDuration(delivery.avgCycleHours),
+      sub: `Average · median ${formatDuration(delivery.medianCycleHours)} · fastest ${formatDuration(delivery.fastestCycleHours)}`,
+      chart: <MiniBars data={repoCycle.map((r) => r.avgCycleHours)} />,
+      drill: {
+        title: 'PR coding cycle time by repository',
+        hint: ': pull request cycle times',
+        items: repoCycle.map((r) => ({
+          key: r.repository,
+          name: r.name,
+          value: formatDuration(r.avgCycleHours),
+          sub: `Fastest ${formatDuration(r.fastest)} · slowest ${formatDuration(r.slowest)} · ${plural(r.prCount, 'pull request')}`,
+          onOpen: () => onOpenRepoCycle(r.repository)
+        }))
+      }
+    },
+    {
+      id: 'rework',
+      label: 'PR rework ratio',
+      anchor: 'metric-pr-rework-ratio',
+      family: 'risk',
+      icon: 'rework',
+      value: String(delivery.reworkRatio),
+      sub: `${lines(delivery.linesDeleted)} deleted per ${lines(delivery.linesAdded)} added`,
+      chart: <MiniBars data={rework.repos.map((r) => r.reworkRatio)} />,
+      drill: {
+        title: 'PR rework ratio by repository',
+        intro:
+          'Lines deleted per line added, per repository, excluding rebase and merge commits. The project ratio weights these by lines added.',
+        items: rework.repos.map((r) => ({
+          key: r.repository,
+          name: r.name,
+          value: String(r.reworkRatio),
+          sub: `${lines(r.linesDeleted)} deleted per ${lines(r.linesAdded)} added · ${plural(r.prCount, 'pull request')}`,
+          onOpen: openRepo(r.repository)
+        }))
+      }
+    },
+    {
+      id: 'batch',
+      label: 'Average batch size',
+      anchor: 'metric-avg-batch-size',
+      family: 'speed',
+      icon: 'box',
+      value: String(delivery.avgCommitSize),
+      unit: 'lines',
+      sub: 'Lines touched per commit',
+      chart: <MiniBars data={repos.map((r) => r.avgCommitSize)} />,
+      drill: {
+        title: 'Average batch size by repository',
+        items: repos.map((r) => ({
+          key: r.repository,
+          name: r.name,
+          value: `${r.avgCommitSize} lines`,
+          sub: `${lines(r.totalLinesTouched)} lines over ${plural(r.totalCommits, 'commit')}`,
+          onOpen: openRepo(r.repository)
+        }))
+      }
+    },
+    {
+      id: 'netlines',
+      label: 'Net lines delivered',
+      anchor: 'metric-net-lines-delivered',
+      family: 'output',
+      icon: 'plusminus',
+      value: lines(delivery.netLines),
+      compact: true,
+      sub: `${lines(delivery.linesAdded)} added minus ${lines(delivery.linesDeleted)} deleted`,
+      chart: <MiniBars data={rework.repos.map((r) => r.netLines)} />,
+      drill: {
+        title: 'Net lines delivered by repository',
+        items: rework.repos.map((r) => ({
+          key: r.repository,
+          name: r.name,
+          value: lines(r.netLines),
+          sub: `${lines(r.linesAdded)} added minus ${lines(r.linesDeleted)} deleted`,
+          onOpen: openRepo(r.repository)
+        }))
+      }
+    }
+  ]
+
+  const isNative = projectType === 'ai-native'
+  const displayCards = isNative
+    ? cards.filter(
+        (c) =>
+          c.id !== 'adoption' &&
+          c.id !== 'commit-assist' &&
+          c.id !== 'line-assist' &&
+          c.id !== 'assist' &&
+          c.id !== 'linerate'
+      )
+    : cards
 
   return (
-    <div className="flex flex-col gap-4">
-      {/* ─────────────── 0 · LIVE COMMIT STREAM ─────────────── */}
-      <SectionHeading hint="Replaying the commit timeline as a simulated live feed">
-        Live commit stream
-      </SectionHeading>
-
-      <Panel
-        title="Commit Stream"
-        subtitle="Lines touched per commit · coloured by Copilot-assisted vs manual · replays the selected time window"
-      >
-        {/* Remount (restart the replay) when the time-window filter changes,
-            but not when live data merely appends to the same window. */}
-        <LiveCommitStream key={windowKey} timeline={timeline} />
-      </Panel>
-
-      {/* ─────────────── 1 · KEY METRICS ─────────────── */}
-      <SectionHeading hint="Portfolio-level headline KPIs">
-        Key Metrics
-      </SectionHeading>
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
-        <KpiCard
-          label="Copilot Adoption"
-          value={delivery.adoptionPct}
-          unit="%"
-          accent="var(--color-success)"
-          icon="◐"
-          footnote={`${delivery.adopters} of ${delivery.contributorTotal} contributors`}
-          info="Share of contributors who made at least one Copilot-assisted commit (Rebase commits excluded)."
-          onClick={() => toggle('adoption')}
-          expanded={openPanel === 'adoption'}
-          controls="accordion-adoption"
-          dimmed={dim('adoption')}
+    <>
+      <section className="app-scope" aria-labelledby={projectId}>
+        <ScopeHeader
+          id={projectId}
+          level="At a glance"
+          icon="layers"
+          title="Key Metrics"
+          meta={`${plural(repos.length, 'repository', 'repositories')} · ${plural(contributors.length, 'contributor')}`}
         />
-        {openPanel === 'adoption' && (
-          <AccordionSection
-            id="accordion-adoption"
-            className="col-span-full"
-            title="Copilot adoption — contributor breakdown"
-            subtitle="How many contributors used Copilot in each repository"
-          >
-            <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
-              {repos.map((r) => (
-                <div
-                  key={r.repository}
-                  className="kpi-card"
-                  style={{ '--kpi-accent': 'var(--color-success)' }}
-                >
-                  <span
-                    className="kpi-card__accent"
-                    aria-hidden="true"
-                    style={{ background: 'var(--color-success)' }}
-                  />
-                  <p
-                    className="m-0 truncate text-xs font-semibold text-[var(--color-text)]"
-                    title={r.name}
-                  >
-                    {r.name}
-                  </p>
-                  <div className="mt-2 grid grid-cols-2 gap-x-4 gap-y-1 text-xs">
-                    <span className="text-[var(--color-text-muted)]">
-                      Contributors
-                    </span>
-                    <span className="text-2xl font-semibold text-[var(--color-success)]">
-                      {r.contributorCount}
-                    </span>
-                    <span className="text-[var(--color-text-muted)]">
-                      Pull requests
-                    </span>
-                    <span className="font-medium text-[var(--color-text)]">
-                      {r.prCount}
-                    </span>
-                    <span className="text-[var(--color-text-muted)]">
-                      Total commits
-                    </span>
-                    <span className="font-medium text-[var(--color-text)]">
-                      {r.totalCommits}
-                    </span>
-                    <span className="text-[var(--color-text-muted)]">
-                      Copilot commits
-                    </span>
-                    <span className="font-medium text-[var(--color-copilot)]">
-                      {r.copilotAssistedCommits}
-                    </span>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </AccordionSection>
-        )}
 
-        <KpiCard
-          label="Avg Cycle Time"
-          value={formatDuration(delivery.avgCycleHours)}
-          accent="var(--color-primary)"
-          icon="⏱"
-          footnote={`Median ${formatDuration(delivery.medianCycleHours)} · fastest ${formatDuration(delivery.fastestCycleHours)}`}
-          info="Average hours from a PR's first commit to its last. Lower means faster delivery."
-          onClick={() => toggle('cycletime')}
-          expanded={openPanel === 'cycletime'}
-          controls="accordion-cycletime"
-          dimmed={dim('cycletime')}
+        <KpiDrillGrid
+          kpis={displayCards}
+          drillId={DRILL_ID}
+          actionText={scope}
         />
-        {openPanel === 'cycletime' && (
-          <AccordionSection
-            id="accordion-cycletime"
-            className="col-span-full"
-            title="Average cycle time — per repository"
-            subtitle="Click a repository to open its pull requests plotted against cycle time"
-          >
-            <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
-              {repoCycle.map((r) => (
-                <button
-                  key={r.repository}
-                  type="button"
-                  onClick={() => onOpenRepoCycle(r.repository)}
-                  className="kpi-card kpi-card--button focus-ring text-left"
-                  style={{ '--kpi-accent': 'var(--color-primary)' }}
-                  aria-label={`Open cycle-time detail for ${r.name}`}
-                >
-                  <span
-                    className="kpi-card__accent"
-                    aria-hidden="true"
-                    style={{ background: 'var(--color-primary)' }}
-                  />
-                  <p
-                    className="m-0 truncate text-xs font-semibold text-[var(--color-text)]"
-                    title={r.name}
-                  >
-                    {r.name}
-                  </p>
-                  <div className="mt-2 grid grid-cols-2 gap-x-4 gap-y-1 text-xs">
-                    <span className="text-[var(--color-text-muted)]">
-                      Avg cycle time
-                    </span>
-                    <span className="text-2xl font-semibold text-[var(--color-primary)]">
-                      {formatDuration(r.avgCycleHours)}
-                    </span>
-                    <span className="text-[var(--color-text-muted)]">
-                      Fastest
-                    </span>
-                    <span className="font-medium text-[var(--color-text)]">
-                      {formatDuration(r.fastest)}
-                    </span>
-                    <span className="text-[var(--color-text-muted)]">
-                      Slowest
-                    </span>
-                    <span className="font-medium text-[var(--color-text)]">
-                      {formatDuration(r.slowest)}
-                    </span>
-                    <span className="text-[var(--color-text-muted)]">
-                      Pull requests
-                    </span>
-                    <span className="font-medium text-[var(--color-text)]">
-                      {r.prCount}
-                    </span>
-                  </div>
-                  <p className="mt-2 text-right text-xs font-medium text-[var(--color-primary)]">
-                    View PR cycle times →
-                  </p>
-                </button>
-              ))}
-            </div>
-          </AccordionSection>
-        )}
 
-        <KpiCard
-          label="Copilot Leverage"
-          value={delivery.copilotLeverage}
-          unit="%"
-          accent="var(--color-info)"
-          icon="⚡"
-          footnote={
-            delivery.leverageFlowAvailable
-              ? `Coverage ${delivery.leverageCoverage}% · Adoption ${delivery.leverageAdoption}% · Copilot ${delivery.leverageFlowRatio}× faster than historical baseline`
-              : `Coverage ${delivery.leverageCoverage}% · Adoption ${delivery.leverageAdoption}% · speed: no baseline yet`
-          }
-          info="0–100 score blending Copilot code coverage, current delivery speed vs. a historical manually-led baseline, and adoption. Read alongside Rework."
-          onClick={() => toggle('leverage')}
-          expanded={openPanel === 'leverage'}
-          controls="accordion-leverage"
-          dimmed={dim('leverage')}
-        />
-        {openPanel === 'leverage' && (
-          <AccordionSection
-            id="accordion-leverage"
-            className="col-span-full"
-            title="Copilot leverage — per repository"
-            subtitle={`Coverage × Efficiency × Adoption (geometric mean, 0–100) · Efficiency = current Copilot speed vs. a historical manually-led baseline · Rework guardrail: ${delivery.reworkRatio}`}
-          >
-            <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
-              {leverage.repos.map((r) => (
-                <div
-                  key={r.repository}
-                  className="kpi-card"
-                  style={{ '--kpi-accent': 'var(--color-info)' }}
-                >
-                  <span
-                    className="kpi-card__accent"
-                    aria-hidden="true"
-                    style={{ background: 'var(--color-info)' }}
-                  />
-                  <p
-                    className="m-0 truncate text-xs font-semibold text-[var(--color-text)]"
-                    title={r.name}
-                  >
-                    {r.name}
-                  </p>
-                  <div className="mt-2 grid grid-cols-2 gap-x-4 gap-y-1 text-xs">
-                    <span className="text-[var(--color-text-muted)]">
-                      Leverage
-                    </span>
-                    <span className="text-2xl font-semibold text-[var(--color-info)]">
-                      {r.leveragePct}%
-                    </span>
-                    <span className="text-[var(--color-text-muted)]">
-                      Coverage
-                    </span>
-                    <span className="font-medium text-[var(--color-text)]">
-                      {r.coverage}%
-                    </span>
-                    <span className="text-[var(--color-text-muted)]">
-                      Efficiency (Flow)
-                    </span>
-                    <span className="font-medium text-[var(--color-text)]">
-                      {r.efficiency}%
-                    </span>
-                    <span className="text-[var(--color-text-muted)]">
-                      Adoption
-                    </span>
-                    <span className="font-medium text-[var(--color-text)]">
-                      {r.adoption}%
-                    </span>
-                    <span className="text-[var(--color-text-muted)]">
-                      Speed vs. baseline
-                    </span>
-                    <span className="font-medium text-[var(--color-copilot)]">
-                      {r.flowAvailable
-                        ? `${r.flowRatio}× faster`
-                        : 'No baseline yet'}
-                    </span>
-                    {r.flowAvailable && (
-                      <>
-                        <span className="text-[var(--color-text-muted)]">
-                          Median cycle (Copilot now / baseline)
-                        </span>
-                        <span className="font-medium text-[var(--color-text)]">
-                          {formatDuration(r.copilotMedianCycleHours)} /{' '}
-                          {formatDuration(r.baselineMedianCycleHours)}
-                        </span>
-                        <span className="text-[var(--color-text-muted)]">
-                          Baseline source
-                        </span>
-                        <span className="font-medium text-[var(--color-text)]">
-                          {r.baselineLocal
-                            ? `This repo (${r.baselineCount} historical PRs)`
-                            : `Portfolio-wide (${r.baselineCount} PRs)`}
-                        </span>
-                      </>
-                    )}
-                  </div>
-                </div>
-              ))}
-            </div>
-          </AccordionSection>
-        )}
-      </div>
-
-      {/* ─────────────── 2 · REPOSITORY METRICS ─────────────── */}
-      <SectionHeading hint="Assist share and delivery quality across the portfolio">
-        Repository Metrics
-      </SectionHeading>
-
-      <div className="grid grid-cols-2 gap-4 lg:grid-cols-3 xl:grid-cols-5">
-        <KpiCard
-          label="Copilot Assist Rate"
-          value={summary.copilotAssistedRate}
-          unit="%"
-          accent="var(--color-copilot)"
-          icon="✦"
-          footnote={`${summary.copilotAssistedCommits} of ${summary.totalCommits} commits`}
-          info="Share of commits that are Copilot-assisted (Rebase/merge commits excluded)."
-          onClick={() => toggle('assist')}
-          expanded={openPanel === 'assist'}
-          controls="accordion-assist"
-          dimmed={dim('assist')}
-        />
-        {openPanel === 'assist' && (
-          <AccordionSection
-            id="accordion-assist"
-            className="col-span-full"
-            title="Copilot assist rate — per repository"
-            subtitle="Commit-level and line-level Copilot assist share · click a repository to drill in"
-          >
-            <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
-              {repos.map((r) => (
-                <button
-                  key={r.repository}
-                  type="button"
-                  onClick={() => onOpenRepo(r.repository)}
-                  className="kpi-card kpi-card--button focus-ring text-left"
-                  style={{ '--kpi-accent': 'var(--color-copilot)' }}
-                  aria-label={`Open ${r.name}`}
-                >
-                  <span
-                    className="kpi-card__accent"
-                    aria-hidden="true"
-                    style={{ background: 'var(--color-copilot)' }}
-                  />
-                  <p
-                    className="m-0 truncate text-xs font-semibold text-[var(--color-text)]"
-                    title={r.name}
-                  >
-                    {r.name}
-                  </p>
-                  <div className="mt-2 grid grid-cols-2 gap-x-4 gap-y-1 text-xs">
-                    <span className="text-[var(--color-text-muted)]">
-                      Commit assist
-                    </span>
-                    <span className="font-semibold text-[var(--color-copilot)]">
-                      {r.copilotAssistedRate}%
-                    </span>
-                    <span className="text-[var(--color-text-muted)]">
-                      Line assist
-                    </span>
-                    <span className="font-semibold text-[var(--color-accent)]">
-                      {r.copilotAssistedLineRate}%
-                    </span>
-                    <span className="text-[var(--color-text-muted)]">
-                      Copilot commits
-                    </span>
-                    <span className="font-medium text-[var(--color-text)]">
-                      {r.copilotAssistedCommits} / {r.totalCommits}
-                    </span>
-                    <span className="text-[var(--color-text-muted)]">
-                      Copilot lines
-                    </span>
-                    <span className="font-medium text-[var(--color-text)]">
-                      {r.copilotAssistedLines.toLocaleString()} /{' '}
-                      {r.totalLinesTouched.toLocaleString()}
-                    </span>
-                    <span className="text-[var(--color-text-muted)]">
-                      Pull requests
-                    </span>
-                    <span className="font-medium text-[var(--color-text)]">
-                      {r.prCount}
-                    </span>
-                  </div>
-                  <p className="mt-2 text-right text-xs font-medium text-[var(--color-primary)]">
-                    View repo →
-                  </p>
-                </button>
-              ))}
-            </div>
-          </AccordionSection>
-        )}
-
-        <KpiCard
-          label="Copilot Line Rate"
-          value={summary.copilotAssistedLineRate}
-          unit="%"
-          accent="var(--color-accent)"
-          icon="≣"
-          footnote={`${summary.copilotAssistedLines.toLocaleString()} of ${summary.totalLinesTouched.toLocaleString()} lines`}
-          info="Share of lines touched by Copilot-assisted commits (Rebase/merge commits excluded)."
-          onClick={() => toggle('linerate')}
-          expanded={openPanel === 'linerate'}
-          controls="accordion-linerate"
-          dimmed={dim('linerate')}
-        />
-        {openPanel === 'linerate' && (
-          <AccordionSection
-            id="accordion-linerate"
-            className="col-span-full"
-            title="Copilot line rate — per repository"
-            subtitle="Lines touched: Copilot-assisted vs manual"
-          >
-            <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
-              {repos.map((r) => (
-                <div
-                  key={r.repository}
-                  className="kpi-card"
-                  style={{ '--kpi-accent': 'var(--color-accent)' }}
-                >
-                  <span
-                    className="kpi-card__accent"
-                    aria-hidden="true"
-                    style={{ background: 'var(--color-accent)' }}
-                  />
-                  <p
-                    className="m-0 truncate text-xs font-semibold text-[var(--color-text)]"
-                    title={r.name}
-                  >
-                    {r.name}
-                  </p>
-                  <div className="mt-2 grid grid-cols-2 gap-x-4 gap-y-1 text-xs">
-                    <span className="text-[var(--color-text-muted)]">
-                      Line assist
-                    </span>
-                    <span className="text-2xl font-semibold text-[var(--color-accent)]">
-                      {r.copilotAssistedLineRate}%
-                    </span>
-                    <span className="text-[var(--color-text-muted)]">
-                      Copilot lines
-                    </span>
-                    <span className="font-medium text-[var(--color-text)]">
-                      {r.copilotAssistedLines.toLocaleString()}
-                    </span>
-                    <span className="text-[var(--color-text-muted)]">
-                      Human-authored lines
-                    </span>
-                    <span className="font-medium text-[var(--color-text)]">
-                      {r.humanAuthoredLines.toLocaleString()}
-                    </span>
-                    <span className="text-[var(--color-text-muted)]">
-                      Total touched
-                    </span>
-                    <span className="font-medium text-[var(--color-text)]">
-                      {r.totalLinesTouched.toLocaleString()}
-                    </span>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </AccordionSection>
-        )}
-
-        <KpiCard
-          label="Avg Batch Size"
-          value={delivery.avgCommitSize}
-          unit="lines"
-          accent="var(--color-warning)"
-          icon="▤"
-          footnote="Lines touched per commit — smaller is safer"
-          info="Average lines touched per commit (Rebase excluded). Smaller commits are easier to review and safer to revert."
-          dimmed={dim('batch')}
-        />
-        <KpiCard
-          label="Rework Ratio"
-          value={delivery.reworkRatio}
-          accent="var(--color-danger)"
-          icon="↺"
-          footnote={`${delivery.linesDeleted.toLocaleString()} deleted / ${delivery.linesAdded.toLocaleString()} added`}
-          info="Lines deleted ÷ lines added (Rebase excluded). Lower means less freshly-added code was rewritten."
-          onClick={() => toggle('rework')}
-          expanded={openPanel === 'rework'}
-          controls="accordion-rework"
-          dimmed={dim('rework')}
-        />
-        {openPanel === 'rework' && (
-          <AccordionSection
-            id="accordion-rework"
-            className="col-span-full"
-            title="Rework ratio — per repository"
-            subtitle="Deleted ÷ added lines, calculated separately per repository (Rebase/merge commits excluded); the portfolio ratio is these values weighted by lines added"
-          >
-            <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
-              {rework.repos.map((r) => (
-                <div
-                  key={r.repository}
-                  className="kpi-card"
-                  style={{ '--kpi-accent': 'var(--color-danger)' }}
-                >
-                  <span
-                    className="kpi-card__accent"
-                    aria-hidden="true"
-                    style={{ background: 'var(--color-danger)' }}
-                  />
-                  <p
-                    className="m-0 truncate text-xs font-semibold text-[var(--color-text)]"
-                    title={r.name}
-                  >
-                    {r.name}
-                  </p>
-                  <div className="mt-2 grid grid-cols-2 gap-x-4 gap-y-1 text-xs">
-                    <span className="text-[var(--color-text-muted)]">
-                      Rework ratio
-                    </span>
-                    <span className="text-2xl font-semibold text-[var(--color-danger)]">
-                      {r.reworkRatio}
-                    </span>
-                    <span className="text-[var(--color-text-muted)]">
-                      Lines added
-                    </span>
-                    <span className="font-medium text-[var(--color-text)]">
-                      {r.linesAdded.toLocaleString()}
-                    </span>
-                    <span className="text-[var(--color-text-muted)]">
-                      Lines deleted
-                    </span>
-                    <span className="font-medium text-[var(--color-text)]">
-                      {r.linesDeleted.toLocaleString()}
-                    </span>
-                    <span className="text-[var(--color-text-muted)]">
-                      Pull requests
-                    </span>
-                    <span className="font-medium text-[var(--color-text)]">
-                      {r.prCount}
-                    </span>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </AccordionSection>
-        )}
-        <KpiCard
-          label="Net Lines Delivered"
-          value={delivery.netLines.toLocaleString()}
-          accent="var(--color-success)"
-          icon="Σ"
-          footnote={`${delivery.linesAdded.toLocaleString()} added − ${delivery.linesDeleted.toLocaleString()} deleted`}
-          info="Lines added minus lines deleted across non-Rebase commits — the net code delivered."
-          onClick={() => toggle('netlines')}
-          expanded={openPanel === 'netlines'}
-          controls="accordion-netlines"
-          dimmed={dim('netlines')}
-        />
-        {openPanel === 'netlines' && (
-          <AccordionSection
-            id="accordion-netlines"
-            className="col-span-full"
-            title="Net lines delivered — per repository"
-            subtitle="Net lines = lines added − lines deleted, per repository (Rebase/merge commits excluded)"
-          >
-            <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
-              {rework.repos.map((r) => (
-                <div
-                  key={r.repository}
-                  className="kpi-card"
-                  style={{ '--kpi-accent': 'var(--color-success)' }}
-                >
-                  <span
-                    className="kpi-card__accent"
-                    aria-hidden="true"
-                    style={{ background: 'var(--color-success)' }}
-                  />
-                  <p
-                    className="m-0 truncate text-xs font-semibold text-[var(--color-text)]"
-                    title={r.name}
-                  >
-                    {r.name}
-                  </p>
-                  <div className="mt-2 grid grid-cols-2 gap-x-4 gap-y-1 text-xs">
-                    <span className="text-[var(--color-text-muted)]">
-                      Net lines
-                    </span>
-                    <span className="text-2xl font-semibold text-[var(--color-success)]">
-                      {(r.linesAdded - r.linesDeleted).toLocaleString()}
-                    </span>
-                    <span className="text-[var(--color-text-muted)]">
-                      Added
-                    </span>
-                    <span className="font-medium text-[var(--color-text)]">
-                      +{r.linesAdded.toLocaleString()}
-                    </span>
-                    <span className="text-[var(--color-text-muted)]">
-                      Deleted
-                    </span>
-                    <span className="font-medium text-[var(--color-text)]">
-                      −{r.linesDeleted.toLocaleString()}
-                    </span>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </AccordionSection>
-        )}
-      </div>
-
-      {/* Composition donuts */}
-      <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-        <Panel title="Commit Composition" subtitle="Across all repositories">
-          <DistributionDonut
-            title="Commit Composition"
-            data={[
-              {
-                name: 'Copilot-assisted',
-                value: summary.copilotAssistedCommits
-              },
-              { name: 'Human-authored', value: summary.humanAuthoredCommits }
+        <div className="govuk-!-margin-top-6">
+          <ChartFigure
+            number={1}
+            title="Live commit stream"
+            subtitle="Lines touched per counted commit, Copilot-assisted and human-authored, replayed in order across the selected period"
+            description={`${summary.copilotAssistedCommits} of ${summary.totalCommits} counted commits were Copilot-assisted (purple circles) and ${summary.humanAuthoredCommits} were human-authored (orange diamonds). Rebase and merge commits are excluded.`}
+            family="adoption"
+            icon="commit"
+            actions={
+              <LiveStreamControls
+                paused={streamPaused}
+                onToggle={toggleStreamPaused}
+              />
+            }
+            columns={[
+              { id: 'commit', label: 'Commit' },
+              { id: 'repo', label: 'Repository' },
+              { id: 'pr', label: 'Pull request' },
+              { id: 'class', label: 'Classification' },
+              { id: 'lines', label: 'Lines touched', numeric: true }
             ]}
-          />
-        </Panel>
-        <Panel title="Line Composition" subtitle="Across all repositories">
-          <DistributionDonut
-            title="Line Composition"
-            data={[
-              { name: 'Copilot-assisted', value: summary.copilotAssistedLines },
-              { name: 'Human-authored', value: summary.humanAuthoredLines }
-            ]}
-          />
-        </Panel>
-      </div>
-
-      {/* ─────────────── PERSONA / ROLE INSIGHTS ─────────────── */}
-      <SectionHeading hint="Copilot impact grouped by each contributor's role">
-        Persona / role insights
-      </SectionHeading>
-
-      <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
-        {personas.map((persona) => (
-          <section
-            key={persona.id}
-            className="kpi-card"
-            style={{ '--kpi-accent': persona.accent }}
-            aria-label={`${persona.label} — Copilot delivery metrics`}
+            rows={timeline.map((c) => [
+              c.commit,
+              c.repoName,
+              `#${c.prNumber}`,
+              c.classification,
+              c.linesTouched
+            ])}
           >
-            <span
-              className="kpi-card__accent"
-              aria-hidden="true"
-              style={{ background: persona.accent }}
+            <LiveCommitStream
+              key={windowKey}
+              timeline={timeline}
+              paused={streamPaused}
             />
-            <div className="flex items-center justify-between gap-2">
-              <div className="flex items-center gap-2">
-                <span
-                  aria-hidden="true"
-                  className="text-lg font-semibold"
-                  style={{ color: persona.accent }}
-                >
-                  {persona.icon}
-                </span>
-                <p className="m-0 text-sm font-semibold text-[var(--color-text)]">
-                  {persona.label}
-                </p>
-              </div>
-              <span
-                className="pill"
-                style={{ color: persona.accent, borderColor: persona.accent }}
-              >
-                {persona.repoCount} {persona.repoCount === 1 ? 'repo' : 'repos'}
-              </span>
-            </div>
+          </ChartFigure>
+        </div>
 
-            {persona.repoCount === 0 || persona.totalCommits === 0 ? (
-              <p className="mt-3 text-xs text-[var(--color-text-muted)]">
-                No activity from this role in the selected window.
-              </p>
-            ) : (
-              <>
-                <div className="mt-3 grid grid-cols-2 gap-x-4 gap-y-2 text-xs">
-                  <span className="text-[var(--color-text-muted)]">
-                    Copilot adoption
-                  </span>
-                  <span
-                    className="text-2xl font-semibold tabular-nums"
-                    style={{ color: persona.accent }}
-                  >
-                    {persona.adoptionPct}%
-                  </span>
-                  <span className="text-[var(--color-text-muted)]">
-                    Commit assist rate
-                  </span>
-                  <span className="font-semibold tabular-nums text-[var(--color-copilot)]">
-                    {persona.copilotAssistedRate}%
-                  </span>
-                  <span className="text-[var(--color-text-muted)]">
-                    Line assist rate
-                  </span>
-                  <span className="font-semibold tabular-nums text-[var(--color-accent)]">
-                    {persona.copilotAssistedLineRate}%
-                  </span>
-                  <span className="text-[var(--color-text-muted)]">
-                    Contributors (adopters)
-                  </span>
-                  <span className="font-medium tabular-nums text-[var(--color-text)]">
-                    {persona.contributorCount} ({persona.adopters})
-                  </span>
-                  <span className="text-[var(--color-text-muted)]">
-                    Pull requests
-                  </span>
-                  <span className="font-medium tabular-nums text-[var(--color-text)]">
-                    {persona.prCount}
-                  </span>
-                  <span className="text-[var(--color-text-muted)]">
-                    Copilot commits
-                  </span>
-                  <span className="font-medium tabular-nums text-[var(--color-text)]">
-                    {persona.copilotAssistedCommits} / {persona.totalCommits}
-                  </span>
-                  <span className="text-[var(--color-text-muted)]">
-                    Net lines delivered
-                  </span>
-                  <span className="font-medium tabular-nums text-[var(--color-text)]">
-                    {persona.netLines.toLocaleString()}
-                  </span>
-                  <span className="text-[var(--color-text-muted)]">
-                    Avg cycle time
-                  </span>
-                  <span className="font-medium tabular-nums text-[var(--color-text)]">
-                    {formatDuration(persona.avgCycleHours)}
-                  </span>
-                </div>
-                <p
-                  className="mt-3 truncate text-xs text-[var(--color-text-faint)]"
-                  title={persona.repoNames.join(', ')}
-                >
-                  {persona.repoNames.join(' · ')}
-                </p>
-              </>
-            )}
-          </section>
-        ))}
-      </div>
+        <Subsection title="Adoption" family="assist" icon="sparkle">
+          <div className="app-grid">
+            <ChartFigure
+              number={2}
+              title="Commit composition"
+              subtitle="Counted commits by classification, selected period"
+              description={`${summary.copilotAssistedCommits} of ${summary.totalCommits} commits (${summary.copilotAssistedRate}%) were Copilot-assisted. Rebase and merge commits are excluded.`}
+              family="assist"
+              icon="donut"
+              chip={PERIOD_CHIP}
+              headingLevel={4}
+              className="app-span-6"
+              columns={[
+                { id: 'class', label: 'Classification' },
+                { id: 'commits', label: 'Commits', numeric: true }
+              ]}
+              rows={
+                summary.totalCommits
+                  ? [
+                      ['Copilot-assisted', summary.copilotAssistedCommits],
+                      ['Human-authored', summary.humanAuthoredCommits]
+                    ]
+                  : []
+              }
+            >
+              <DistributionDonut
+                title="Commit composition"
+                data={[
+                  {
+                    name: 'Copilot-assisted',
+                    value: summary.copilotAssistedCommits
+                  },
+                  {
+                    name: 'Human-authored',
+                    value: summary.humanAuthoredCommits
+                  }
+                ]}
+              />
+            </ChartFigure>
+            <ChartFigure
+              number={3}
+              title="Line composition"
+              subtitle="Lines touched by classification, selected period"
+              description={`${lines(summary.copilotAssistedLines)} of ${lines(summary.totalLinesTouched)} lines touched (${summary.copilotAssistedLineRate}%) were in Copilot-assisted commits.`}
+              family="assist"
+              icon="donut"
+              chip={PERIOD_CHIP}
+              headingLevel={4}
+              className="app-span-6"
+              columns={[
+                { id: 'class', label: 'Classification' },
+                { id: 'lines', label: 'Lines touched', numeric: true }
+              ]}
+              rows={
+                summary.totalLinesTouched
+                  ? [
+                      ['Copilot-assisted', summary.copilotAssistedLines],
+                      ['Human-authored', summary.humanAuthoredLines]
+                    ]
+                  : []
+              }
+            >
+              <DistributionDonut
+                title="Line composition"
+                data={[
+                  {
+                    name: 'Copilot-assisted',
+                    value: summary.copilotAssistedLines
+                  },
+                  { name: 'Human-authored', value: summary.humanAuthoredLines }
+                ]}
+              />
+            </ChartFigure>
+          </div>
+        </Subsection>
 
-      {/* ─────────────── 2 · CODE QUALITY ─────────────── */}
-      <SonarPortfolioPanel onOpenRepo={onOpenRepo} />
-
-      {/* ─────────────── 3 · REPOSITORY-LEVEL INSIGHTS ─────────────── */}
-      <SectionHeading hint="Drill into a repository to see its pull requests">
-        Repository-level insights
-      </SectionHeading>
-
-      <Panel
-        title="Repository Delivery Profile"
-        subtitle="Each axis normalised to 0–100 (higher is better) · click a repository to drill in"
-      >
-        <ProfileRadar
-          title="Repository delivery profile"
-          subtitle="Commit assist, line assist, adoption, delivery speed and rework control per repository."
-          indicators={repoProfiles.indicators}
-          series={repoProfiles.repos}
-          onSelect={(key) => onOpenRepo(key)}
+        <CopilotUsagePanel
+          usage={usage}
+          insightsHref={insightsHref}
+          headingLevel={3}
+          meta="Model level, never per person"
         />
-      </Panel>
 
-      <Panel
-        title="Assist Rate by Repository"
-        subtitle="Click a repository to drill into its pull requests"
+        {jiraConnected ? (
+          <DeliverySnapshot
+            delivery={jiraDelivery}
+            payloads={payloads}
+            window={deliveryWindow}
+            deliveryHref={deliveryHref}
+            onOpenTicket={onOpenTicket}
+            onOpenPR={onOpenPR}
+          />
+        ) : (
+          <JiraHiddenNotice canAdminister={canAdminister} />
+        )}
+
+        <Subsection
+          title="Personas"
+          family="output"
+          icon="users"
+          meta="Mapped in Settings"
+        >
+          <div className="app-kpi-grid app-kpi-grid--3">
+            {personas.map((persona) => (
+              <PersonaPanel
+                key={persona.id}
+                persona={persona}
+                state={personaPanelState(personaStatus)}
+              />
+            ))}
+          </div>
+        </Subsection>
+      </section>
+
+      <section
+        className="app-scope"
+        id="repositories"
+        aria-labelledby={reposId}
       >
-        <CategoryBar
-          title="Assist Rate by Repository"
-          categories={repos.map((r) => r.name)}
-          values={repos.map((r) => r.copilotAssistedRate)}
-          seriesName="assist rate"
-          unit="%"
-          colorByValue
-          onSelect={(i) => onOpenRepo(repos[i].repository)}
+        <ScopeHeader
+          id={reposId}
+          level="Compare"
+          icon="repo"
+          title="Repositories"
+          meta="Select a repository to see its pull requests"
         />
-      </Panel>
 
-      {/* ─────────────── 3 · CONTRIBUTOR-LEVEL INSIGHTS ─────────────── */}
-      <SectionHeading hint="Click a contributor to see their PRs across repositories">
-        Contributor-level insights
-      </SectionHeading>
+        <Panel
+          title="Repository comparison"
+          family="speed"
+          icon="grid"
+          aside={<PeriodChip />}
+          className="app-compare"
+        >
+          <PanelState
+            state={comparison.length ? 'populated' : 'empty'}
+            title="Repository comparison"
+            icon="repo"
+          >
+            <Table
+              className="govuk-!-margin-bottom-0"
+              caption="Repository comparison for the selected period"
+              captionHidden
+              head={[
+                { id: 'repo', label: 'Repository' },
+                { id: 'prs', label: 'Pull requests', numeric: true },
+                { id: 'assist', label: 'Commit assist rate' },
+                { id: 'line', label: 'Line assist rate', numeric: true },
+                { id: 'cycle', label: 'PR coding cycle time', numeric: true },
+                { id: 'rework', label: 'PR rework ratio', numeric: true }
+              ]}
+              rows={comparison.map((r) => ({
+                id: r.repository,
+                cells: [
+                  <OpenButton key="name" onClick={openRepo(r.repository)}>
+                    {r.name}
+                  </OpenButton>,
+                  r.prCount,
+                  <span key="assist" className="app-family--assist">
+                    <Meter value={r.copilotAssistedRate} />
+                    {r.copilotAssistedRate}%
+                  </span>,
+                  `${r.copilotAssistedLineRate}%`,
+                  formatDuration(r.avgCycleHours),
+                  r.reworkRatio
+                ]
+              }))}
+            />
+          </PanelState>
+        </Panel>
 
-      <Panel
-        title="Assist Rate by Contributor"
-        subtitle="Click a contributor to see their PRs across repos"
-      >
-        <CategoryBar
-          title="Assist Rate by Contributor"
-          categories={contributors.map((c) => c.contributor)}
-          values={contributors.map((c) => c.copilotAssistedRate)}
-          seriesName="assist rate"
-          unit="%"
-          colorByValue
-          onSelect={(i) => onOpenContributor(contributors[i].contributor)}
-        />
-      </Panel>
+        <div className="app-grid govuk-!-margin-top-5">
+          <ChartFigure
+            number={4}
+            title="Commit assist rate by repository"
+            subtitle="Commit assist rate by repository, percentage, selected period"
+            description={
+              repos.length
+                ? `${repos[0].name} has the highest commit assist rate at ${repos[0].copilotAssistedRate}%; ${repos.at(-1).name} the lowest at ${repos.at(-1).copilotAssistedRate}%.`
+                : undefined
+            }
+            family="assist"
+            icon="bars"
+            chip={PERIOD_CHIP}
+            className="app-span-6"
+            columns={[
+              { id: 'repo', label: 'Repository' },
+              { id: 'rate', label: 'Commit assist rate (%)', numeric: true }
+            ]}
+            rows={repos.map((r) => [r.name, r.copilotAssistedRate])}
+          >
+            <CategoryBar
+              title="Commit assist rate by repository"
+              categories={repos.map((r) => r.name)}
+              values={repos.map((r) => r.copilotAssistedRate)}
+              seriesName="commit assist rate"
+              unit="%"
+              colorByValue
+              hideCategoryLabels
+              showSelectList={false}
+              onSelect={(i) => onOpenRepo(repos[i].repository)}
+            />
+          </ChartFigure>
 
-      {/* ─────────────── 4 · CONTRIBUTOR × REPOSITORY HEATMAP ─────────────── */}
-      <SectionHeading hint="Spot adoption gaps across the team">
-        Contributor × repository heatmap
-      </SectionHeading>
+          <ChartFigure
+            number={5}
+            title="Repository delivery profile"
+            subtitle="Repository profile scores from 0 to 100, where higher is better, selected period"
+            description="Each axis is normalised to 0 to 100: commit assist, line assist, adoption, delivery speed and rework control."
+            family="leverage"
+            icon="radar"
+            chip={PERIOD_CHIP}
+            className="app-span-6"
+            columns={[
+              { id: 'dim', label: 'Dimension' },
+              ...repoProfiles.repos.map((r) => ({
+                id: r.key,
+                label: `${r.name} (score)`,
+                numeric: true
+              }))
+            ]}
+            rows={
+              repoProfiles.repos.length
+                ? repoProfiles.indicators.map((ind, i) => [
+                    ind.name,
+                    ...repoProfiles.repos.map((r) => r.values[i])
+                  ])
+                : []
+            }
+          >
+            <ProfileRadar
+              title="Repository delivery profile"
+              subtitle="Commit assist, line assist, adoption, delivery speed and rework control per repository."
+              indicators={repoProfiles.indicators}
+              series={repoProfiles.repos}
+              onSelect={(key) => onOpenRepo(key)}
+            />
+          </ChartFigure>
 
-      <Panel
-        title="Contributor × Repository"
-        subtitle="Assist rate heatmap — green means higher Copilot adoption, pale blue means lower"
-      >
-        <ActivityHeatmap
-          title="Assist rate by contributor and repository"
-          xLabels={matrix.repos}
-          yLabels={matrix.contributors}
-          data={matrix.data}
-        />
-      </Panel>
-    </div>
+          <ChartFigure
+            number={6}
+            title="Assist Rate by Contributor and Repository"
+            subtitle="Commit assist rate by contributor and repository, percentage, selected period. Blank cells mean no commits."
+            family="leverage"
+            icon="grid"
+            chip={PERIOD_CHIP}
+            className="app-span-12"
+            columns={[
+              { id: 'who', label: 'Contributor' },
+              ...matrix.repos.map((name) => ({
+                id: name,
+                label: `${name} (%)`,
+                numeric: true
+              }))
+            ]}
+            rows={heatmapRows}
+          >
+            <ActivityHeatmap
+              title="Commit assist rate by contributor and repository"
+              xLabels={matrix.repos}
+              yLabels={matrix.contributors}
+              data={matrix.data}
+              onSelectContributor={onOpenContributor}
+              onSelectCell={(repoName, contributor) =>
+                onOpenContributor(contributor, repoByName.get(repoName))
+              }
+            />
+          </ChartFigure>
+        </div>
+
+        <div className="govuk-!-margin-top-6">
+          <SonarPortfolioPanel
+            projectSlug={projectSlug}
+            onOpenRepo={onOpenRepo}
+            asOf={sonarAsOf}
+          />
+        </div>
+        {sprintWindows?.length > 0 && (
+          <div className="govuk-!-margin-top-6">
+            <SonarSprintTrend
+              projectSlug={projectSlug}
+              sprints={sprintWindows}
+              number={7}
+            />
+          </div>
+        )}
+      </section>
+    </>
   )
 }

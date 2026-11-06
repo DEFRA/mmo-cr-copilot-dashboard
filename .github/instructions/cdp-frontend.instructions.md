@@ -41,8 +41,9 @@ handler: (request, h) =>
 
 ## Ingest
 
-`POST /api/ingest` is the only write path. It authenticates with a shared secret in `x-ingest-token`,
-compared in constant time, then forwards the body to the backend. Validation lives in the backend so
+`POST /api/ingest` is the only write path. It authenticates the caller with a GitHub Actions OIDC
+bearer token (ADR 0003) — there is no per-repository secret — then forwards the body to the backend
+with the service-to-service `x-ingest-token`, compared in constant time. Validation lives in the backend so
 there is one source of truth for the contract — do not duplicate the schema here.
 
 Cap the body size with `payload.maxBytes` and restrict `payload.allow` to `application/json`.

@@ -1,67 +1,45 @@
-import { getPalette, deltaColor } from './palette.js'
+import { APP_FAMILIES, getAppPalette, getMotionDuration } from './palette.js'
 
 const setToken = (key, value) =>
   document.documentElement.style.setProperty(key, value)
 
-describe('#getPalette', () => {
-  test('Should read every semantic token from the document root', () => {
-    setToken('--color-primary', '#3b82f6')
+describe('#getAppPalette', () => {
+  test('Should read the app tokens, families and categorical palette', () => {
+    setToken('--app-colour-text', '#0b0c0c')
+    setToken('--app-colour-copilot', '#4c2c92')
+    setToken('--app-colour-human', '#d9621a')
+    setToken('--app-colour-assist', '#28a197')
+    setToken('--app-colour-assist-ink', '#0b6e65')
+    setToken('--app-colour-assist-tint', '#e5f5f3')
+    setToken('--app-chart-1', '#12436d')
 
-    expect(getPalette().primary).toBe('#3b82f6')
-  })
+    const palette = getAppPalette()
 
-  test('Should expose the categorical, sequential, diverging and heat scales', () => {
-    const palette = getPalette()
-
-    expect(palette.categorical).toHaveLength(10)
-    expect(palette.sequential).toHaveLength(5)
-    expect(palette.diverging).toHaveLength(3)
-    expect(palette.heat).toHaveLength(5)
-  })
-
-  test('Should convert oklch tokens to rgb, which ECharts can interpolate', () => {
-    setToken('--color-copilot', 'oklch(0.5 0 0)')
-
-    expect(getPalette().copilot).toMatch(/^rgb\(\d+, \d+, \d+\)$/)
-  })
-
-  test('Should preserve alpha when converting oklch', () => {
-    setToken('--color-copilot', 'oklch(0.5 0 0 / 0.5)')
-
-    expect(getPalette().copilot).toMatch(/^rgba\(\d+, \d+, \d+, 0\.5\)$/)
-  })
-
-  test('Should accept a percentage lightness', () => {
-    setToken('--color-copilot', 'oklch(50% 0 0)')
-
-    expect(getPalette().copilot).toMatch(/^rgb\(/)
-  })
-
-  test('Should pass non-oklch values through unchanged', () => {
-    setToken('--color-manual', '#64748b')
-
-    expect(getPalette().manual).toBe('#64748b')
-  })
-
-  test('Should return an empty string for a token that is not defined', () => {
-    setToken('--color-manual', '')
-
-    expect(getPalette().manual).toBe('')
+    expect(palette.text).toBe('#0b0c0c')
+    expect(palette.copilot).toBe('#4c2c92')
+    expect(palette.human).toBe('#d9621a')
+    expect(palette.family.assist).toStrictEqual({
+      band: '#28a197',
+      ink: '#0b6e65',
+      tint: '#e5f5f3'
+    })
+    expect(palette.categorical).toHaveLength(6)
+    expect(palette.categorical[0]).toBe('#12436d')
+    expect(Object.keys(palette.family)).toStrictEqual(APP_FAMILIES)
+    expect(palette.font).toMatch(/^Arial/)
   })
 })
 
-describe('#deltaColor', () => {
-  const palette = { diverging: ['negative', 'neutral', 'positive'] }
+describe('#getMotionDuration', () => {
+  test('Should read the motion duration token in milliseconds', () => {
+    setToken('--app-motion-duration', '240ms')
 
-  test('Should use the positive end of the scale for a gain', () => {
-    expect(deltaColor(10, palette)).toBe('positive')
+    expect(getMotionDuration()).toBe(240)
   })
 
-  test('Should use the negative end of the scale for a loss', () => {
-    expect(deltaColor(-10, palette)).toBe('negative')
-  })
+  test('Should be 0 when the token is missing', () => {
+    document.documentElement.style.removeProperty('--app-motion-duration')
 
-  test('Should use the midpoint for no change', () => {
-    expect(deltaColor(0, palette)).toBe('neutral')
+    expect(getMotionDuration()).toBe(0)
   })
 })

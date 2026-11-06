@@ -17,6 +17,15 @@ describe('#loggerOptions', () => {
     expect(Array.isArray(loggerOptions.redact.paths)).toBe(true)
   })
 
+  test('Should redact credential headers outside production', () => {
+    expect(loggerOptions.redact.paths).toEqual(
+      expect.arrayContaining([
+        'req.headers.authorization',
+        'req.headers.cookie'
+      ])
+    )
+  })
+
   test('Should return trace ID in mixin when available', () => {
     vi.mocked(getTraceId).mockReturnValue('trace-xyz-123')
 

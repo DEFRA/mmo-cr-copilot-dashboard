@@ -1,0 +1,32 @@
+{
+  "schema": "ai-attribution-file/2",
+  "path": "src/client/components/ModelLeaderboardPanel.jsx",
+  "added": 13,
+  "counts": {
+    "aiCompletion": 0,
+    "aiChat": 0,
+    "aiAgent": 13,
+    "aiModified": 0,
+    "pasted": 0,
+    "typed": 0,
+    "untracked": 0
+  },
+  "ranges": {
+    "ai-agent": "2-3,9-11,61,63-67,70-71"
+  },
+  "ai": [
+    [2, "a", "389199ff", 0],
+    [3, "a", "4fe080ad", 0],
+    [9, "a", "a438421a", 0],
+    [10, "a", "5a9c0394", 0],
+    [11, "a", "2d177792", 0],
+    [61, "a", "0ebe7f90", 0],
+    [63, "a", "bddfb2dc", 0],
+    [64, "a", "c34f98a1", 0],
+    [65, "a", "b7a5f191", 0],
+    [66, "a", "3c2353aa", 0],
+    [67, "a", "481a7b53", 0],
+    [70, "a", "c4d6dce0", 0],
+    [71, "a", "871b2681", 0]
+  ]
+}

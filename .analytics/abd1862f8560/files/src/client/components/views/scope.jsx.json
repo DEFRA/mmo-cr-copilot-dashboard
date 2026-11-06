@@ -1,0 +1,28 @@
+{
+  "schema": "ai-attribution-file/2",
+  "path": "src/client/components/views/scope.jsx",
+  "added": 9,
+  "counts": {
+    "aiCompletion": 0,
+    "aiChat": 0,
+    "aiAgent": 9,
+    "aiModified": 0,
+    "pasted": 0,
+    "typed": 0,
+    "untracked": 0
+  },
+  "ranges": {
+    "ai-agent": "15-23"
+  },
+  "ai": [
+    [15, "a", "f0fca789", 0],
+    [16, "a", "af4a6492", 0],
+    [17, "a", "89228ebf", 0],
+    [18, "a", "78374b86", 0],
+    [19, "a", "e072cb05", 0],
+    [20, "a", "eb43d8df", 0],
+    [21, "a", "8e98e3e8", 0],
+    [22, "a", "ee44a98c", 0],
+    [23, "a", "9845a6a3", 0]
+  ]
+}

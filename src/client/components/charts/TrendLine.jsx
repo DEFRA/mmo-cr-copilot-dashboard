@@ -1,79 +1,69 @@
 import { useMemo } from 'react'
 import { Chart } from './Chart'
-import echarts from '../../lib/echarts'
-import { getPalette } from '../../lib/palette'
+import { getAppPalette } from '../../lib/palette'
+import {
+  LINE_TYPES,
+  SYMBOLS,
+  categoryAxis,
+  textStyle,
+  tooltip,
+  valueAxis
+} from '../../lib/chart-style'
+
+const MAX_TREND_LINES = 4
 
 /**
- * Multi-series area/line chart for trends over time (e.g. assist-rate per PR
- * chronologically). Gradient area fill emphasises volume/trajectory.
+ * Line chart for trends over time. Plots at most four series, each with its
+ * own dash and marker plus a direct end label instead of a legend.
  */
 export function TrendLine({
   categories,
   series,
   title,
   unit = '',
-  theme,
   height = 320
 }) {
   const option = useMemo(() => {
-    const p = getPalette()
+    const p = getAppPalette()
     const colorFor = (token, i) =>
-      ({ copilot: p.copilot, accent: p.accent, success: p.success })[token] ??
-      p.categorical[i % p.categorical.length]
+      ({
+        copilot: p.copilot,
+        accent: p.family.leverage.band,
+        success: p.family.adoption.band
+      })[token] ?? p.categorical[i % p.categorical.length]
     return {
-      grid: { left: 44, right: 24, top: 32, bottom: 56 },
-      legend: { top: 0, textStyle: { color: p.textMuted }, icon: 'roundRect' },
-      tooltip: {
-        trigger: 'axis',
-        backgroundColor: p.surface2,
-        borderColor: p.border,
-        textStyle: { color: p.text }
-      },
-      xAxis: {
-        type: 'category',
-        boundaryGap: false,
-        data: categories,
-        axisLabel: {
-          color: p.text,
-          rotate: categories.length > 6 ? 30 : 0,
-          hideOverlap: true,
-          fontSize: 11
-        },
-        axisLine: { lineStyle: { color: p.borderStrong } }
-      },
-      yAxis: {
-        type: 'value',
+      grid: { left: 8, right: 120, top: 32, bottom: 8, containLabel: true },
+      tooltip: tooltip(p, { trigger: 'axis' }),
+      xAxis: categoryAxis(p, categories, { boundaryGap: false }),
+      yAxis: valueAxis(p, unit ? `(${unit})` : '', {
         max: 100,
-        axisLabel: {
-          color: p.textMuted,
-          formatter: unit ? `{value}${unit}` : '{value}',
-          fontSize: 11
-        },
-        splitLine: { lineStyle: { color: p.border, opacity: 0.6 } }
-      },
-      series: series.map((s, i) => {
+        axisLabel: textStyle(p, {
+          color: p.muted,
+          formatter: unit ? `{value}${unit}` : '{value}'
+        })
+      }),
+      series: series.slice(0, MAX_TREND_LINES).map((s, i) => {
         const color = colorFor(s.colorToken, i)
         return {
           name: s.name,
           type: 'line',
-          smooth: true,
-          symbol: 'circle',
-          symbolSize: 7,
-          lineStyle: { width: 3, color },
-          itemStyle: { color },
-          areaStyle: {
-            opacity: 0.22,
-            color: new echarts.graphic.LinearGradient(0, 0, 0, 1, [
-              { offset: 0, color },
-              { offset: 1, color: 'transparent' }
-            ])
-          },
+          symbol: SYMBOLS[i],
+          symbolSize: 8,
+          lineStyle: { width: 3, color, type: LINE_TYPES[i] },
+          itemStyle: { color, borderColor: p.white, borderWidth: 1 },
+          endLabel: textStyle(p, {
+            show: true,
+            formatter: '{a}',
+            fontWeight: 'bold',
+            distance: 8
+          }),
+          labelLayout: { moveOverlap: 'shiftY' },
+          emphasis: { focus: 'series' },
           data: s.data
         }
       })
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [categories, series, unit, theme])
+  }, [categories, series, unit])
 
   return (
     <Chart

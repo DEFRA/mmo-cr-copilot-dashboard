@@ -1,9 +1,93 @@
 {% extends 'layouts/page.njk' %}
 
+{% block head %}
+  <link rel="stylesheet" href="{{ assetPath }}/error-page.css" />
+{% endblock %}
+
 {% block content %}
-  <main class="error-page">
-    <h1>{{ heading }}</h1>
-    <p>{{ message }}</p>
-    <p><a href="/">Go to the dashboard</a></p>
+  <main class="app-error app-error--{{ kind }}" id="main-content">
+    <div class="app-error__scene" aria-hidden="true">
+      <svg class="app-error__art" viewBox="0 0 640 360" focusable="false" preserveAspectRatio="xMidYMax slice">
+        <defs>
+          <linearGradient id="app-error-sky" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0" class="app-error__sky-top" />
+            <stop offset="1" class="app-error__sky-bottom" />
+          </linearGradient>
+          <linearGradient id="app-error-beam" x1="0" y1="0" x2="1" y2="0">
+            <stop offset="0" class="app-error__beam-start" />
+            <stop offset="1" class="app-error__beam-end" />
+          </linearGradient>
+        </defs>
+
+        <rect width="640" height="360" fill="url(#app-error-sky)" />
+
+        <g class="app-error__stars">
+          <circle cx="60" cy="40" r="1.6" /><circle cx="140" cy="80" r="1.2" />
+          <circle cx="230" cy="30" r="1.4" /><circle cx="330" cy="62" r="1" />
+          <circle cx="420" cy="26" r="1.6" /><circle cx="520" cy="70" r="1.2" />
+          <circle cx="600" cy="36" r="1.4" /><circle cx="270" cy="110" r="1" />
+        </g>
+        <circle class="app-error__moon" cx="560" cy="64" r="22" />
+
+        <g class="app-error__rain">
+          <path d="M80 0 l-12 40 M200 -30 l-12 40 M320 10 l-12 40 M440 -20 l-12 40 M560 0 l-12 40" />
+        </g>
+
+        {# The beam pivots on the lamp at (120, 168). #}
+        <g class="app-error__beam">
+          <path d="M120 168 L640 110 L640 226 Z" fill="url(#app-error-beam)" />
+        </g>
+
+        <g class="app-error__lighthouse">
+          <path class="app-error__tower" d="M104 290 L112 180 H128 L136 290 Z" />
+          <path class="app-error__stripe" d="M108.6 240 H131.4 L132.6 256 H107.4 Z" />
+          <path class="app-error__stripe" d="M111 205 H129 L129.9 219 H110.1 Z" />
+          <rect class="app-error__lamp" x="112" y="160" width="16" height="16" rx="2" />
+          <path class="app-error__roof" d="M108 160 L120 146 L132 160 Z" />
+          <path class="app-error__rock" d="M70 300 Q100 270 150 290 L170 300 Z" />
+        </g>
+
+        <g class="app-error__boom">
+          <path class="app-error__chain" d="M250 286 Q330 302 410 286" />
+          <g class="app-error__buoy app-error__buoy--left">
+            <path d="M242 292 h16 l-3 -14 h-10 z" /><circle class="app-error__buoy-light" cx="250" cy="274" r="3" />
+          </g>
+          <g class="app-error__buoy app-error__buoy--right">
+            <path d="M402 292 h16 l-3 -14 h-10 z" /><circle class="app-error__buoy-light" cx="410" cy="274" r="3" />
+          </g>
+          <g class="app-error__padlock" transform="translate(318 270)">
+            <path class="app-error__shackle" d="M4 12 V7 a8 8 0 0 1 16 0 V12" />
+            <rect class="app-error__lock-body" x="0" y="12" width="24" height="20" rx="3" />
+            <circle class="app-error__keyhole" cx="12" cy="21" r="3" />
+          </g>
+        </g>
+
+        <g class="app-error__boat">
+          <path class="app-error__hull" d="M470 292 H560 L548 310 H482 Z" />
+          <rect class="app-error__cabin" x="500" y="270" width="28" height="22" rx="2" />
+          <rect class="app-error__window" x="506" y="276" width="7" height="7" />
+          <rect class="app-error__window" x="516" y="276" width="7" height="7" />
+          <path class="app-error__mast" d="M540 292 V246 M540 252 L556 284" />
+          <circle class="app-error__masthead" cx="540" cy="246" r="2.5" />
+        </g>
+
+        <g class="app-error__waves">
+          <path class="app-error__wave app-error__wave--back" d="M0 300 q40 -10 80 0 t80 0 t80 0 t80 0 t80 0 t80 0 t80 0 t80 0 t80 0 t80 0 t80 0 V360 H0 Z" />
+          <path class="app-error__wave app-error__wave--front" d="M0 314 q40 -12 80 0 t80 0 t80 0 t80 0 t80 0 t80 0 t80 0 t80 0 t80 0 t80 0 t80 0 V360 H0 Z" />
+        </g>
+      </svg>
+    </div>
+
+    <div class="app-error__panel">
+      <p class="app-error__code">Error {{ statusCode }}</p>
+      <h1 class="app-error__heading">{{ heading }}</h1>
+      <p class="app-error__message">{{ message }}</p>
+      <p class="app-error__actions">
+        <a class="app-error__button" href="{{ primary.href }}">{{ primary.text }}</a>
+        {% if secondary %}
+          <a class="app-error__link" href="{{ secondary.href }}">{{ secondary.text }}</a>
+        {% endif %}
+      </p>
+    </div>
   </main>
 {% endblock %}

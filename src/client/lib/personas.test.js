@@ -78,11 +78,10 @@ describe('#personaMeta', () => {
     expect(personaMeta('nobody')).toBe(PERSONAS[0])
   })
 
-  test('Should give every persona a label, icon and accent', () => {
+  test('Should give every persona a label and icon', () => {
     for (const persona of PERSONAS) {
       expect(persona.label).toBeTruthy()
       expect(persona.icon).toBeTruthy()
-      expect(persona.accent).toBeTruthy()
     }
   })
 })

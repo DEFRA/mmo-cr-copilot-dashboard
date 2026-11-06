@@ -5,7 +5,10 @@ import {
   recentSprints,
   formatSprintRange,
   formatWindow,
-  toDateTimeLocal
+  toDateTimeLocal,
+  toDateInput,
+  toTimeInput,
+  parseDateTime
 } from './sprints.js'
 
 // The anchor sprint runs 8 Jul 2026 → 22 Jul 2026 (end exclusive), local time.
@@ -111,5 +114,31 @@ describe('#toDateTimeLocal', () => {
     expect(toDateTimeLocal(new Date(2026, 6, 8, 14, 30).toISOString())).toBe(
       '2026-07-08T14:30'
     )
+  })
+})
+
+describe('#toDateInput and #toTimeInput', () => {
+  test('Should format a date as dd/mm/yyyy and hh:mm', () => {
+    const date = new Date(2026, 9, 4, 9, 5)
+
+    expect(toDateInput(date)).toBe('04/10/2026')
+    expect(toTimeInput(date)).toBe('09:05')
+  })
+})
+
+describe('#parseDateTime', () => {
+  test('Should parse a day, month, year and time as local time', () => {
+    expect(parseDateTime(' 4/10/2026 ', '09:05')).toEqual(
+      new Date(2026, 9, 4, 9, 5)
+    )
+  })
+
+  test.each([
+    ['31/02/2026', '10:00'],
+    ['2026-10-04', '10:00'],
+    ['04/10/2026', ''],
+    ['04/10/2026', undefined]
+  ])('Should reject %j at %j', (date, time) => {
+    expect(parseDateTime(date, time)).toBeNull()
   })
 })

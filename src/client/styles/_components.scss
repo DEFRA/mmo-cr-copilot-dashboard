@@ -1,0 +1,154 @@
+@use 'pkg:govuk-frontend' as *;
+
+// Caps every text-like control. `width` composes with the narrower
+// `govuk-input--width-*` max-widths, so no component class can exceed the cap.
+.govuk-input,
+.govuk-textarea {
+  width: min(100%, var(--app-input-max-width));
+}
+
+.govuk-select {
+  max-width: min(100%, var(--app-input-max-width));
+}
+
+// One centred column for every onboarding step.
+.app-onboarding {
+  max-width: var(--app-onboarding-max-width);
+  margin-inline: auto;
+}
+
+// A centred measure for text-led pages such as Help.
+.app-reading {
+  max-width: var(--app-reading-max-width);
+  margin-inline: auto;
+}
+
+// The listbox sits in the flow under the input, so no ancestor can clip it.
+.app-combobox {
+  max-width: min(100%, var(--app-input-max-width));
+}
+
+.app-combobox__list {
+  max-height: 15rem;
+  margin: 0;
+  padding: 0;
+  overflow-y: auto;
+  border: 2px solid govuk-functional-colour(border);
+  border-top: 0;
+  background: var(--app-colour-white);
+  list-style: none;
+}
+
+.app-combobox__option {
+  display: flex;
+  align-items: center;
+  min-height: 44px;
+  padding: govuk-spacing(2) govuk-spacing(3);
+  color: var(--app-colour-text);
+  overflow-wrap: anywhere;
+  cursor: pointer;
+
+  &:hover {
+    background: var(--app-colour-brand-tint);
+  }
+
+  &[aria-selected='true'] {
+    background: var(--app-colour-focus);
+    outline: 3px solid var(--app-colour-text);
+    outline-offset: -3px;
+    color: var(--app-colour-text);
+  }
+}
+
+.app-combobox__option--add {
+  font-weight: $govuk-font-weight-bold;
+}
+
+// The repositories added so far, each with its own remove button.
+.app-repo-list {
+  margin: 0 0 govuk-spacing(6);
+  padding: 0;
+  list-style: none;
+}
+
+.app-repo-list__item {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: govuk-spacing(2) govuk-spacing(4);
+  padding: govuk-spacing(1) 0;
+  border-bottom: 1px solid govuk-functional-colour(border);
+  overflow-wrap: anywhere;
+}
+
+.app-repo-list__remove {
+  min-width: 44px;
+  min-height: 44px;
+}
+
+// A button that reads as a GOV.UK link, for in-page actions with no URL.
+.app-link-button {
+  @include govuk-link-common;
+
+  padding: 0;
+  border: 0;
+  background: none;
+  color: govuk-functional-colour(link);
+  font-size: inherit;
+  line-height: inherit;
+  cursor: pointer;
+
+  &:hover {
+    color: govuk-functional-colour(link-hover);
+  }
+}
+
+// A long list kept to a fixed height so the page does not grow with it.
+.app-scroll-list {
+  max-height: 20rem;
+  overflow-y: auto;
+}
+
+// Settings page title row: heading left, the caller's role tag right.
+.app-settings__head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: govuk-spacing(2) govuk-spacing(4);
+  margin-bottom: govuk-spacing(4);
+}
+
+.app-role-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: govuk-spacing(2);
+  margin: 0 0 0 auto;
+}
+
+.app-role-tag__label {
+  color: var(--app-colour-text-muted);
+  font-size: 1rem;
+}
+
+// Inline identifiers such as slugs and Sonar keys.
+.app-code {
+  padding: 0 govuk-spacing(1);
+  background: govuk-colour('light-grey');
+  font-family: monospace;
+  font-size: 0.9em;
+  overflow-wrap: anywhere;
+}
+
+// A block of code to copy, scrolling sideways rather than wrapping.
+.app-code-block {
+  @include govuk-responsive-margin(6, 'bottom');
+
+  padding: govuk-spacing(3);
+  border: 1px solid govuk-functional-colour(border);
+  background: govuk-colour('light-grey');
+  font-family: monospace;
+  font-size: 0.875rem;
+  overflow-x: auto;
+}

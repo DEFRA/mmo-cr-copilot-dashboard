@@ -7,12 +7,18 @@
     id="root"
     data-poll-interval-ms="{{ pollIntervalMs }}"
     data-service-name="{{ serviceName }}"
+    data-session-cookie-name="{{ sessionCookieName }}"
+    data-session-cookie-ttl-hours="{{ sessionCookieTtlHours }}"
   ></div>
   <noscript>
-    <p>
-      The Copilot analytics dashboard needs JavaScript to render its charts.
-      Enable JavaScript in your browser to view it.
-    </p>
+    <div class="govuk-width-container">
+      <main class="govuk-main-wrapper" id="main-content">
+        <p class="govuk-body">
+          The Copilot analytics dashboard needs JavaScript to render its charts.
+          Enable JavaScript in your browser to view it.
+        </p>
+      </main>
+    </div>
   </noscript>
 {% endblock %}
 

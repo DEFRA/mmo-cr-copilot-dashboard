@@ -1,7 +1,24 @@
 import { render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 
+import { axeViolations } from '#/test-helpers/axe.js'
 import { SettingsView } from './SettingsView'
+
+// jsdom drops the space before visually hidden text in accessible names.
+const changeButton = (handle) =>
+  screen.getByRole('button', {
+    name: new RegExp(`^Change\\s?persona for ${handle}$`)
+  })
+const deleteButton = (handle) =>
+  screen.getByRole('button', {
+    name: new RegExp(`^Delete\\s?persona mapping for ${handle}$`)
+  })
+
+const PROJECT = {
+  slug: 'alpha',
+  name: 'Alpha',
+  type: 'ai-adopted'
+}
 
 const MAPPINGS = [
   { githubHandle: 'jeevankuduvaravindran', persona: 'devops' },
@@ -25,88 +42,657 @@ describe('#SettingsView', () => {
   const renderSettings = (props = {}) =>
     render(
       <SettingsView
+        project={PROJECT}
+        role="project-admin"
         mappings={MAPPINGS}
         status="success"
-        error={null}
         onSave={vi.fn()}
         onRemove={vi.fn()}
         {...props}
       />
     )
 
-  test('Should list every configured mapping with its role', () => {
-    renderSettings()
-    const table = within(screen.getByRole('table'))
+  const mappingsTable = () =>
+    within(
+      screen.getByRole('table', { name: 'Persona mappings by GitHub handle' })
+    )
 
-    expect(table.getByText('jeevankuduvaravindran')).toBeInTheDocument()
-    expect(table.getByText('sarathk06')).toBeInTheDocument()
-    expect(table.getByText('DevOps Engineers')).toBeInTheDocument()
-    expect(table.getByText('QA Engineers')).toBeInTheDocument()
+  test('Should suggest unmapped project contributors in a GOV.UK combobox', async () => {
+    renderSettings({
+      contributors: ['ada', 'sarathk06', 'Jeevan K R']
+    })
+
+    const input = screen.getByRole('combobox', { name: 'GitHub handle' })
+    expect(input).not.toHaveAttribute('list')
+    await userEvent.click(input)
+
+    const options = within(screen.getByRole('listbox')).getAllByRole('option')
+    expect(options.map((o) => o.textContent)).toEqual(['ada', 'Jeevan K R'])
+
+    await userEvent.click(options[1])
+    expect(input).toHaveValue('Jeevan K R')
   })
 
-  test('Should show an empty message when nothing is configured', () => {
-    renderSettings({ mappings: [] })
+  test('Should offer no suggestion list when there are no contributors', async () => {
+    renderSettings()
+
+    await userEvent.click(screen.getByLabelText('GitHub handle'))
+
+    expect(screen.queryByRole('listbox')).not.toBeInTheDocument()
+    expect(document.querySelector('datalist')).toBeNull()
+  })
+
+  const fillForm = async (handle, persona) => {
+    if (handle) {
+      await userEvent.type(screen.getByLabelText('GitHub handle'), handle)
+    }
+    if (persona) await userEvent.click(screen.getByLabelText(persona))
+    await userEvent.click(screen.getByRole('button', { name: 'Save mapping' }))
+  }
+
+  test('Should list every configured mapping with its persona as a row header', () => {
+    renderSettings()
+    const table = mappingsTable()
 
     expect(
-      screen.getByText(/every contributor defaults to Developers/)
+      table.getByRole('rowheader', { name: 'jeevankuduvaravindran' })
     ).toBeInTheDocument()
+    expect(table.getByText('DevOps Engineers')).toHaveClass('govuk-tag--blue')
+    expect(table.getByText('QA Engineers')).toHaveClass('govuk-tag--green')
   })
 
-  test('Should surface a load error', () => {
-    renderSettings({ mappings: [], status: 'error', error: 'offline' })
+  test('Should drop mappings with an unknown persona or handle', () => {
+    renderSettings({
+      mappings: [
+        ...MAPPINGS,
+        { githubHandle: 'mystery', persona: 'architect' },
+        { persona: 'qa' }
+      ]
+    })
 
-    expect(screen.getByRole('alert')).toHaveTextContent('offline')
+    expect(mappingsTable().queryByText('mystery')).not.toBeInTheDocument()
+    expect(mappingsTable().getAllByRole('row')).toHaveLength(3)
   })
 
-  test('Should submit a new mapping', async () => {
+  test('Should offer only the mapped personas', () => {
+    renderSettings()
+
+    expect(
+      within(screen.getByRole('group', { name: /Persona/ }))
+        .getAllByRole('radio')
+        .map((r) => r.value)
+    ).toEqual(['developer', 'devops', 'qa'])
+  })
+
+  test('Should show the empty state when nothing is configured', () => {
+    renderSettings({ mappings: [] })
+
+    expect(screen.getByText('No mappings yet')).toBeInTheDocument()
+  })
+
+  test('Should show the loading state before mappings arrive', () => {
+    renderSettings({ mappings: [], status: 'loading' })
+
+    expect(screen.getByText('Loading Persona mappings')).toBeInTheDocument()
+  })
+
+  test('Should show a load error without internal detail', () => {
+    renderSettings({ mappings: [], status: 'error', error: 'ECONNREFUSED' })
+
+    expect(
+      screen.getByText('We could not load persona mappings. Try again later.')
+    ).toBeInTheDocument()
+    expect(screen.queryByText(/ECONNREFUSED/)).not.toBeInTheDocument()
+  })
+
+  test('Should keep the last known mappings when a refresh fails', () => {
+    renderSettings({ status: 'error' })
+
+    expect(
+      screen.getByText(/could not refresh persona mappings/)
+    ).toBeInTheDocument()
+    expect(mappingsTable().getByText('sarathk06')).toBeInTheDocument()
+  })
+
+  test('Should save a new mapping and confirm it in a success banner', async () => {
     const onSave = vi.fn().mockResolvedValue({})
     renderSettings({ onSave })
 
-    await userEvent.type(
-      screen.getByPlaceholderText('e.g. octocat'),
-      'randhir-patel'
-    )
-    await userEvent.selectOptions(screen.getByLabelText('Role'), 'qa')
-    await userEvent.click(screen.getByRole('button', { name: 'Save mapping' }))
+    await fillForm('randhir-patel', 'QA Engineers')
 
-    await waitFor(() =>
-      expect(onSave).toHaveBeenCalledWith('randhir-patel', 'qa')
-    )
+    expect(onSave).toHaveBeenCalledWith('randhir-patel', 'qa')
+    const banner = await screen.findByRole('alert')
+    expect(banner).toHaveTextContent('Persona mapping for randhir-patel saved')
+    expect(banner).toHaveFocus()
+    expect(screen.getByLabelText('GitHub handle')).toHaveValue('')
   })
 
-  test('Should reject an invalid handle without calling onSave', async () => {
+  test('Should summarise every missing answer and focus the summary', async () => {
     const onSave = vi.fn()
     renderSettings({ onSave })
 
-    await userEvent.type(screen.getByPlaceholderText('e.g. octocat'), '-bad')
-    await userEvent.click(screen.getByRole('button', { name: 'Save mapping' }))
+    await fillForm()
 
-    expect(await screen.findByRole('alert')).toHaveTextContent(
-      'valid GitHub handle'
+    const summary = screen
+      .getByText('There is a problem')
+      .closest('div[tabindex]')
+    expect(summary).toHaveFocus()
+    expect(
+      within(summary).getByRole('link', { name: 'Enter a GitHub handle' })
+    ).toHaveAttribute('href', '#github-handle')
+    expect(
+      within(summary).getByRole('link', { name: 'Select a persona' })
+    ).toHaveAttribute('href', '#persona')
+    expect(screen.getByLabelText('GitHub handle')).toHaveAttribute(
+      'aria-describedby',
+      'github-handle-hint github-handle-error'
     )
     expect(onSave).not.toHaveBeenCalled()
+  })
+
+  test('Should reject a handle with a slash without calling onSave', async () => {
+    const onSave = vi.fn()
+    renderSettings({ onSave })
+
+    await fillForm('team/bad', 'Developers')
+
+    expect(screen.getAllByText(/must not include \/ or \\/)).toHaveLength(2)
+    expect(onSave).not.toHaveBeenCalled()
+  })
+
+  test('Should reject a handle over 100 characters', async () => {
+    const onSave = vi.fn()
+    renderSettings({ onSave })
+
+    await fillForm('a'.repeat(101), 'Developers')
+
+    expect(
+      screen.getAllByText('GitHub handle must be 100 characters or fewer')
+    ).toHaveLength(2)
+    expect(onSave).not.toHaveBeenCalled()
+  })
+
+  test('Should save a git config name with spaces and accents', async () => {
+    const onSave = vi.fn().mockResolvedValue({})
+    renderSettings({ onSave })
+
+    await fillForm('  Zoë O’Brien-Smith ', 'QA Engineers')
+
+    expect(onSave).toHaveBeenCalledWith('Zoë O’Brien-Smith', 'qa')
+  })
+
+  test('Should move focus to the field from the error summary', async () => {
+    renderSettings()
+
+    await fillForm()
+    await userEvent.click(
+      screen.getByRole('link', { name: 'Enter a GitHub handle' })
+    )
+
+    expect(screen.getByLabelText('GitHub handle')).toHaveFocus()
   })
 
   test('Should surface a save failure from the backend', async () => {
     const onSave = vi.fn().mockRejectedValue(new Error('Handle already taken'))
     renderSettings({ onSave })
 
-    await userEvent.type(screen.getByPlaceholderText('e.g. octocat'), 'octocat')
-    await userEvent.click(screen.getByRole('button', { name: 'Save mapping' }))
+    await fillForm('octocat', 'Developers')
 
-    expect(await screen.findByRole('alert')).toHaveTextContent(
-      'Handle already taken'
+    expect(await screen.findAllByText('Handle already taken')).not.toHaveLength(
+      0
     )
   })
 
-  test('Should remove a mapping', async () => {
+  test('Should fall back to a generic message when a save fails silently', async () => {
+    renderSettings({ onSave: vi.fn().mockRejectedValue(new Error('')) })
+
+    await fillForm('octocat', 'Developers')
+
+    expect(
+      await screen.findAllByText('The mapping could not be saved')
+    ).not.toHaveLength(0)
+  })
+
+  test('Should change an existing mapping', async () => {
+    const onSave = vi.fn().mockResolvedValue({})
+    renderSettings({ onSave })
+
+    await userEvent.click(changeButton('sarathk06'))
+
+    expect(
+      screen.getByRole('heading', { name: 'Change a Persona Mapping' })
+    ).toBeInTheDocument()
+    expect(screen.getByLabelText('GitHub handle')).toHaveValue('sarathk06')
+    expect(screen.getByLabelText('QA Engineers')).toBeChecked()
+
+    await userEvent.click(screen.getByLabelText('DevOps Engineers'))
+    await userEvent.click(screen.getByRole('button', { name: 'Save mapping' }))
+
+    expect(onSave).toHaveBeenCalledWith('sarathk06', 'devops')
+  })
+
+  test('Should cancel a change', async () => {
+    renderSettings()
+
+    await userEvent.click(changeButton('sarathk06'))
+    await userEvent.click(screen.getByRole('button', { name: 'Cancel' }))
+
+    expect(
+      screen.getByRole('heading', { name: 'Add a Persona Mapping' })
+    ).toBeInTheDocument()
+    expect(screen.getByLabelText('GitHub handle')).toHaveValue('')
+  })
+
+  test('Should ask for confirmation before deleting a mapping', async () => {
     const onRemove = vi.fn().mockResolvedValue()
     renderSettings({ onRemove })
 
-    await userEvent.click(screen.getAllByRole('button', { name: 'Remove' })[0])
+    await userEvent.click(deleteButton('jeevankuduvaravindran'))
+
+    const question = screen.getByRole('heading', {
+      name: /Are you sure you want to delete the persona mapping for jeevankuduvaravindran/
+    })
+    expect(question).toHaveFocus()
+    expect(onRemove).not.toHaveBeenCalled()
+
+    await userEvent.click(
+      screen.getByRole('button', { name: 'Delete mapping' })
+    )
 
     await waitFor(() =>
       expect(onRemove).toHaveBeenCalledWith('jeevankuduvaravindran')
     )
+    expect(await screen.findByRole('alert')).toHaveTextContent(
+      'Persona mapping for jeevankuduvaravindran deleted'
+    )
+  })
+
+  test('Should not delete when the confirmation is cancelled', async () => {
+    const onRemove = vi.fn()
+    renderSettings({ onRemove })
+
+    await userEvent.click(deleteButton('sarathk06'))
+    await userEvent.click(screen.getByRole('button', { name: 'Cancel' }))
+
+    expect(screen.queryByText(/Are you sure/)).not.toBeInTheDocument()
+    expect(onRemove).not.toHaveBeenCalled()
+  })
+
+  test('Should report a failed delete', async () => {
+    const onRemove = vi.fn().mockRejectedValue(new Error('500'))
+    renderSettings({ onRemove })
+
+    await userEvent.click(deleteButton('sarathk06'))
+    await userEvent.click(
+      screen.getByRole('button', { name: 'Delete mapping' })
+    )
+
+    expect(
+      await screen.findByText(
+        'The persona mapping for sarathk06 could not be deleted. Try again.'
+      )
+    ).toBeInTheDocument()
+  })
+
+  test('Should have no detectable accessibility violations on the audit log tab', async () => {
+    const { container } = renderSettings({ tab: 'audit-log' })
+    await screen.findByText('No audited changes in this period.')
+
+    expect(await axeViolations(container)).toEqual([])
+  })
+
+  test('Should have no detectable accessibility violations', async () => {
+    const { container } = renderSettings()
+
+    expect(await axeViolations(container)).toEqual([])
+  })
+
+  describe('By role', () => {
+    test('Should show a project user only the audit log', () => {
+      renderSettings({ role: 'project-user' })
+
+      expect(
+        screen.getByText(/You are a project user on Alpha/)
+      ).toBeInTheDocument()
+      expect(
+        screen.queryByRole('button', { name: 'Save mapping' })
+      ).not.toBeInTheDocument()
+      expect(
+        screen.queryByRole('heading', { name: 'Role Mappings' })
+      ).not.toBeInTheDocument()
+      expect(
+        screen.queryByRole('heading', { name: 'Connected Repositories' })
+      ).not.toBeInTheDocument()
+      expect(
+        screen.getByRole('heading', { name: /Audit Log/i })
+      ).toBeInTheDocument()
+    })
+
+    test('Should not fetch repositories for a project user', () => {
+      renderSettings({ role: 'project-user' })
+
+      const urls = fetchMock.mock.calls.map(([url]) => String(url))
+      expect(urls.some((url) => url.startsWith('/api/repositories'))).toBe(
+        false
+      )
+    })
+
+    test('Should open a project admin on persona mappings by default', () => {
+      renderSettings()
+
+      expect(
+        screen.getByRole('button', { name: 'Save mapping' })
+      ).toBeInTheDocument()
+      expect(
+        screen.getByRole('link', { name: 'Persona Mappings' })
+      ).toHaveAttribute('aria-current', 'page')
+      expect(
+        screen.queryByRole('heading', { name: 'Audit Log' })
+      ).not.toBeInTheDocument()
+    })
+
+    test('Should offer a project admin everything but role mappings', () => {
+      renderSettings({ tab: 'roles' })
+
+      expect(
+        screen.getAllByRole('link').map((link) => link.textContent)
+      ).toEqual(['Persona Mappings', 'Repositories', 'Audit Log'])
+      expect(
+        screen.getByRole('button', { name: 'Save mapping' })
+      ).toBeInTheDocument()
+    })
+
+    test('Should show the repositories tab', () => {
+      renderSettings({ tab: 'repositories' })
+
+      expect(
+        screen.getByRole('heading', { name: 'Connected Repositories' })
+      ).toBeInTheDocument()
+      expect(
+        screen.getByRole('heading', { name: 'Add a Repository' })
+      ).toBeInTheDocument()
+      expect(
+        screen.queryByRole('button', { name: 'Save mapping' })
+      ).not.toBeInTheDocument()
+    })
+
+    test('Should show the roles tab to a dashboard admin only', () => {
+      renderSettings({
+        role: 'dashboard-admin',
+        isDashboardAdmin: true,
+        tab: 'roles'
+      })
+
+      expect(
+        screen.getByRole('heading', { name: 'Role Mappings' })
+      ).toBeInTheDocument()
+      expect(
+        screen.getByRole('link', { name: 'Role Mappings' })
+      ).toHaveAttribute('aria-current', 'page')
+    })
+
+    test('Should show the audit log tab', async () => {
+      renderSettings({ tab: 'audit-log' })
+
+      expect(
+        screen.getByRole('heading', { name: /Audit Log/i })
+      ).toBeInTheDocument()
+      await screen.findByText('No audited changes in this period.')
+    })
+
+    test('Should ask the page to change tab when a section is chosen', async () => {
+      const onTabChange = vi.fn()
+      renderSettings({ onTabChange })
+
+      await userEvent.click(screen.getByRole('link', { name: 'Repositories' }))
+
+      expect(onTabChange).toHaveBeenCalledWith('repositories')
+    })
+
+    test('Should show the caller’s role at the top right', () => {
+      const { container } = renderSettings()
+
+      const head = container.querySelector('.app-settings__head')
+      expect(within(head).getByText('Your role')).toBeInTheDocument()
+      expect(within(head).getByText('Project Admin')).toHaveClass(
+        'govuk-tag--teal'
+      )
+    })
+
+    test('Should treat a dashboard admin as one whatever the project role', () => {
+      renderSettings({ role: 'project-user', isDashboardAdmin: true })
+
+      expect(screen.getByText('Dashboard Admin')).toHaveClass(
+        'govuk-tag--magenta'
+      )
+      expect(
+        screen.getByRole('button', { name: 'Save mapping' })
+      ).toBeInTheDocument()
+      expect(
+        screen.getByRole('link', { name: 'Role Mappings' })
+      ).toBeInTheDocument()
+    })
+
+    test('Should give a project user only the audit log tab, whatever tab is asked for', () => {
+      renderSettings({ role: 'project-user', tab: 'personas' })
+
+      expect(screen.getAllByRole('link')).toHaveLength(1)
+      expect(screen.getByRole('link', { name: 'Audit Log' })).toHaveAttribute(
+        'aria-current',
+        'page'
+      )
+      expect(screen.getByText('Project User')).toHaveClass('govuk-tag--grey')
+      expect(
+        screen.queryByRole('button', { name: 'Save mapping' })
+      ).not.toBeInTheDocument()
+    })
+
+    describe('Jira workflow tab', () => {
+      const JIRA_PROJECT = { ...PROJECT, jira: { projectKeys: ['ALPHA'] } }
+      const jiraLink = () =>
+        screen.queryByRole('link', { name: 'Jira Workflow' })
+
+      test('Should offer a project admin the tab when the project has a Jira key', () => {
+        renderSettings({ project: JIRA_PROJECT })
+
+        expect(jiraLink()).toHaveAttribute('href', '#/settings/jira-workflow')
+      })
+
+      test('Should not offer the tab to a project without a Jira key', () => {
+        renderSettings({ tab: 'jira-workflow' })
+
+        expect(jiraLink()).toBeNull()
+        expect(
+          screen.queryByRole('heading', { name: 'Jira Workflow' })
+        ).toBeNull()
+        expect(
+          screen.getByRole('link', { name: 'Persona Mappings' })
+        ).toHaveAttribute('aria-current', 'page')
+      })
+
+      test('Should not offer the tab to a project user even with a Jira key', () => {
+        renderSettings({
+          project: JIRA_PROJECT,
+          role: 'project-user',
+          tab: 'jira-workflow'
+        })
+
+        expect(jiraLink()).toBeNull()
+        expect(
+          screen.queryByRole('heading', { name: 'Jira Workflow' })
+        ).toBeNull()
+        expect(screen.getByRole('link', { name: 'Audit Log' })).toHaveAttribute(
+          'aria-current',
+          'page'
+        )
+      })
+
+      describe('Unsaved changes', () => {
+        const workflowFor = (slug) => ({
+          source: 'project',
+          version: 1,
+          stages: [
+            {
+              id: 'todo',
+              label: 'To Do',
+              kind: 'todo',
+              required: true,
+              statuses: [`${slug} Backlog`]
+            },
+            {
+              id: 'done',
+              label: 'Done',
+              kind: 'done',
+              required: true,
+              statuses: ['Done']
+            }
+          ],
+          suggestions: {}
+        })
+
+        beforeEach(() => {
+          fetchMock.mockResponse(async (req) => {
+            const { pathname } = new URL(req.url, 'http://localhost')
+            if (pathname.endsWith('/jira/statuses')) {
+              return JSON.stringify({ jiraAvailable: true, statuses: [] })
+            }
+            const slug = pathname.split('/')[3]
+            if (pathname.endsWith('/jira/workflow')) {
+              return JSON.stringify(workflowFor(slug))
+            }
+            return JSON.stringify({
+              entries: [],
+              page: 1,
+              pageSize: 25,
+              total: 0,
+              totalPages: 1
+            })
+          })
+        })
+
+        const editWorkflow = async () => {
+          await screen.findByRole('group', { name: 'To Do' })
+          await userEvent.type(
+            screen.getByRole('combobox', { name: 'Add a status to To Do' }),
+            'Triage{Enter}'
+          )
+        }
+
+        test('Should keep the user on the tab when they cancel leaving', async () => {
+          vi.spyOn(window, 'confirm').mockReturnValue(false)
+          const onTabChange = vi.fn()
+          renderSettings({
+            project: JIRA_PROJECT,
+            tab: 'jira-workflow',
+            onTabChange
+          })
+          await editWorkflow()
+
+          await userEvent.click(
+            screen.getByRole('link', { name: 'Persona Mappings' })
+          )
+
+          expect(window.confirm).toHaveBeenCalledWith(
+            expect.stringContaining('unsaved changes')
+          )
+          expect(onTabChange).not.toHaveBeenCalled()
+        })
+
+        test('Should leave the tab when the user accepts losing the changes', async () => {
+          vi.spyOn(window, 'confirm').mockReturnValue(true)
+          const onTabChange = vi.fn()
+          renderSettings({
+            project: JIRA_PROJECT,
+            tab: 'jira-workflow',
+            onTabChange
+          })
+          await editWorkflow()
+
+          await userEvent.click(
+            screen.getByRole('link', { name: 'Persona Mappings' })
+          )
+
+          expect(onTabChange).toHaveBeenCalledWith('personas')
+        })
+
+        test('Should not ask when nothing has changed', async () => {
+          vi.spyOn(window, 'confirm').mockReturnValue(false)
+          const onTabChange = vi.fn()
+          renderSettings({
+            project: JIRA_PROJECT,
+            tab: 'jira-workflow',
+            onTabChange
+          })
+          await screen.findByRole('group', { name: 'To Do' })
+
+          await userEvent.click(
+            screen.getByRole('link', { name: 'Persona Mappings' })
+          )
+
+          expect(window.confirm).not.toHaveBeenCalled()
+          expect(onTabChange).toHaveBeenCalledWith('personas')
+        })
+
+        test('Should tell the app about unsaved changes and clear them on unmount', async () => {
+          const onUnsavedChange = vi.fn()
+          const { unmount } = renderSettings({
+            project: JIRA_PROJECT,
+            tab: 'jira-workflow',
+            onUnsavedChange
+          })
+          await editWorkflow()
+          expect(onUnsavedChange).toHaveBeenLastCalledWith(true)
+
+          unmount()
+
+          expect(onUnsavedChange).toHaveBeenLastCalledWith(false)
+        })
+
+        test('Should show the new project’s workflow, not the old one, after a project switch', async () => {
+          const view = renderSettings({
+            project: { ...JIRA_PROJECT, slug: 'alpha' },
+            tab: 'jira-workflow'
+          })
+          expect(await screen.findByText('alpha Backlog')).toBeVisible()
+
+          view.rerender(
+            <SettingsView
+              project={{ ...JIRA_PROJECT, slug: 'beta' }}
+              role="project-admin"
+              mappings={MAPPINGS}
+              status="success"
+              onSave={vi.fn()}
+              onRemove={vi.fn()}
+              tab="jira-workflow"
+            />
+          )
+
+          expect(screen.queryByText('alpha Backlog')).toBeNull()
+          expect(await screen.findByText('beta Backlog')).toBeVisible()
+        })
+      })
+    })
+
+    test('Should treat a missing role as no administration rights', () => {
+      renderSettings({ role: null })
+
+      expect(
+        screen.queryByRole('button', { name: 'Save mapping' })
+      ).not.toBeInTheDocument()
+    })
+
+    test('Should keep a default mapping read-only', () => {
+      renderSettings({
+        mappings: [
+          ...MAPPINGS,
+          { githubHandle: 'olddefault', persona: 'qa', scope: 'default' }
+        ]
+      })
+
+      expect(screen.getByText('Default for every project')).toBeInTheDocument()
+      expect(
+        screen.queryByRole('button', { name: /persona for olddefault/ })
+      ).not.toBeInTheDocument()
+    })
   })
 })

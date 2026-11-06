@@ -163,16 +163,14 @@ export function computePrMetrics(payload) {
     humanLinesDeleted: 0
   }
   const byContributor = new Map()
+  const countedCommits = []
 
   for (const c of commits) {
     const author = c.author ?? 'Unknown'
     const kind = effectiveClassification(c)
 
     // Rebase/merge and Dependabot commits are excluded from every metric.
-    // Critically, an author who ONLY appears on excluded commits is never
-    // registered as a contributor, so neither rebase-derived names nor bots
-    // can leak into any contributor count, adoption denominator, heatmap
-    // cell, or persona insight anywhere.
+    // Authors seen only on excluded commits are never registered.
     if (isExcludedClassification(kind)) {
       if (kind === 'Dependabot') {
         m.dependabotCommits += 1
@@ -185,6 +183,8 @@ export function computePrMetrics(payload) {
       if (prior) prior.rebase += 1
       continue
     }
+
+    countedCommits.push(c)
 
     if (!byContributor.has(author)) {
       byContributor.set(author, {
@@ -230,6 +230,25 @@ export function computePrMetrics(payload) {
     }
   }
 
+  let extensionAiLines = 0
+  let extensionTotalLines = 0
+  for (const c of countedCommits) {
+    if (c.attribution?.source === 'extension') {
+      const ai =
+        (c.attribution.aiCompletionLines || 0) +
+        (c.attribution.aiChatLines || 0) +
+        (c.attribution.aiAgentLines || 0)
+      const human =
+        (c.attribution.pastedLines || 0) + (c.attribution.typedLines || 0)
+      extensionAiLines += ai
+      extensionTotalLines += ai + human
+    }
+  }
+  const aiLineSharePercent =
+    extensionTotalLines > 0
+      ? Number(((extensionAiLines / extensionTotalLines) * 100).toFixed(2))
+      : null
+
   return {
     repository: payload.repository,
     prNumber: payload.prNumber,
@@ -238,6 +257,7 @@ export function computePrMetrics(payload) {
     reworkRatio: m.linesAdded ? round(m.linesDeleted / m.linesAdded, 2) : 0,
     copilotAssistedRate: rate(m.copilotAssistedCommits, m.totalCommits),
     copilotAssistedLineRate: rate(m.copilotAssistedLines, m.totalLinesTouched),
+    aiLineSharePercent,
     byContributor
   }
 }
@@ -329,7 +349,13 @@ export function selectRepoSummaries(payloads) {
       contributorCount: r.contributors.size,
       contributors: undefined,
       copilotAssistedRate: rate(r.copilotAssistedCommits, r.totalCommits),
-      copilotAssistedLineRate: rate(r.copilotAssistedLines, r.totalLinesTouched)
+      copilotAssistedLineRate: rate(
+        r.copilotAssistedLines,
+        r.totalLinesTouched
+      ),
+      avgCommitSize: r.totalCommits
+        ? round(r.totalLinesTouched / r.totalCommits, 1)
+        : 0
     }))
     .sort((a, b) => b.copilotAssistedRate - a.copilotAssistedRate)
 }
@@ -340,6 +366,110 @@ export function selectRepoPRs(payloads, repository) {
     .filter((p) => p.repository === repository)
     .slice()
     .sort((a, b) => new Date(b.calculatedAt) - new Date(a.calculatedAt))
+}
+
+/** One row per pull request in a repository, newest first (Rebase excluded). */
+export function selectRepoPrRows(payloads, repository) {
+  return selectRepoPRs(payloads, repository).map((p) => {
+    const m = computePrMetrics(p)
+    const contributors = Array.from(m.byContributor.values())
+    return {
+      prNumber: p.prNumber,
+      title: typeof p.prTitle === 'string' ? p.prTitle : null,
+      merged: isMergedPayload(p),
+      contributors: contributors.map((c) => c.contributor),
+      adopters: contributors.filter((c) => c.copilotAssisted > 0).length,
+      totalCommits: m.totalCommits,
+      copilotAssistedCommits: m.copilotAssistedCommits,
+      humanAuthoredCommits: m.humanAuthoredCommits,
+      totalLinesTouched: m.totalLinesTouched,
+      copilotAssistedLines: m.copilotAssistedLines,
+      humanAuthoredLines: m.humanAuthoredLines,
+      copilotAssistedRate: m.copilotAssistedRate,
+      copilotAssistedLineRate: m.copilotAssistedLineRate,
+      copilotLed: m.copilotAssistedRate >= COPILOT_LED_THRESHOLD,
+      linesAdded: m.linesAdded,
+      linesDeleted: m.linesDeleted,
+      netLines: m.netLines,
+      reworkRatio: m.reworkRatio,
+      avgCommitSize: m.totalCommits
+        ? round(m.totalLinesTouched / m.totalCommits, 1)
+        : 0,
+      cycleHours: hoursBetween(p.firstCommitAt, p.lastCommitAt),
+      jiraKeys: Array.isArray(p.jiraKeys)
+        ? p.jiraKeys.filter((k) => typeof k === 'string')
+        : []
+    }
+  })
+}
+
+/** Per-PR averages for a repository: mean commit assist rate and PRs that used Copilot. */
+export function selectPrAverages(rows) {
+  if (rows.length === 0) return { avgAssistRate: 0, copilotPrCount: 0 }
+  const sum = rows.reduce((s, r) => s + r.copilotAssistedRate, 0)
+  return {
+    avgAssistRate: round(sum / rows.length),
+    copilotPrCount: rows.filter((r) => r.copilotAssistedCommits > 0).length
+  }
+}
+
+/** Commit assist rate per contributor within one repository, highest first. */
+export function selectRepoContributors(payloads, repository) {
+  const byContributor = new Map()
+  for (const p of payloads) {
+    if (p.repository !== repository) continue
+    for (const [contributor, c] of computePrMetrics(p).byContributor) {
+      const e = byContributor.get(contributor) ?? {
+        contributor,
+        assisted: 0,
+        total: 0
+      }
+      e.assisted += c.copilotAssisted
+      e.total += c.totalCommits
+      byContributor.set(contributor, e)
+    }
+  }
+  return Array.from(byContributor.values())
+    .map((c) => ({ ...c, rate: rate(c.assisted, c.total) }))
+    .sort((a, b) => b.rate - a.rate)
+}
+
+/** Counted commits as lines-added against lines-deleted points (excluded commits left out). */
+export function selectCommitHotspots(payloads) {
+  return payloads.flatMap((p) =>
+    (Array.isArray(p.commitBreakdown) ? p.commitBreakdown : [])
+      .filter(isPlottableCommit)
+      .map((c) => ({ c, category: effectiveClassification(c) }))
+      .filter(({ category }) => !isExcludedClassification(category))
+      .map(({ c, category }) => ({
+        x: c.linesAdded,
+        y: c.linesDeleted,
+        size: c.linesTouched,
+        category,
+        label: `#${p.prNumber} ${c.commit}`
+      }))
+  )
+}
+
+/** One pull request's counted commits, oldest first, with lines split by classification. */
+export function selectPrCommitLines(payload) {
+  return (
+    Array.isArray(payload?.commitBreakdown) ? payload.commitBreakdown : []
+  )
+    .filter(isPlottableCommit)
+    .map((c) => ({ c, category: effectiveClassification(c) }))
+    .filter(({ category }) => !isExcludedClassification(category))
+    .sort((a, b) => Date.parse(a.c.committedAt) - Date.parse(b.c.committedAt))
+    .map(({ c, category }) => ({
+      commit: c.commit,
+      subject: c.subject ?? '',
+      category,
+      added: c.linesAdded,
+      deleted: c.linesDeleted,
+      touched: c.linesTouched,
+      copilot: category === 'Copilot-assisted' ? c.linesTouched : 0,
+      human: category === 'Copilot-assisted' ? 0 : c.linesTouched
+    }))
 }
 
 /**
@@ -561,6 +691,79 @@ export function selectDeliveryMetrics(payloads) {
     .sort((a, b) => new Date(a.date) - new Date(b.date))
 }
 
+/** Average, fastest and slowest PR coding cycle time per repository, fastest first. */
+export function selectRepoCycleTimes(payloads) {
+  const byRepo = new Map()
+  for (const m of selectDeliveryMetrics(payloads)) {
+    if (!byRepo.has(m.repository)) {
+      byRepo.set(m.repository, {
+        repository: m.repository,
+        name: m.repoName,
+        cycles: [],
+        prCount: 0
+      })
+    }
+    const r = byRepo.get(m.repository)
+    if (m.cycleHours > 0) r.cycles.push(m.cycleHours)
+    r.prCount += 1
+  }
+  return Array.from(byRepo.values())
+    .map(({ cycles, ...r }) => ({
+      ...r,
+      avgCycleHours: cycles.length
+        ? cycles.reduce((a, b) => a + b, 0) / cycles.length
+        : 0,
+      fastest: cycles.length ? Math.min(...cycles) : 0,
+      slowest: cycles.length ? Math.max(...cycles) : 0
+    }))
+    .sort((a, b) => a.avgCycleHours - b.avgCycleHours)
+}
+
+/**
+ * One cycle-time point per pull request in a repository, plotted at its merge
+ * date (or last activity); PRs without a usable timestamp are skipped.
+ */
+export function selectRepoCyclePoints(payloads, repository) {
+  return selectRepoPRs(payloads, repository)
+    .map((pr) => {
+      const m = computePrMetrics(pr)
+      const mergedAt = new Date(
+        pr.prMergedAt ?? pr.lastCommitAt ?? pr.calculatedAt
+      ).getTime()
+      if (!Number.isFinite(mergedAt)) return null
+      return {
+        prNumber: pr.prNumber,
+        mergedAt,
+        merged: isMergedPayload(pr),
+        cycleHours: hoursBetween(pr.firstCommitAt, pr.lastCommitAt),
+        timeToMergeHours: hoursBetween(pr.prCreatedAt, pr.prMergedAt),
+        batchSize: m.totalCommits
+          ? round(m.totalLinesTouched / m.totalCommits, 1)
+          : 0,
+        assistRate: m.copilotAssistedRate,
+        linesAdded: m.linesAdded,
+        linesDeleted: m.linesDeleted,
+        contributors: Array.from(m.byContributor.keys())
+      }
+    })
+    .filter(Boolean)
+}
+
+/** Average, median, fastest and slowest PR coding cycle time of a set of points. */
+export function selectCycleTimeStats(points) {
+  const cycles = points.map((p) => p.cycleHours).filter((h) => h > 0)
+  return {
+    avg: cycles.length
+      ? round(cycles.reduce((a, b) => a + b, 0) / cycles.length, 1)
+      : 0,
+    median: median(cycles),
+    fastest: cycles.length ? Math.min(...cycles) : 0,
+    slowest: cycles.length ? Math.max(...cycles) : 0,
+    measured: cycles.length,
+    prCount: points.length
+  }
+}
+
 /**
  * Rework Ratio (deleted ÷ added lines, Rebase excluded), computed per
  * repository first and then aggregated into one portfolio KPI — the
@@ -593,6 +796,7 @@ export function selectRepoRework(payloads) {
   const repos = Array.from(byRepo.values())
     .map((r) => ({
       ...r,
+      netLines: r.linesAdded - r.linesDeleted,
       reworkRatio: r.linesAdded ? round(r.linesDeleted / r.linesAdded, 2) : 0
     }))
     .sort((a, b) => b.reworkRatio - a.reworkRatio)
@@ -1044,7 +1248,6 @@ export function selectPersonaSummaries(payloads, mappingsByHandle = {}) {
       id: persona.id,
       label: persona.label,
       icon: persona.icon,
-      accent: persona.accent,
       repoCount: a.repos.size,
       repoNames: Array.from(a.repos).map(shortRepoName).sort(),
       prCount: a.prs.size,
@@ -1064,6 +1267,618 @@ export function selectPersonaSummaries(payloads, mappingsByHandle = {}) {
         : 0
     }
   })
+}
+
+const DAY_MS = 24 * 60 * 60 * 1000
+
+/** Pull requests per Jira key, from the payloads' `jiraKeys`. */
+export function selectPrsByTicket(payloads) {
+  const byKey = new Map()
+  for (const p of payloads ?? []) {
+    if (!Array.isArray(p?.jiraKeys)) continue
+    for (const key of p.jiraKeys) {
+      if (typeof key !== 'string') continue
+      if (!byKey.has(key)) byKey.set(key, [])
+      byKey.get(key).push({
+        repository: p.repository,
+        prNumber: p.prNumber,
+        title: p.prTitle ?? '',
+        merged: isMergedPayload(p)
+      })
+    }
+  }
+  return byKey
+}
+
+// Workflow stage kinds as the Jira status categories the ticket views group by.
+const STAGE_CATEGORY = {
+  todo: 'new',
+  active: 'indeterminate',
+  waiting: 'indeterminate',
+  done: 'done'
+}
+
+const finiteOrNull = (n) => (isFiniteNum(n) ? n : null)
+const timeOrNull = (value) => {
+  const t = Date.parse(value)
+  return Number.isFinite(t) ? t : null
+}
+
+/** A ticket's start, end and timings from the backend `flow`, else from Jira fields. */
+function ticketTimings(issue) {
+  const created = timeOrNull(issue.created)
+  const flow = issue.flow
+  if (flow && typeof flow === 'object') {
+    return {
+      created,
+      category:
+        STAGE_CATEGORY[flow.stageKind] ?? issue.status?.categoryKey ?? '',
+      stageKind: typeof flow.stageKind === 'string' ? flow.stageKind : null,
+      started: timeOrNull(flow.startedAt),
+      resolved: timeOrNull(flow.doneAt),
+      firstDone: timeOrNull(flow.firstDoneAt),
+      cycleDays: finiteOrNull(flow.cycleDays),
+      leadDays: finiteOrNull(flow.leadDays),
+      flowEfficiency: finiteOrNull(flow.flowEfficiency),
+      reopenCount: Number(flow.reopenCount) || 0
+    }
+  }
+  const started = timeOrNull(issue.started ?? issue.created)
+  const resolved = timeOrNull(issue.resolved)
+  return {
+    created,
+    category: issue.status?.categoryKey ?? '',
+    stageKind: null,
+    started,
+    resolved,
+    firstDone: timeOrNull(issue.firstDoneAt) ?? resolved,
+    cycleDays:
+      started !== null && resolved !== null
+        ? round(Math.max(0, resolved - started) / DAY_MS, 1)
+        : null,
+    leadDays:
+      created !== null && resolved !== null
+        ? round(Math.max(0, resolved - created) / DAY_MS, 1)
+        : null,
+    flowEfficiency: null,
+    reopenCount: Number(issue.reopenCount) || 0
+  }
+}
+
+/**
+ * Ticket table rows. With the backend's per-issue `flow` the workflow stages
+ * set start, Done and cycle time; without it, Jira's started and resolved do.
+ */
+export function selectTicketRows(issues, payloads) {
+  const prs = selectPrsByTicket(payloads)
+  return (issues ?? [])
+    .filter((issue) => typeof issue?.key === 'string')
+    .map((issue) => {
+      const timings = ticketTimings(issue)
+      return {
+        key: issue.key,
+        summary: issue.summary ?? '',
+        type: issue.issueType ?? '',
+        status: issue.status?.name ?? '',
+        storyPoints: Number.isFinite(Number(issue.storyPoints))
+          ? Number(issue.storyPoints)
+          : null,
+        ...timings,
+        links: (Array.isArray(issue.issueLinks) ? issue.issueLinks : [])
+          .filter((l) => typeof l?.key === 'string')
+          .map((l) => ({
+            key: l.key,
+            type: l.type ?? '',
+            issueType: l.issueType ?? ''
+          })),
+        history: (Array.isArray(issue.statusHistory) ? issue.statusHistory : [])
+          .filter((h) => Number.isFinite(Date.parse(h?.at)))
+          .map((h) => ({
+            at: Date.parse(h.at),
+            from: h.from ?? '',
+            to: h.to ?? ''
+          })),
+        prs: prs.get(issue.key) ?? []
+      }
+    })
+}
+
+/**
+ * Per-sprint delivery points, oldest first, from newest-first sprints and the
+ * matching delivery-metrics responses. Missing or failed sprints read as null.
+ */
+export function selectDeliveryTrend(results, sprints) {
+  const num = (v) => (Number.isFinite(v) ? v : null)
+  return (sprints ?? [])
+    .map((sprint, i) => {
+      const m = results?.[i] ?? {}
+      return {
+        label: sprint.label ?? `Sprint ${sprint.index ?? i + 1}`,
+        delivered: num(m.storiesDelivered),
+        predictability: num(m.sprintPredictability),
+        changeFailRate: num(m.changeFailRate),
+        changeLeadTimeDays: num(m.changeLeadTimeDays)
+      }
+    })
+    .reverse()
+}
+
+/** Tickets that reached Done inside the window, the set delivery metrics count. */
+export function selectDoneTickets(rows, start, end) {
+  const from = start ? new Date(start).getTime() : -Infinity
+  const to = end ? new Date(end).getTime() : Infinity
+  return rows.filter(
+    (row) =>
+      row.category === 'done' &&
+      row.resolved !== null &&
+      row.resolved >= from &&
+      row.resolved < to
+  )
+}
+
+export const FUNNEL_STAGES = ['To do', 'In progress', 'PR merged', 'Done']
+
+/**
+ * Where each ticket sits: Jira's status category, with an in-progress ticket
+ * whose linked PRs are all merged counted as "PR merged".
+ */
+export function selectTicketFunnel(rows) {
+  const counts = [0, 0, 0, 0]
+  for (const row of rows) {
+    if (row.category === 'done') counts[3] += 1
+    else if (row.prs.length > 0 && row.prs.every((pr) => pr.merged)) {
+      counts[2] += 1
+    } else if (row.category === 'indeterminate') counts[1] += 1
+    else counts[0] += 1
+  }
+  return counts
+}
+
+export const COMPLEXITY_BANDS = ['XS', 'S', 'M', 'L', 'XL']
+
+const medianOf = (values) => {
+  const nums = values.filter(Number.isFinite).sort((a, b) => a - b)
+  if (nums.length === 0) return null
+  const mid = Math.floor(nums.length / 2)
+  return nums.length % 2 ? nums[mid] : (nums[mid - 1] + nums[mid]) / 2
+}
+
+/** Per-repository delivery comparison with no adoption measures (AI-Native). */
+export function selectNativeRepoComparison(payloads) {
+  const byRepo = new Map()
+  for (const p of payloads ?? []) {
+    if (!p?.repository) continue
+    if (!byRepo.has(p.repository)) byRepo.set(p.repository, [])
+    byRepo.get(p.repository).push(p)
+  }
+  return [...byRepo.entries()]
+    .map(([repository, prs]) => {
+      const cycles = prs
+        .map((p) => hoursBetween(p.firstCommitAt, p.lastCommitAt))
+        .filter((h) => h > 0)
+      const complexity = medianOf(prs.map((p) => Number(p.complexity?.score)))
+      const cycle = medianOf(cycles)
+      return {
+        repository,
+        name: shortRepoName(repository),
+        prCount: prs.length,
+        merged: prs.filter(isMergedPayload).length,
+        medianComplexity: complexity === null ? null : Math.round(complexity),
+        medianCycleHours: cycle === null ? null : round(cycle, 1)
+      }
+    })
+    .sort((a, b) => a.name.localeCompare(b.name))
+}
+
+/** Leverage v2 band rows in band order; a band without data reads as empty. */
+export function selectLeverageBands(leverage) {
+  const bands = leverage?.bandComparison ?? {}
+  return COMPLEXITY_BANDS.map((band) => {
+    const b = bands[band] ?? {}
+    return {
+      band,
+      baselineCount: Number(b.baselineCount) || 0,
+      adoptedCount: Number(b.adoptedCount) || 0,
+      baselineHours: round(Number(b.baselineMedianCycleHours) || 0, 1),
+      adoptedHours: round(Number(b.adoptedMedianCycleHours) || 0, 1),
+      speedup: Number(b.speedup) || 0,
+      comparable: b.comparable === true
+    }
+  })
+}
+
+// ── AI code survival and Copilot usage ──────────────────────────────────────
+
+const CHURN_ORIGINS = [
+  { id: 'aiAgent', label: 'Agent' },
+  { id: 'aiCompletion', label: 'Completion' },
+  { id: 'aiChat', label: 'Chat' }
+]
+
+/**
+ * AI code churn (CCR_N, docs/metrics.md) from the backend churn response.
+ * Unavailable until the survival workflow has measured at least one PR.
+ */
+export function selectAiCodeChurnRate(churn) {
+  if (!churn || churn.available !== true) {
+    return {
+      available: false,
+      windowDays: Number(churn?.windowDays) || 21,
+      reason: typeof churn?.reason === 'string' ? churn.reason : null,
+      prCount: num(churn?.prCount)
+    }
+  }
+  return {
+    available: true,
+    windowDays: num(churn.windowDays),
+    percent: num(churn.churnRatePercent),
+    humanPercent: isFiniteNum(churn.humanChurnPercent)
+      ? churn.humanChurnPercent
+      : null,
+    penaltyApplied: churn.penaltyApplied === true,
+    multiplier: isFiniteNum(churn.effectiveMultiplier)
+      ? churn.effectiveMultiplier
+      : 1,
+    prCount: num(churn.prCount),
+    aiLinesMerged: num(churn.aiLinesMerged),
+    aiLinesSurviving: num(churn.aiLinesSurviving),
+    byOrigin: CHURN_ORIGINS.map(({ id, label }) => ({
+      id,
+      label,
+      merged: num(churn.byOrigin?.[id]?.merged),
+      surviving: num(churn.byOrigin?.[id]?.surviving),
+      churnPercent: isFiniteNum(churn.byOrigin?.[id]?.churnPercent)
+        ? churn.byOrigin[id].churnPercent
+        : null
+    }))
+  }
+}
+
+function* usageCommits(payload) {
+  for (const commit of payload?.commitBreakdown ?? []) {
+    const attribution = commit?.attribution
+    if (attribution?.source !== 'extension') continue
+    if (!attribution.usage || !Array.isArray(attribution.usage.models)) continue
+    yield { commit, usage: attribution.usage }
+  }
+}
+
+// GitHub AI credits recorded by the extension; null means not recorded (never derived from tokens).
+const creditsOf = (m) =>
+  isFiniteNum(m?.credits) && m.credits >= 0 ? m.credits : null
+
+/**
+ * Copilot model usage across pull requests, from the extension's per-commit
+ * attribution: model requests and the GitHub AI credits recorded on developers'
+ * machines. Team and model level only; never per person. Coverage says how many
+ * Copilot-assisted PRs carry usage, and how many of those recorded credits.
+ */
+export function selectCopilotUsage(payloads) {
+  const byModel = new Map()
+  const perPrCredits = []
+  let prsWithUsage = 0
+  let assistedPrs = 0
+
+  for (const payload of payloads ?? []) {
+    let assisted = false
+    let credits = 0
+    let hasUsage = false
+    let hasCredits = false
+
+    for (const commit of payload.commitBreakdown ?? []) {
+      const attribution = commit?.attribution
+      const writtenByCopilot =
+        attribution?.source === 'extension' &&
+        num(attribution.aiCompletionLines) +
+          num(attribution.aiChatLines) +
+          num(attribution.aiAgentLines) >
+          0
+      if (commit?.classification === 'Copilot-assisted' || writtenByCopilot) {
+        assisted = true
+      }
+    }
+
+    for (const { usage } of usageCommits(payload)) {
+      for (const m of usage.models) {
+        if (typeof m?.model !== 'string') continue
+        const entry = byModel.get(m.model) ?? {
+          model: m.model,
+          requests: 0,
+          credits: 0,
+          recorded: false
+        }
+        entry.requests += num(m.requests)
+        const spent = creditsOf(m)
+        if (spent !== null) {
+          entry.credits += spent
+          entry.recorded = true
+          credits += spent
+          hasCredits = true
+        }
+        byModel.set(m.model, entry)
+        hasUsage = true
+      }
+    }
+    if (assisted) assistedPrs += 1
+    if (hasUsage) prsWithUsage += 1
+    if (hasCredits) perPrCredits.push(credits)
+  }
+
+  const models = [...byModel.values()]
+    .map((m) => ({
+      model: m.model,
+      requests: round(m.requests, 2),
+      credits: m.recorded ? round(m.credits, 4) : null
+    }))
+    .sort(
+      (a, b) =>
+        (b.credits ?? -1) - (a.credits ?? -1) ||
+        b.requests - a.requests ||
+        a.model.localeCompare(b.model)
+    )
+  return {
+    models,
+    prsWithUsage,
+    prsWithCredits: perPrCredits.length,
+    assistedPrs,
+    coveragePercent:
+      assistedPrs > 0 ? round((prsWithUsage / assistedPrs) * 100, 1) : null,
+    totalCredits: perPrCredits.length
+      ? round(
+          perPrCredits.reduce((s, c) => s + c, 0),
+          4
+        )
+      : null,
+    medianCreditsPerPr: perPrCredits.length
+      ? round(median(perPrCredits), 4)
+      : null
+  }
+}
+
+export const RESERVED_USAGE_MODELS = new Set(['other', 'unknown'])
+export const SUPERLATIVE_MIN_PRS = 2
+export const BEST_VALUE_MIN_REQUESTS = 5
+export const NIGHT_OWL_MIN_REQUESTS = 5
+
+const cappedPercent = (part, whole) =>
+  whole > 0 ? Math.min(100, round((part / whole) * 100, 1)) : null
+
+const isOutOfHours = (date) => date.getHours() >= 19 || date.getHours() < 7
+
+function accrueUsageModels(payloads) {
+  const byModel = new Map()
+  const prModels = new Map()
+
+  for (const payload of payloads ?? []) {
+    const prKey = `${payload?.repository}#${payload?.prNumber}`
+    for (const { commit, usage } of usageCommits(payload)) {
+      const committedAt = new Date(commit.committedAt)
+      const timed = !Number.isNaN(committedAt.getTime())
+      const outOfHours = timed && isOutOfHours(committedAt)
+
+      for (const m of usage.models) {
+        if (typeof m?.model !== 'string' || m.model === '') continue
+        const entry = byModel.get(m.model) ?? {
+          model: m.model,
+          requests: 0,
+          credits: 0,
+          recorded: false,
+          pricedRequests: 0,
+          prs: new Set(),
+          outOfHoursRequests: 0,
+          timedRequests: 0
+        }
+        const requests = num(m.requests)
+        entry.requests += requests
+        const spent = creditsOf(m)
+        if (spent !== null) {
+          entry.credits += spent
+          entry.pricedRequests += requests
+          entry.recorded = true
+        }
+        entry.prs.add(prKey)
+        if (timed) entry.timedRequests += requests
+        if (outOfHours) entry.outOfHoursRequests += requests
+        byModel.set(m.model, entry)
+
+        if (!RESERVED_USAGE_MODELS.has(m.model)) {
+          const set = prModels.get(prKey) ?? new Set()
+          set.add(m.model)
+          prModels.set(prKey, set)
+        }
+      }
+    }
+  }
+  return { byModel, prModels }
+}
+
+function buildSuperlatives(named, variety) {
+  const eligible = named.filter((m) => m.prCount >= SUPERLATIVE_MIN_PRS)
+  const pick = (id, metric, qualifies, value, direction) => {
+    const winner = eligible
+      .filter((m) => qualifies(m) && value(m) !== null)
+      .sort(
+        (a, b) =>
+          direction * (value(b) - value(a)) ||
+          b.requests - a.requests ||
+          a.model.localeCompare(b.model)
+      )[0]
+    return winner
+      ? { id, model: winner.model, metric, value: value(winner) }
+      : null
+  }
+
+  const found = [
+    pick(
+      'biggest-spender',
+      'creditShare',
+      (m) => m.credits > 0,
+      (m) => m.creditShare,
+      1
+    ),
+    pick(
+      'best-value',
+      'creditsPerRequest',
+      (m) => m.requests >= BEST_VALUE_MIN_REQUESTS,
+      (m) => m.creditsPerRequest,
+      -1
+    ),
+    pick(
+      'night-owl',
+      'outOfHoursShare',
+      (m) => m.requests >= NIGHT_OWL_MIN_REQUESTS && m.outOfHoursShare > 0,
+      (m) => m.outOfHoursShare,
+      1
+    )
+  ]
+  if (variety.distinctModels >= 2) {
+    found.push({
+      id: 'prompt-polyglot',
+      model: null,
+      metric: 'distinctModels',
+      value: variety.distinctModels,
+      multiModelPrShare: variety.multiModelPrShare
+    })
+  }
+  return found.filter(Boolean)
+}
+
+/**
+ * Copilot usage insights at team and model level, in requests and recorded
+ * GitHub AI credits. Never reads authors or contributor breakdowns, so nothing
+ * here can identify a person.
+ */
+export function selectCopilotInsights(payloads) {
+  const usage = selectCopilotUsage(payloads)
+  const { byModel, prModels } = accrueUsageModels(payloads)
+
+  const entries = [...byModel.values()]
+  const grandRequests = entries.reduce((s, m) => s + m.requests, 0)
+  const grandCredits = entries.reduce((s, m) => s + m.credits, 0)
+
+  const models = entries
+    .map((m) => {
+      let creditShare = null
+      if (m.recorded) {
+        creditShare =
+          grandCredits > 0 ? round((m.credits / grandCredits) * 100, 1) : 0
+      }
+      return {
+        model: m.model,
+        requests: round(m.requests, 2),
+        credits: m.recorded ? round(m.credits, 4) : null,
+        requestShare:
+          grandRequests > 0 ? round((m.requests / grandRequests) * 100, 1) : 0,
+        creditShare,
+        creditsPerRequest:
+          m.pricedRequests > 0 ? round(m.credits / m.pricedRequests, 4) : null,
+        outOfHoursShare: cappedPercent(m.outOfHoursRequests, m.timedRequests),
+        prCount: m.prs.size,
+        reserved: RESERVED_USAGE_MODELS.has(m.model),
+        rank: null
+      }
+    })
+    .sort(
+      (a, b) =>
+        b.requests - a.requests ||
+        (b.credits ?? -1) - (a.credits ?? -1) ||
+        a.model.localeCompare(b.model)
+    )
+
+  const named = models.filter((m) => !m.reserved)
+  named.forEach((m, i) => {
+    m.rank = i + 1
+  })
+
+  const lead = named.find((m) => m.requests > 0) ?? named[0] ?? null
+  const runnerUp = lead ? named[named.indexOf(lead) + 1] : null
+  const favourite = lead
+    ? {
+        model: lead.model,
+        requests: lead.requests,
+        requestShare: lead.requestShare,
+        prCount: lead.prCount,
+        leadPoints: round(lead.requestShare - (runnerUp?.requestShare ?? 0), 1)
+      }
+    : null
+
+  const namedRequests = named.reduce((s, m) => s + m.requests, 0)
+  const hhi = named.reduce(
+    (s, m) => s + (m.requests / (namedRequests || 1)) ** 2,
+    0
+  )
+  const multiModelPrs = [...prModels.values()].filter(
+    (set) => set.size >= 2
+  ).length
+  const variety = {
+    distinctModels: named.length,
+    effectiveModels: namedRequests > 0 ? round(1 / hhi, 1) : null,
+    multiModelPrShare:
+      usage.prsWithUsage > 0
+        ? round((multiModelPrs / usage.prsWithUsage) * 100, 1)
+        : null
+  }
+
+  const recorded = entries.some((m) => m.recorded)
+  const pricedRequests = entries.reduce((s, m) => s + m.pricedRequests, 0)
+  const totals = {
+    requests: round(grandRequests, 2),
+    credits: recorded ? round(grandCredits, 4) : null,
+    creditsPerRequest:
+      pricedRequests > 0 ? round(grandCredits / pricedRequests, 4) : null
+  }
+
+  return {
+    hasUsage: models.length > 0,
+    coverage: {
+      prsWithUsage: usage.prsWithUsage,
+      prsWithCredits: usage.prsWithCredits,
+      assistedPrs: usage.assistedPrs,
+      coveragePercent: usage.coveragePercent
+    },
+    medianCreditsPerPr: usage.medianCreditsPerPr,
+    totals,
+    models,
+    favourite,
+    variety,
+    superlatives: buildSuperlatives(named, variety)
+  }
+}
+
+/** Top `limit` entries by `key`, the rest merged into one 'Other models' entry. */
+export function foldModels(models, limit, key) {
+  const sorted = [...(models ?? [])].sort((a, b) => num(b[key]) - num(a[key]))
+  if (sorted.length <= limit) return sorted
+  const rest = sorted.slice(limit)
+  return [
+    ...sorted.slice(0, limit),
+    {
+      model: 'Other models',
+      [key]: rest.reduce((s, m) => s + num(m[key]), 0)
+    }
+  ]
+}
+
+export const OTHER_MODELS_ID = 'other'
+
+/**
+ * Each model's share of Copilot requests, largest first, with the tail folded
+ * into 'Other models' past `limit`. Models without requests are left out.
+ */
+export function selectModelRequestShares(models, limit = 5) {
+  const folded = foldModels(
+    (models ?? []).filter((m) => num(m.requests) > 0),
+    limit,
+    'requests'
+  )
+  const total = folded.reduce((s, m) => s + num(m.requests), 0)
+  // The id keeps the folded bucket apart from a model that is itself called 'Other models'.
+  return folded.map((m, i) => ({
+    id: i === limit ? OTHER_MODELS_ID : `model:${m.model}`,
+    model: m.model,
+    requests: num(m.requests),
+    share: round((num(m.requests) / total) * 100, 1)
+  }))
 }
 
 export { round, rate }

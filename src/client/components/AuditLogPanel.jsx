@@ -1,20 +1,57 @@
 import { useState } from 'react'
-import { Panel } from './Panel'
+
+import { Panel, PanelState } from './dashboard'
+import {
+  Button,
+  DateInput,
+  ErrorSummary,
+  NotificationBanner,
+  Pagination,
+  Select,
+  Table
+} from './govuk'
 import { useAuditLogs } from '../hooks/useAuditLogs'
 
 const PAGE_SIZES = [10, 25, 50, 100]
+const FROM_ID = 'audit-from'
+const TO_ID = 'audit-to'
+const PARTS = ['day', 'month', 'year']
 
 const ACTION_LABEL = {
   'commit-classification.updated': 'Commit re-classified',
-  'persona-mapping.upserted': 'Role assigned',
-  'persona-mapping.deleted': 'Role removed'
+  'persona-mapping.upserted': 'Persona assigned',
+  'persona-mapping.deleted': 'Persona removed',
+  'repository.mapped': 'Repository added',
+  'repository.remapped': 'Repository moved',
+  'repository.unmapped': 'Repository removed',
+  'project.created': 'Project created',
+  'project.updated': 'Project changed',
+  'project.archived': 'Project archived',
+  'project.user-groups.updated': 'User groups changed',
+  'role-mapping.created': 'Role mapping added',
+  'role-mapping.updated': 'Role mapping changed',
+  'role-mapping.deleted': 'Role mapping removed',
+  'role-mapping.migrated': 'Role mappings migrated',
+  'pr-jira-links.updated': 'Jira links changed',
+  'complexity-model.updated': 'Complexity model changed'
 }
 
-function formatTimestamp(iso) {
-  return new Date(iso).toLocaleString(undefined, {
-    dateStyle: 'medium',
-    timeStyle: 'medium'
+function formatWhen(iso) {
+  const d = new Date(iso)
+  const date = d.toLocaleDateString('en-GB', {
+    day: 'numeric',
+    month: 'short',
+    year: 'numeric'
   })
+  const hours = d.getHours() % 12 || 12
+  const minutes = String(d.getMinutes()).padStart(2, '0')
+  return `${date}, ${hours}:${minutes}${d.getHours() < 12 ? 'am' : 'pm'}`
+}
+
+// The backend records the actor as `{ oid, name }`; older entries hold a plain string.
+export function actorLabel(actor) {
+  if (typeof actor === 'string') return actor
+  return actor?.name || actor?.oid || 'Unknown'
 }
 
 function formatValue(value) {
@@ -24,18 +61,58 @@ function formatValue(value) {
     .join(', ')
 }
 
+/** Parses a GOV.UK date input value into a Date, or an error and the fields at fault. */
+function parseDate(value, label) {
+  const parts = PARTS.map((key) => String(value[key] ?? '').trim())
+  if (parts.every((p) => !p)) return {}
+
+  const missing = PARTS.filter((_, i) => !parts[i])
+  if (missing.length > 0) {
+    return {
+      error: `${label} must include a ${missing.join(' and ')}`,
+      fields: missing
+    }
+  }
+
+  const [day, month, year] = parts.map(Number)
+  const date = new Date(year, month - 1, day)
+  const real =
+    parts.every((p) => /^\d+$/.test(p)) &&
+    year >= 1000 &&
+    date.getFullYear() === year &&
+    date.getMonth() === month - 1 &&
+    date.getDate() === day
+  return real
+    ? { date }
+    : { error: `${label} must be a real date`, fields: PARTS }
+}
+
+function pageItems(page, totalPages, goTo) {
+  const numbers = [...new Set([1, page - 1, page, page + 1, totalPages])]
+    .filter((n) => n >= 1 && n <= totalPages)
+    .sort((a, b) => a - b)
+
+  return numbers.flatMap((number, i) => {
+    const item = {
+      number,
+      current: number === page,
+      onClick: () => goTo(number)
+    }
+    return i > 0 && number - numbers[i - 1] > 1
+      ? [{ ellipsis: true }, item]
+      : [item]
+  })
+}
+
 /**
- * The audit trail — every change an operator has made through the dashboard,
- * newest first. Paged and filterable by a datetime window so a specific
- * change can be located without scrolling the whole history.
- *
- * The window is applied only when "Apply" is pressed, so typing into a
- * datetime input does not fire a request per keystroke.
+ * The audit trail of every change made through the dashboard, newest first,
+ * paged and filterable by date. The filter applies only on submit.
  */
-export function AuditLogPanel() {
-  const [fromInput, setFromInput] = useState('')
-  const [toInput, setToInput] = useState('')
-  const [rangeError, setRangeError] = useState(null)
+export function AuditLogPanel({ projectSlug }) {
+  const [fromInput, setFromInput] = useState({})
+  const [toInput, setToInput] = useState({})
+  const [errors, setErrors] = useState({})
+  const [attempt, setAttempt] = useState(0)
   const [query, setQuery] = useState({
     from: null,
     to: null,
@@ -43,228 +120,196 @@ export function AuditLogPanel() {
     pageSize: PAGE_SIZES[1]
   })
 
-  const { entries, page, total, totalPages, status, error, refresh } =
-    useAuditLogs(query)
+  const { entries, page, total, totalPages, status, refresh } = useAuditLogs({
+    projectSlug,
+    ...query
+  })
 
-  const applyRange = (event) => {
+  const applyFilter = (event) => {
     event.preventDefault()
-
-    const from = fromInput ? new Date(fromInput) : null
-    const to = toInput ? new Date(toInput) : null
-
-    if (
-      (from && Number.isNaN(from.getTime())) ||
-      (to && Number.isNaN(to.getTime()))
-    ) {
-      setRangeError('Enter a valid date and time.')
-      return
+    const from = parseDate(fromInput, 'Date from')
+    const to = parseDate(toInput, 'Date to')
+    const found = {}
+    if (from.error) found.from = from
+    if (to.error) found.to = to
+    if (from.date && to.date && from.date > to.date) {
+      found.to = {
+        error: 'Date to must be the same as or after date from',
+        fields: PARTS
+      }
     }
 
-    if (from && to && from.getTime() >= to.getTime()) {
-      setRangeError('From must be before To.')
-      return
-    }
+    setAttempt((n) => n + 1)
+    setErrors(found)
+    if (found.from || found.to) return
 
-    setRangeError(null)
+    const end = to.date && new Date(to.date)
+    end?.setHours(23, 59, 59, 999)
     setQuery((q) => ({
       ...q,
-      from: from ? from.toISOString() : null,
-      to: to ? to.toISOString() : null,
+      from: from.date ? from.date.toISOString() : null,
+      to: end ? end.toISOString() : null,
       page: 1
     }))
   }
 
-  const clearRange = () => {
-    setFromInput('')
-    setToInput('')
-    setRangeError(null)
+  const clearFilter = () => {
+    setFromInput({})
+    setToInput({})
+    setErrors({})
     setQuery((q) => ({ ...q, from: null, to: null, page: 1 }))
   }
 
   const goToPage = (next) => setQuery((q) => ({ ...q, page: next }))
 
+  const errorList = [
+    errors.from && {
+      href: `#${FROM_ID}-${errors.from.fields[0]}`,
+      text: errors.from.error
+    },
+    errors.to && {
+      href: `#${TO_ID}-${errors.to.fields[0]}`,
+      text: errors.to.error
+    }
+  ].filter(Boolean)
+
+  let state = 'populated'
+  if (entries.length === 0) {
+    if (status === 'error') state = 'error'
+    else if (status === 'loading' || status === 'idle') state = 'loading'
+    else state = 'empty'
+  }
+
   return (
     <Panel
       title="Audit log"
-      subtitle="Every change made from this dashboard — commit re-classifications and role mappings."
-      action={
-        <button
-          type="button"
+      family="speed"
+      icon="layers"
+      headingLevel={2}
+      busy={state === 'loading'}
+      actions={
+        <Button
+          variant="secondary"
+          className="govuk-!-margin-bottom-0"
           onClick={refresh}
-          className="focus-ring rounded-[0.6rem] border border-[var(--color-border)] px-2 py-1 text-xs font-medium text-[var(--color-text-muted)] transition-colors hover:border-[var(--color-primary)] hover:text-[var(--color-text)]"
         >
-          Refresh
-        </button>
+          Refresh<span className="govuk-visually-hidden"> audit log</span>
+        </Button>
       }
     >
-      <form
-        onSubmit={applyRange}
-        className="mb-4 flex flex-wrap items-end gap-3"
-      >
-        <label className="flex flex-col gap-1 text-xs font-medium text-[var(--color-text-muted)]">
-          From
-          <input
-            type="datetime-local"
-            className="filter-input"
-            value={fromInput}
-            onChange={(e) => setFromInput(e.target.value)}
-          />
-        </label>
-        <label className="flex flex-col gap-1 text-xs font-medium text-[var(--color-text-muted)]">
-          To
-          <input
-            type="datetime-local"
-            className="filter-input"
-            value={toInput}
-            onChange={(e) => setToInput(e.target.value)}
-          />
-        </label>
-        <label className="flex flex-col gap-1 text-xs font-medium text-[var(--color-text-muted)]">
-          Per page
-          <select
-            className="filter-input"
-            value={query.pageSize}
-            onChange={(e) =>
-              setQuery((q) => ({
-                ...q,
-                pageSize: Number(e.target.value),
-                page: 1
-              }))
-            }
-          >
-            {PAGE_SIZES.map((size) => (
-              <option key={size} value={size}>
-                {size}
-              </option>
-            ))}
-          </select>
-        </label>
-        <button
-          type="submit"
-          className="focus-ring rounded-[0.6rem] bg-[var(--color-primary)] px-3 py-2 text-sm font-semibold text-white transition-opacity hover:opacity-90"
-        >
-          Apply
-        </button>
-        <button
-          type="button"
-          onClick={clearRange}
-          className="focus-ring rounded-[0.6rem] border border-[var(--color-border)] px-3 py-2 text-sm font-medium text-[var(--color-text-muted)] transition-colors hover:border-[var(--color-primary)] hover:text-[var(--color-text)]"
-        >
-          Clear
-        </button>
+      <p className="govuk-body-s">
+        Every change made from this dashboard: commit re-classifications and
+        persona mappings.
+      </p>
+
+      {errorList.length > 0 && (
+        <ErrorSummary key={attempt} errors={errorList} />
+      )}
+
+      <form onSubmit={applyFilter} noValidate>
+        <div className="app-grid">
+          <div className="app-span-6">
+            <DateInput
+              id={FROM_ID}
+              legend="Date from"
+              legendSize="s"
+              hint="For example, 27 3 2026"
+              errorMessage={errors.from?.error}
+              errorFields={errors.from?.fields}
+              value={fromInput}
+              onChange={setFromInput}
+            />
+          </div>
+          <div className="app-span-6">
+            <DateInput
+              id={TO_ID}
+              legend="Date to"
+              legendSize="s"
+              hint="For example, 31 3 2026"
+              errorMessage={errors.to?.error}
+              errorFields={errors.to?.fields}
+              value={toInput}
+              onChange={setToInput}
+            />
+          </div>
+        </div>
+        <Select
+          id="audit-page-size"
+          label="Results per page"
+          value={query.pageSize}
+          onChange={(e) =>
+            setQuery((q) => ({
+              ...q,
+              pageSize: Number(e.target.value),
+              page: 1
+            }))
+          }
+          options={PAGE_SIZES.map((size) => ({
+            value: size,
+            text: String(size)
+          }))}
+        />
+        <div className="govuk-button-group">
+          <Button type="submit">Apply filter</Button>
+          <Button variant="secondary" onClick={clearFilter}>
+            Clear filter
+          </Button>
+        </div>
       </form>
 
-      {rangeError && (
-        <p
-          role="alert"
-          className="mb-3 text-xs font-medium text-[var(--color-danger)]"
-        >
-          {rangeError}
-        </p>
-      )}
-      {status === 'error' && error && (
-        <p
-          role="alert"
-          className="mb-3 text-xs font-medium text-[var(--color-danger)]"
-        >
-          Couldn't load the audit log: {error}
-        </p>
+      {status === 'error' && entries.length > 0 && (
+        <NotificationBanner headingLevel={3}>
+          We could not refresh the audit log. Showing the last page loaded.
+        </NotificationBanner>
       )}
 
-      {status === 'loading' && entries.length === 0 ? (
-        <p className="text-xs text-[var(--color-text-muted)]">Loading…</p>
-      ) : entries.length === 0 ? (
-        <p className="text-xs text-[var(--color-text-muted)]">
-          No audited changes in this time window.
+      <PanelState
+        state={state}
+        title="Audit log"
+        icon="layers"
+        emptyTag="No changes"
+        emptyMessage="No audited changes in this period."
+        errorMessage="We could not load the audit log. Try again later."
+        onRetry={refresh}
+      >
+        <p className="govuk-body-s" aria-live="polite">
+          Page {page} of {totalPages} · {total} change{total === 1 ? '' : 's'}
         </p>
-      ) : (
-        <>
-          <div className="overflow-x-auto">
-            <table className="w-full border-collapse text-left text-sm">
-              <caption className="sr-only">
-                Audited changes, newest first
-              </caption>
-              <thead>
-                <tr className="text-xs text-[var(--color-text-muted)]">
-                  <th scope="col" className="px-3 py-2 font-medium">
-                    When
-                  </th>
-                  <th scope="col" className="px-3 py-2 font-medium">
-                    Action
-                  </th>
-                  <th scope="col" className="px-3 py-2 font-medium">
-                    Subject
-                  </th>
-                  <th scope="col" className="px-3 py-2 font-medium">
-                    From
-                  </th>
-                  <th scope="col" className="px-3 py-2 font-medium">
-                    To
-                  </th>
-                  <th scope="col" className="px-3 py-2 font-medium">
-                    By
-                  </th>
-                </tr>
-              </thead>
-              <tbody>
-                {entries.map((entry) => (
-                  <tr
-                    key={entry.id}
-                    className="border-t border-[var(--color-border)]"
-                  >
-                    <td className="whitespace-nowrap px-3 py-2 text-xs text-[var(--color-text-muted)]">
-                      {formatTimestamp(entry.occurredAt)}
-                    </td>
-                    <td className="px-3 py-2 text-[var(--color-text)]">
-                      {ACTION_LABEL[entry.action] ?? entry.action}
-                    </td>
-                    <td className="px-3 py-2 font-mono text-xs text-[var(--color-text)]">
-                      {entry.entityId}
-                    </td>
-                    <td className="px-3 py-2 text-xs text-[var(--color-text-muted)]">
-                      {formatValue(entry.before)}
-                    </td>
-                    <td className="px-3 py-2 text-xs text-[var(--color-text)]">
-                      {formatValue(entry.after)}
-                    </td>
-                    <td className="px-3 py-2 text-xs text-[var(--color-text-muted)]">
-                      {entry.actor}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-
-          <nav
-            aria-label="Audit log pages"
-            className="mt-3 flex items-center justify-between gap-3 text-xs text-[var(--color-text-muted)]"
-          >
-            <span>
-              Page {page} of {totalPages} · {total} change
-              {total === 1 ? '' : 's'}
-            </span>
-            <span className="flex gap-2">
-              <button
-                type="button"
-                onClick={() => goToPage(page - 1)}
-                disabled={page <= 1}
-                className="focus-ring rounded-[0.6rem] border border-[var(--color-border)] px-2 py-1 font-medium transition-colors hover:border-[var(--color-primary)] hover:text-[var(--color-text)] disabled:opacity-50"
-              >
-                Previous
-              </button>
-              <button
-                type="button"
-                onClick={() => goToPage(page + 1)}
-                disabled={page >= totalPages}
-                className="focus-ring rounded-[0.6rem] border border-[var(--color-border)] px-2 py-1 font-medium transition-colors hover:border-[var(--color-primary)] hover:text-[var(--color-text)] disabled:opacity-50"
-              >
-                Next
-              </button>
-            </span>
-          </nav>
-        </>
-      )}
+        <Table
+          className="govuk-!-margin-bottom-0"
+          caption="Audited changes, newest first"
+          captionHidden
+          head={[
+            { id: 'when', label: 'When' },
+            { id: 'action', label: 'Action' },
+            { id: 'subject', label: 'Subject' },
+            { id: 'from', label: 'From' },
+            { id: 'to', label: 'To' },
+            { id: 'by', label: 'By' }
+          ]}
+          rows={entries.map((entry) => ({
+            id: entry.id,
+            cells: [
+              formatWhen(entry.occurredAt),
+              ACTION_LABEL[entry.action] ?? entry.action,
+              entry.entityId,
+              formatValue(entry.before),
+              formatValue(entry.after),
+              actorLabel(entry.actor)
+            ]
+          }))}
+        />
+        {totalPages > 1 && (
+          <Pagination
+            landmarkLabel="Audit log pages"
+            previous={page > 1 ? { onClick: () => goToPage(page - 1) } : null}
+            next={
+              page < totalPages ? { onClick: () => goToPage(page + 1) } : null
+            }
+            items={pageItems(page, totalPages, goToPage)}
+          />
+        )}
+      </PanelState>
     </Panel>
   )
 }

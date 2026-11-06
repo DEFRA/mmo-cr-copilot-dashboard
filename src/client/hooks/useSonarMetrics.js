@@ -13,7 +13,7 @@
  *   error   — Error message string, or null
  */
 import { useEffect, useState } from 'react'
-import { apiUrl } from '../lib/api'
+import { apiFetch, apiUrl } from '../lib/api'
 
 export function useSonarMetrics(path) {
   const [state, setState] = useState({
@@ -31,7 +31,7 @@ export function useSonarMetrics(path) {
     const controller = new AbortController()
     setState((s) => ({ ...s, status: 'loading', error: null }))
 
-    fetch(apiUrl(path), {
+    apiFetch(apiUrl(path), {
       signal: controller.signal,
       headers: { Accept: 'application/json' }
     })

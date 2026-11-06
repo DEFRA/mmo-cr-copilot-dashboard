@@ -1,0 +1,30 @@
+{
+  "schema": "ai-attribution-file/2",
+  "path": "src/client/components/views/OverviewView.jsx",
+  "added": 11,
+  "counts": {
+    "aiCompletion": 0,
+    "aiChat": 0,
+    "aiAgent": 11,
+    "aiModified": 0,
+    "pasted": 0,
+    "typed": 0,
+    "untracked": 0
+  },
+  "ranges": {
+    "ai-agent": "152,790-794,798-802"
+  },
+  "ai": [
+    [152, "a", "905a8431", 0],
+    [790, "a", "783055b0", 0],
+    [791, "a", "71e94401", 0],
+    [792, "a", "80e8403a", 0],
+    [793, "a", "0b248e5a", 0],
+    [794, "a", "5742e2c1", 0],
+    [798, "a", "4a0a8a05", 0],
+    [799, "a", "71e94401", 0],
+    [800, "a", "d1e10948", 0],
+    [801, "a", "0600902c", 0],
+    [802, "a", "5742e2c1", 0]
+  ]
+}

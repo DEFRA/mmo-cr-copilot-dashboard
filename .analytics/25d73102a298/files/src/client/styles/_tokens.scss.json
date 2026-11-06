@@ -1,0 +1,21 @@
+{
+  "schema": "ai-attribution-file/2",
+  "path": "src/client/styles/_tokens.scss",
+  "added": 2,
+  "counts": {
+    "aiCompletion": 0,
+    "aiChat": 0,
+    "aiAgent": 2,
+    "aiModified": 0,
+    "pasted": 0,
+    "typed": 0,
+    "untracked": 0
+  },
+  "ranges": {
+    "ai-agent": "74-75"
+  },
+  "ai": [
+    [74, "a", "b01c6fc7", 0],
+    [75, "a", "2f482cee", 0]
+  ]
+}

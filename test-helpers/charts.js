@@ -18,3 +18,12 @@ export function lastChartOption() {
 export function allSeries() {
   return chartOptions().flatMap((option) => option?.series ?? [])
 }
+
+/** The `onEvents` handlers of the last chart rendered with a series of `type`. */
+export function chartEventsFor(type) {
+  const options = chartOptions()
+  const index = options.findLastIndex((option) =>
+    option?.series?.some((s) => s.type === type)
+  )
+  return index < 0 ? undefined : globalThis.__chartEvents[index]
+}

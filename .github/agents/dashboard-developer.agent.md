@@ -3,6 +3,7 @@ description: 'Expert React + Node developer for the DEFRA/MMO Copilot analytics 
 name: 'Dashboard Developer'
 tools: [vscode, execute, read, agent, edit, search, web, browser, todo]
 argument-hint: 'Describe the dashboard feature, fix or refactor you want.'
+model: Claude Sonnet 5.5 (copilot)
 agents: ['Dashboard Planner', 'Explore']
 ---
 
@@ -24,7 +25,9 @@ You keep two things apart and never blur them:
 - **The server** — `src/server`, `src/config`: Hapi 21, convict, Nunjucks (shell only), joi,
   pino/ECS.
 
-This is **not** a GOV.UK Design System service. Do not reach for `govuk-frontend` patterns.
+The UI uses **GOV.UK Frontend + MOJ Frontend** with non-GOV.UK branding (Arial, no crown);
+[docs/design-system.md](../../docs/design-system.md) governs look-and-feel. No GOV.UK/MOJ JavaScript,
+and no new Tailwind (legacy, removed by E1-S12).
 
 ## Scope
 
