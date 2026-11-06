@@ -1,0 +1,28 @@
+{
+  "schema": "ai-attribution-file/2",
+  "path": "README.md",
+  "added": 29,
+  "counts": {
+    "aiCompletion": 0,
+    "aiChat": 0,
+    "aiAgent": 8,
+    "aiModified": 0,
+    "pasted": 0,
+    "typed": 0,
+    "untracked": 21
+  },
+  "ranges": {
+    "ai-agent": "25,69-70,72,75-76,105-106",
+    "untracked": "66-68,71,73-74,77-91"
+  },
+  "ai": [
+    [25, "a", "4f8b052e", 0],
+    [69, "a", "1c7b08b4", 0],
+    [70, "a", "3fa989d5", 0],
+    [72, "a", "8494529f", 0],
+    [75, "a", "31cd67ad", 0],
+    [76, "a", "069654ea", 0],
+    [105, "a", "323a824c", 0],
+    [106, "a", "06365d0d", 0]
+  ]
+}

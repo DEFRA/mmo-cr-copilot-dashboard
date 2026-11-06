@@ -329,7 +329,7 @@ export const config = convict({
   },
   ingest: {
     token: {
-      doc: 'Shared secret presented by the GitHub Actions workflow on POST /api/ingest, and forwarded to the backend. Required outside local development.',
+      doc: 'Service-to-service secret this dashboard presents to the backend (x-ingest-token). Must match INGEST_TOKEN on the backend. Required outside local development.',
       format: String,
       default: '',
       sensitive: true,
@@ -342,9 +342,9 @@ export const config = convict({
       env: 'INGEST_MAX_PAYLOAD_BYTES'
     },
     allowSharedToken: {
-      doc: 'Accept the shared x-ingest-token on POST /api/ingest when no GitHub OIDC bearer token is sent. Set to false once every caller sends OIDC tokens (dashboard ADR 0003).',
+      doc: 'Break-glass only: accept INGEST_TOKEN as x-ingest-token on POST /api/ingest from callers with no GitHub OIDC token (for example the one-off legacy migration). Off by default; GitHub workflows use OIDC (dashboard ADR 0003).',
       format: Boolean,
-      default: true,
+      default: false,
       env: 'INGEST_ALLOW_SHARED_TOKEN'
     },
     oidc: {

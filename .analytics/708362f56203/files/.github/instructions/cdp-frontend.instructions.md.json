@@ -1,0 +1,22 @@
+{
+  "schema": "ai-attribution-file/2",
+  "path": ".github/instructions/cdp-frontend.instructions.md",
+  "added": 3,
+  "counts": {
+    "aiCompletion": 0,
+    "aiChat": 0,
+    "aiAgent": 3,
+    "aiModified": 0,
+    "pasted": 0,
+    "typed": 0,
+    "untracked": 0
+  },
+  "ranges": {
+    "ai-agent": "44-46"
+  },
+  "ai": [
+    [44, "a", "5e12a5b5", 0],
+    [45, "a", "eb712a55", 0],
+    [46, "a", "e5c65aca", 0]
+  ]
+}

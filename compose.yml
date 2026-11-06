@@ -31,7 +31,7 @@ services:
       REDIS_TLS: false
       SESSION_COOKIE_SECURE: false
       COPILOT_BACKEND_API_URL: http://host.docker.internal:3001
-      # Must match INGEST_TOKEN on the backend and in the GitHub Actions workflow.
+      # Must match INGEST_TOKEN on the backend (dashboard to backend only).
       INGEST_TOKEN: local-development-ingest-token
     # Source is mounted, so nodemon restarts the server and Vite recompiles the
     # client on every edit. Dependency changes rebuild the image under --watch.

@@ -152,12 +152,12 @@ export function HelpView({ onBack, isAdmin = false, onOnboardProject }) {
           the DEFRA organisation, from the shared workflow, on a pull request or
           manual run, and that the repository is mapped to a project.
         </p>
-        <Details summary="If the job cannot request an OIDC token">
+        <Details summary="If the workflow cannot send data">
           <p className="govuk-body">
-            Without <code>id-token: write</code> the workflow falls back to a
-            shared secret, sent from the <code>COPILOT_INGEST_TOKEN</code>{' '}
-            repository secret. Ask the service team for it. This fallback will
-            be switched off once every repository uses OIDC.
+            There is no repository secret to set. If the run summary says the
+            ingest credential was rejected or missing, check that the job has{' '}
+            <code>id-token: write</code> and that the repository is mapped to a
+            project.
           </p>
         </Details>
       </section>

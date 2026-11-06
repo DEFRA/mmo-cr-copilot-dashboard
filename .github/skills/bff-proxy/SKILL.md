@@ -52,8 +52,9 @@ In `src/server/routes/api/controller.js`, alongside the existing ones:
 
 ## 3. Changing the ingest path
 
-`POST /api/ingest` authenticates with `x-ingest-token` (constant-time comparison) and forwards the
-body to the backend, which owns validation. Do not duplicate the payload schema here — one source of
+`POST /api/ingest` authenticates the caller with a GitHub Actions OIDC bearer token (ADR 0003) and
+forwards the body to the backend with the service-to-service `x-ingest-token` (constant-time
+comparison there). The backend owns validation. Do not duplicate the payload schema here — one source of
 truth.
 
 If the payload contract changes, the change belongs in the backend; this service only needs a body

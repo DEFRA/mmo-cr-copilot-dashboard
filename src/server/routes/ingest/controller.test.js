@@ -42,9 +42,11 @@ describe('#ingest route', () => {
 
   describe('When a token is configured', () => {
     beforeEach(() => {
-      vi.spyOn(config, 'get').mockImplementation((key) =>
-        key === 'ingest.token' ? INGEST_TOKEN : readConfig(key)
-      )
+      vi.spyOn(config, 'get').mockImplementation((key) => {
+        if (key === 'ingest.token') return INGEST_TOKEN
+        if (key === 'ingest.allowSharedToken') return true
+        return readConfig(key)
+      })
     })
 
     afterEach(() => {
@@ -143,15 +145,12 @@ describe('#ingest route', () => {
     })
   })
 
-  describe('When no token is configured', () => {
-    test('Should accept the request so local development works without secrets', async () => {
-      fetchMock.mockResponse(JSON.stringify({ status: 'stored' }), {
-        status: 201
-      })
+  describe('With the shared token switched off (the default)', () => {
+    test('Should refuse a request that has no bearer token', async () => {
+      const { statusCode } = await post({ 'x-ingest-token': INGEST_TOKEN })
 
-      const { statusCode } = await post({})
-
-      expect(statusCode).toBe(statusCodes.created)
+      expect(statusCode).toBe(statusCodes.unauthorized)
+      expect(fetchMock).not.toHaveBeenCalled()
     })
   })
 

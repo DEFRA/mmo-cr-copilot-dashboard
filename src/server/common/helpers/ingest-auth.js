@@ -51,8 +51,8 @@ function checkSharedToken(request, h) {
 /**
  * Guards `POST /api/ingest`. A GitHub Actions OIDC bearer token is verified
  * (dashboard ADR 0003) and its claims kept on `request.app.ingestClaims` for the
- * repository checks in the handler. Until `INGEST_ALLOW_SHARED_TOKEN` is turned
- * off, callers without a bearer token may still present the shared secret.
+ * repository checks in the handler. A caller without a bearer token is refused
+ * unless `INGEST_ALLOW_SHARED_TOKEN` is switched on (break-glass, off by default).
  */
 export async function requireIngestToken(request, h) {
   const authorization = request.headers.authorization

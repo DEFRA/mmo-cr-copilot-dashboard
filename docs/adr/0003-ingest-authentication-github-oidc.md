@@ -59,7 +59,8 @@ The shared `INGEST_TOKEN` is retired once every caller has migrated.
 Resolved (B2.5):
 
 - **Audience:** `mmo-cr-copilot-dashboard` (`INGEST_OIDC_AUDIENCE`).
-- **Organisation ID:** configured per environment in `INGEST_OIDC_OWNER_ID`; OIDC ingest is
+- **Organisation ID:** `5528822`, set once for every environment in `cdp-app-config`
+  (`services/mmo-cr-copilot-dashboard/defaults.env`) as `INGEST_OIDC_OWNER_ID`; OIDC ingest is
   refused while it is empty.
 - **Events:** `pull_request,workflow_dispatch` (`INGEST_OIDC_ALLOWED_EVENTS`).
 - **Workflow ref:** any ref after the `@` is accepted, so callers may pin a tag or SHA
@@ -72,8 +73,9 @@ Resolved (B2.5):
 
 Still open:
 
-- Transition date for setting `INGEST_ALLOW_SHARED_TOKEN=false` and then removing the shared
-  token.
+- None. The shared token is no longer used by GitHub workflows: `INGEST_ALLOW_SHARED_TOKEN` now
+  defaults to `false` and remains only as a break-glass switch (for example the one-off legacy
+  migration). `INGEST_TOKEN` is retained solely as the dashboard-to-backend service credential.
 
 ## References
 
