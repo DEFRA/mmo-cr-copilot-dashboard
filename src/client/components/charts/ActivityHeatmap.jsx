@@ -11,21 +11,26 @@ import {
 // Above this rate the cell is dark enough that only white text meets 4.5:1.
 const WHITE_TEXT_FROM = 80
 const CONTRIBUTOR_LABEL_WIDTH = 48
+// Each contributor row fits its chip-styled name and a 14px cell label.
+const ROW_HEIGHT = 36
+const CHROME_HEIGHT = 80
 
 /**
  * Heatmap of a value across two categorical axes (contributor × repository
  * assist rate). Every cell is labelled with its value; null cells read as
- * "no activity".
+ * "no activity". Height grows with the rows unless one is given.
  */
 export function ActivityHeatmap({
   xLabels,
   yLabels,
   data,
   title,
-  height = 340,
+  height,
   onSelectContributor,
   onSelectCell
 }) {
+  const chartHeight =
+    height ?? Math.max(240, CHROME_HEIGHT + yLabels.length * ROW_HEIGHT)
   // data: [xIndex, yIndex, value|null]
   const option = useMemo(() => {
     const p = getAppPalette()
@@ -58,6 +63,8 @@ export function ActivityHeatmap({
         // Full name on hover, since long handles are truncated below.
         tooltip: { show: true },
         axisLabel: textStyle(p, {
+          // Every row named: a skipped label would pin a name to the wrong row.
+          interval: 0,
           // Fits "charlie" in 14px bold Arial; longer handles truncate.
           width: CONTRIBUTOR_LABEL_WIDTH,
           overflow: 'truncate',
@@ -123,7 +130,7 @@ export function ActivityHeatmap({
     <div>
       <Chart
         option={option}
-        height={height}
+        height={chartHeight}
         onEvents={handleEvents}
         ariaLabel={`${title}. Assist rate for ${yLabels.length} contributors across ${xLabels.length} repositories.`}
         dataTable={

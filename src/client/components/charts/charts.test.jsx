@@ -178,6 +178,58 @@ describe('#CategoryBar', () => {
     await userEvent.click(button)
     expect(onSelect).toHaveBeenCalledWith(0, 'repo-a')
   })
+
+  const manyBars = (count, props = {}) => {
+    const categories = Array.from({ length: count }, (_, i) => `#${i + 1}`)
+    render(
+      <CategoryBar
+        categories={categories}
+        values={categories.map((_, i) => i * 10)}
+        seriesName="average batch size"
+        unit=" lines"
+        title="Batch size"
+        onSelect={vi.fn()}
+        {...props}
+      />
+    )
+    return lastChartOption()
+  }
+
+  test('Should label each bar while few enough to fit, without a word unit', () => {
+    const option = manyBars(5)
+
+    expect(option.series[0].label).toMatchObject({
+      show: true,
+      formatter: '{c}'
+    })
+    expect(option.dataZoom[0].show).toBe(false)
+  })
+
+  test('Should leave crowded bars to hover and hide overlapping axis labels', () => {
+    const option = manyBars(20)
+
+    expect(option.series[0].label.show).toBe(false)
+    expect(option.series[0].emphasis.label.show).toBe(true)
+    expect(option.xAxis.axisLabel.hideOverlap).toBe(true)
+  })
+
+  test('Should scroll a long axis through a window anchored where asked', () => {
+    const option = manyBars(60, { zoomAnchor: 'end' })
+
+    expect(option.dataZoom[0]).toMatchObject({
+      show: true,
+      xAxisIndex: 0,
+      start: 50,
+      end: 100
+    })
+  })
+
+  test('Should fold a long drill-down list behind a disclosure', () => {
+    manyBars(20)
+
+    expect(screen.getByText('List all 20 bars')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: '#20' })).toBeInTheDocument()
+  })
 })
 
 describe('#StackedBar', () => {
@@ -375,6 +427,21 @@ describe('#ActivityHeatmap', () => {
     })
     expect(lastChartOption().yAxis.tooltip).toEqual({ show: true })
   })
+
+  test('Should give every contributor its own labelled row', () => {
+    const contributors = Array.from({ length: 30 }, (_, i) => `dev-${i}`)
+    render(
+      <ActivityHeatmap
+        xLabels={['repo-a']}
+        yLabels={contributors}
+        data={[[0, 0, 50]]}
+        title="Activity"
+      />
+    )
+
+    expect(lastChartOption().yAxis.axisLabel.interval).toBe(0)
+    expect(screen.getByRole('img').style.height).toBe(`${80 + 30 * 36}px`)
+  })
 })
 
 describe('#ProfileRadar', () => {
@@ -497,6 +564,31 @@ describe('#DeliveryTimeBar', () => {
 
     expect(screen.getByRole('img')).toBeInTheDocument()
   })
+
+  test('Should leave zero-hour bars unlabelled', () => {
+    render(<DeliveryTimeBar items={items} title="Delivery time" />)
+
+    const { formatter } = lastChartOption().series[0].label
+    expect(formatter({ value: 0 })).toBe('')
+    expect(formatter({ value: 12 })).toBe('12h')
+  })
+
+  test('Should open a long run of pull requests on the newest window', () => {
+    const many = Array.from({ length: 90 }, (_, i) => ({
+      prNumber: i + 1,
+      cycleHours: i,
+      completed: true
+    }))
+    render(<DeliveryTimeBar items={many} title="Delivery time" />)
+
+    const option = lastChartOption()
+    expect(option.series[0].label.show).toBe(false)
+    expect(option.dataZoom[0]).toMatchObject({
+      show: true,
+      start: expect.closeTo(66.67, 1),
+      end: 100
+    })
+  })
 })
 
 describe('#LiveCommitStream', () => {
@@ -531,6 +623,37 @@ describe('#LiveCommitStream', () => {
     render(<LiveCommitStream timeline={[]} theme="dark" />)
 
     expect(screen.getByText('Awaiting commits…')).toBeInTheDocument()
+  })
+
+  const stream = (sizes) =>
+    sizes.map((linesTouched, i) => ({
+      ...timeline[0],
+      commit: `sha${i}`,
+      linesTouched
+    }))
+
+  test('Should plot only the latest window of commits but table them all', () => {
+    preferReducedMotion()
+    render(<LiveCommitStream timeline={stream(Array(60).fill(10))} />)
+
+    expect(lastChartOption().xAxis.data).toHaveLength(40)
+    expect(lastChartOption().xAxis.data[0]).toBe('sha20')
+    expect(screen.getByRole('cell', { name: 'sha0' })).toBeInTheDocument()
+  })
+
+  test('Should switch to a log axis when one commit dwarfs the rest', () => {
+    preferReducedMotion()
+    render(<LiveCommitStream timeline={stream([10, 0, 12, 23000])} />)
+
+    expect(lastChartOption().yAxis).toMatchObject({ type: 'log', min: 1 })
+    expect(lastChartOption().series[0].data).toEqual([10, 1, 12, 23000])
+  })
+
+  test('Should keep a linear axis for an even spread', () => {
+    preferReducedMotion()
+    render(<LiveCommitStream timeline={stream([10, 40, 120, 200])} />)
+
+    expect(lastChartOption().yAxis.type).toBe('value')
   })
 })
 

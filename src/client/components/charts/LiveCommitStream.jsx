@@ -17,12 +17,22 @@ import { cx } from '../govuk/utils.js'
 export const REVEAL_MS = 1100
 export const HOLD_MS = 2500
 const FEED_LENGTH = 8
+// The chart scrolls through the latest commits; the data table keeps them all.
+export const STREAM_WINDOW = 40
 
 const COPILOT = 'Copilot-assisted'
 const HUMAN = 'Human-authored'
 
 const isCopilot = (commit) => commit.classification === COPILOT
 const commitKey = (c) => `${c.repository}-${c.prNumber}-${c.commit}`
+
+/** A log axis when one commit would flatten the rest, e.g. 23,000 lines against a median of 20. */
+function needsLogScale(timeline) {
+  const sizes = timeline.map((c) => c.linesTouched).sort((a, b) => a - b)
+  const peak = sizes.at(-1) ?? 0
+  const median = sizes[Math.floor(sizes.length / 2)] ?? 0
+  return peak >= 100 && peak > 20 * Math.max(1, median)
+}
 // Each repository also gets its own symbol, so colour is not the only key.
 const REPO_SYMBOLS = [
   'circle',
@@ -67,11 +77,15 @@ export function LiveCommitStream({
   }, [count, moving, total])
 
   const visible = useMemo(() => timeline.slice(0, shown), [timeline, shown])
+  const plotted = useMemo(() => visible.slice(-STREAM_WINDOW), [visible])
+  const logScale = useMemo(() => needsLogScale(timeline), [timeline])
   const latest = visible[visible.length - 1]
 
   const option = useMemo(() => {
     const p = getAppPalette()
     const byRepo = colorBy === 'repository'
+    const lines = (c) =>
+      logScale ? Math.max(1, c.linesTouched) : c.linesTouched
     const repoIndex = (c) => Math.max(0, repoNames.indexOf(c.repoName))
     const colorOf = (c) =>
       byRepo
@@ -86,9 +100,9 @@ export function LiveCommitStream({
           ? 'circle'
           : 'diamond'
     const point = (c, i) => ({
-      value: [i, c.linesTouched],
+      value: [i, lines(c)],
       symbol: symbolOf(c),
-      symbolSize: Math.max(12, Math.min(40, Math.sqrt(c.linesTouched) * 3.4)),
+      symbolSize: Math.max(8, Math.min(24, Math.sqrt(c.linesTouched) * 2)),
       itemStyle: {
         color: colorOf(c),
         borderColor: p.white,
@@ -125,14 +139,14 @@ export function LiveCommitStream({
       tooltip: tooltip(p, {
         trigger: 'item',
         formatter: (d) => {
-          const c = visible[d.dataIndex]
+          const c = plotted[d.dataIndex]
           if (!c) return ''
           return `<strong>${escapeHtml(c.repoName)} #${c.prNumber}</strong><br/>${escapeHtml(c.commit)}${byRepo ? '' : ` · ${classificationLabel(c.classification)}`}<br/>${c.linesTouched} lines touched`
         }
       }),
       xAxis: categoryAxis(
         p,
-        visible.map((c) => c.commit),
+        plotted.map((c) => c.commit),
         {
           boundaryGap: true,
           axisLabel: textStyle(p, {
@@ -142,7 +156,9 @@ export function LiveCommitStream({
           })
         }
       ),
-      yAxis: valueAxis(p, 'Lines touched'),
+      yAxis: logScale
+        ? valueAxis(p, 'Lines touched (log scale)', { type: 'log', min: 1 })
+        : valueAxis(p, 'Lines touched', { min: null }),
       series: [
         {
           type: 'line',
@@ -151,25 +167,25 @@ export function LiveCommitStream({
           silent: true,
           lineStyle: { width: 2, color: p.categorical[5] },
           areaStyle: { color: withAlpha(p.categorical[5], 0.15) },
-          data: visible.map((c) => c.linesTouched),
+          data: plotted.map(lines),
           z: 1
         },
         ...groups.map((g) => ({
           name: g.name,
           type: 'scatter',
-          data: visible.map((c, i) => (g.match(c) ? point(c, i) : null)),
+          data: plotted.map((c, i) => (g.match(c) ? point(c, i) : null)),
           z: 2
         })),
         {
           type: 'effectScatter',
           silent: true,
           rippleEffect: { scale: 2.6, brushType: 'stroke', period: 2.4 },
-          data: moving && latest ? [point(latest, visible.length - 1)] : [],
+          data: moving && latest ? [point(latest, plotted.length - 1)] : [],
           z: 3
         }
       ]
     }
-  }, [visible, latest, moving, reducedMotion, colorBy, repoNames])
+  }, [plotted, latest, moving, reducedMotion, colorBy, repoNames, logScale])
 
   const feed = visible.slice(-FEED_LENGTH).reverse()
   const byClass = colorBy !== 'repository'
@@ -186,7 +202,7 @@ export function LiveCommitStream({
           <Chart
             option={option}
             height={height}
-            ariaLabel={`Live commit stream. ${visible.length} of ${total} commits shown, plotted by lines touched. ${byClass ? 'Copilot-assisted commits are circles and human-authored commits are diamonds.' : 'Each repository has its own colour and symbol.'}`}
+            ariaLabel={`Live commit stream. ${visible.length} of ${total} commits shown, the latest ${plotted.length} plotted by lines touched${logScale ? ' on a log scale' : ''}. ${byClass ? 'Copilot-assisted commits are circles and human-authored commits are diamonds.' : 'Each repository has its own colour and symbol.'}`}
             dataTable={
               <table>
                 <caption>Commit stream — lines touched by commit</caption>

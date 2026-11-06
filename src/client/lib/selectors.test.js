@@ -76,8 +76,13 @@ describe('#classificationLabel', () => {
 })
 
 describe('#filterPayloadsByWindow', () => {
-  const early = buildPayload({ calculatedAt: '2026-01-01T00:00:00.000Z' })
-  const late = buildPayload({ calculatedAt: '2026-02-01T00:00:00.000Z' })
+  const datedPayload = (prNumber, ...dates) =>
+    payloadWith(
+      dates.map((committedAt, i) => commit({ commit: `c${i}`, committedAt })),
+      { prNumber, calculatedAt: '2026-11-01T00:00:00.000Z' }
+    )
+  const early = datedPayload(1, '2026-01-01T00:00:00.000Z')
+  const late = datedPayload(2, '2026-02-01T00:00:00.000Z')
 
   test('Should return every payload when the window is unbounded', () => {
     expect(filterPayloadsByWindow([early, late], null, null)).toHaveLength(2)
@@ -99,8 +104,58 @@ describe('#filterPayloadsByWindow', () => {
     ).toEqual([late])
   })
 
+  test('Should place a backfilled PR by its commits, not its analysis time', () => {
+    expect(
+      filterPayloadsByWindow(
+        [early, late],
+        '2026-10-28T00:00:00.000Z',
+        '2026-11-11T00:00:00.000Z'
+      )
+    ).toEqual([])
+  })
+
+  test('Should show a PR in each sprint it has commits in, with only those commits', () => {
+    const spanning = datedPayload(
+      3,
+      '2026-01-30T10:00:00.000Z',
+      '2026-02-03T10:00:00.000Z'
+    )
+
+    const [january] = filterPayloadsByWindow(
+      [spanning],
+      '2026-01-22T00:00:00.000Z',
+      '2026-02-01T00:00:00.000Z'
+    )
+    const [february] = filterPayloadsByWindow(
+      [spanning],
+      '2026-02-01T00:00:00.000Z',
+      '2026-02-15T00:00:00.000Z'
+    )
+
+    expect(january.commitBreakdown.map((c) => c.commit)).toEqual(['c0'])
+    expect(february.commitBreakdown.map((c) => c.commit)).toEqual(['c1'])
+    expect(spanning.commitBreakdown).toHaveLength(2)
+  })
+
+  test('Should fall back to the last commit time when commits are undated', () => {
+    const undatedCommits = buildPayload({
+      commitBreakdown: [],
+      calculatedAt: '2026-11-01T00:00:00.000Z',
+      lastCommitAt: '2026-01-10T00:00:00.000Z'
+    })
+
+    expect(
+      filterPayloadsByWindow(
+        [undatedCommits],
+        '2026-01-01T00:00:00.000Z',
+        '2026-01-15T00:00:00.000Z'
+      )
+    ).toEqual([undatedCommits])
+  })
+
   test('Should keep a payload with no usable timestamp', () => {
     const undated = buildPayload({
+      commitBreakdown: [],
       calculatedAt: undefined,
       lastCommitAt: undefined,
       firstCommitAt: undefined

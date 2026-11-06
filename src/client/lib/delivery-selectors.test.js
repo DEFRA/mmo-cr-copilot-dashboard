@@ -48,14 +48,28 @@ describe('#selectContributorPRs', () => {
       prNumber: 1,
       calculatedAt: '2026-01-10T10:00:00.000Z',
       commits: [
-        copilotCommit({ commit: 'a1', author: 'ada' }),
-        humanCommit({ commit: 'b1', author: 'grace' })
+        copilotCommit({
+          commit: 'a1',
+          author: 'ada',
+          committedAt: '2026-01-10T09:00:00.000Z'
+        }),
+        humanCommit({
+          commit: 'b1',
+          author: 'grace',
+          committedAt: '2026-01-10T09:30:00.000Z'
+        })
       ]
     }),
     pullRequest({
       prNumber: 2,
       calculatedAt: '2026-01-12T10:00:00.000Z',
-      commits: [copilotCommit({ commit: 'a2', author: 'ada' })]
+      commits: [
+        copilotCommit({
+          commit: 'a2',
+          author: 'ada',
+          committedAt: '2026-01-12T09:00:00.000Z'
+        })
+      ]
     })
   ]
 
@@ -181,10 +195,17 @@ describe('#selectDeliveryMetrics', () => {
     expect(metrics.avgCommitSize).toBe(100)
   })
 
-  test('Should order the metrics chronologically', () => {
+  test('Should order the metrics chronologically by commit time', () => {
+    const at = (prNumber, committedAt) =>
+      pullRequest({
+        prNumber,
+        // One analysis time for both, as a backfill would produce.
+        calculatedAt: '2026-11-01T00:00:00.000Z',
+        commits: [copilotCommit({ commit: `c${prNumber}`, committedAt })]
+      })
     const metrics = selectDeliveryMetrics([
-      pullRequest({ prNumber: 2, calculatedAt: '2026-02-01T00:00:00.000Z' }),
-      pullRequest({ prNumber: 1, calculatedAt: '2026-01-01T00:00:00.000Z' })
+      at(2, '2026-02-01T00:00:00.000Z'),
+      at(1, '2026-01-01T00:00:00.000Z')
     ])
 
     expect(metrics.map((entry) => entry.prNumber)).toEqual([1, 2])

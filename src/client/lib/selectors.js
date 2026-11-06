@@ -31,21 +31,51 @@ export function classificationLabel(classification) {
 }
 
 /**
- * Restricts payloads to a [start, end) time window. A PR is included when its
- * analysis time (`calculatedAt`, which runs across all its commits and so
- * tracks the latest commit) falls inside the window. Missing bounds are open.
+ * Restricts payloads to a [start, end) time window by commit time, so a
+ * backfill (one `calculatedAt` for every PR) still lands in the right sprints.
+ * A PR whose commits span sprints appears in each, carrying only the commits
+ * of that window; one without commit dates falls back to its last activity.
  */
 export function filterPayloadsByWindow(payloads, start, end) {
   if (start == null && end == null) return payloads
   const s = start != null ? new Date(start).getTime() : -Infinity
   const e = end != null ? new Date(end).getTime() : Infinity
-  return payloads.filter((p) => {
-    const stamp = p.calculatedAt ?? p.lastCommitAt ?? p.firstCommitAt
-    if (!stamp) return true
+  const inWindow = (stamp) => {
     const t = new Date(stamp).getTime()
     return t >= s && t < e
-  })
+  }
+  const out = []
+  for (const p of payloads) {
+    const commits = Array.isArray(p.commitBreakdown) ? p.commitBreakdown : []
+    const dated = commits.filter((c) => isValidDateStr(c?.committedAt))
+    if (dated.length === 0) {
+      const stamp = p.lastCommitAt ?? p.calculatedAt ?? p.firstCommitAt
+      if (!stamp || inWindow(stamp)) out.push(p)
+      continue
+    }
+    const kept = dated.filter((c) => inWindow(c.committedAt))
+    if (kept.length === 0) continue
+    out.push(
+      kept.length === commits.length ? p : { ...p, commitBreakdown: kept }
+    )
+  }
+  return out
 }
+
+/** Epoch ms of a PR's latest commit (in the current window), else its last recorded activity. */
+export function payloadActivityTime(p) {
+  let latest = -Infinity
+  for (const c of Array.isArray(p.commitBreakdown) ? p.commitBreakdown : []) {
+    const t = Date.parse(c?.committedAt)
+    if (t > latest) latest = t
+  }
+  if (Number.isFinite(latest)) return latest
+  const t = Date.parse(p.lastCommitAt ?? p.calculatedAt)
+  return Number.isFinite(t) ? t : 0
+}
+
+const byActivityDesc = (a, b) => payloadActivityTime(b) - payloadActivityTime(a)
+const byActivityAsc = (a, b) => payloadActivityTime(a) - payloadActivityTime(b)
 
 // ── Validation guards ────────────────────────────────────────────────────────
 // The dashboard must never break on partial data. These guards let callers skip
@@ -365,7 +395,7 @@ export function selectRepoPRs(payloads, repository) {
   return payloads
     .filter((p) => p.repository === repository)
     .slice()
-    .sort((a, b) => new Date(b.calculatedAt) - new Date(a.calculatedAt))
+    .sort(byActivityDesc)
 }
 
 /** One row per pull request in a repository, newest first (Rebase excluded). */
@@ -572,12 +602,13 @@ export function selectContributorPRs(payloads, contributor) {
         repoName: shortRepoName(p.repository),
         prNumber: p.prNumber,
         calculatedAt: p.calculatedAt,
+        activityAt: payloadActivityTime(p),
         ...mine,
         copilotAssistedRate: rate(mine.copilotAssisted, mine.totalCommits),
         commits: myCommits
       }
     })
-    .sort((a, b) => new Date(b.calculatedAt) - new Date(a.calculatedAt))
+    .sort((a, b) => b.activityAt - a.activityAt)
 }
 
 /** Matrix of assist-rate by contributor × repo for the heatmap (Rebase excluded). */
@@ -621,12 +652,12 @@ export function selectContributorRepoMatrix(payloads) {
 export function selectAssistTrend(payloads) {
   return payloads
     .slice()
-    .sort((a, b) => new Date(a.calculatedAt) - new Date(b.calculatedAt))
+    .sort(byActivityAsc)
     .map((p) => {
       const m = computePrMetrics(p)
       return {
         label: `${shortRepoName(p.repository)} #${p.prNumber}`,
-        date: p.calculatedAt,
+        date: new Date(payloadActivityTime(p)).toISOString(),
         repository: p.repository,
         prNumber: p.prNumber,
         commitRate: m.copilotAssistedRate,
@@ -669,7 +700,7 @@ export function selectDeliveryMetrics(payloads) {
         repository: p.repository,
         repoName: shortRepoName(p.repository),
         prNumber: p.prNumber,
-        date: p.calculatedAt,
+        date: new Date(payloadActivityTime(p)).toISOString(),
         cycleHours: hoursBetween(p.firstCommitAt, p.lastCommitAt),
         timeToMergeHours: hoursBetween(p.prCreatedAt, p.prMergedAt),
         // A PR is "completed" once it has a valid merge timestamp; otherwise it

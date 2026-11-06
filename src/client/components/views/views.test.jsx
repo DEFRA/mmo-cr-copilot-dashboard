@@ -21,12 +21,18 @@ const REPOSITORY = 'DEFRA/mmo-cr-pdf'
 const payloads = [
   buildPayloadFromCommits(
     [
-      buildCommit({ commit: 'a1', author: 'ada', linesAdded: 200 }),
+      buildCommit({
+        commit: 'a1',
+        author: 'ada',
+        linesAdded: 200,
+        committedAt: '2026-01-12T09:00:00.000Z'
+      }),
       buildCommit({
         commit: 'g1',
         author: 'grace',
         classification: 'Human-authored',
-        linesAdded: 50
+        linesAdded: 50,
+        committedAt: '2026-01-13T09:00:00.000Z'
       })
     ],
     {
@@ -37,7 +43,14 @@ const payloads = [
     }
   ),
   buildPayloadFromCommits(
-    [buildCommit({ commit: 'b1', author: 'ada', linesAdded: 120 })],
+    [
+      buildCommit({
+        commit: 'b1',
+        author: 'ada',
+        linesAdded: 120,
+        committedAt: '2026-01-16T09:00:00.000Z'
+      })
+    ],
     {
       prNumber: 43,
       repository: 'DEFRA/mmo-cr-core-infra',
@@ -453,14 +466,22 @@ describe('#RepoView', () => {
       jiraConnected: true,
       payloads: [
         ...payloads,
-        buildPayloadFromCommits([buildCommit({ commit: 'c1' })], {
-          prNumber: 44,
-          repository: REPOSITORY,
-          prTitle: 'Add landing dates',
-          jiraKeys: ['MMO-9'],
-          prMergedAt: null,
-          calculatedAt: '2026-01-20T10:00:00.000Z'
-        })
+        buildPayloadFromCommits(
+          [
+            buildCommit({
+              commit: 'c1',
+              committedAt: '2026-01-20T09:00:00.000Z'
+            })
+          ],
+          {
+            prNumber: 44,
+            repository: REPOSITORY,
+            prTitle: 'Add landing dates',
+            jiraKeys: ['MMO-9'],
+            prMergedAt: null,
+            calculatedAt: '2026-01-20T10:00:00.000Z'
+          }
+        )
       ]
     })
 

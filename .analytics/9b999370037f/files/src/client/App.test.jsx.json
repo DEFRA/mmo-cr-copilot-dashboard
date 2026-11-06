@@ -1,0 +1,26 @@
+{
+  "schema": "ai-attribution-file/2",
+  "path": "src/client/App.test.jsx",
+  "added": 7,
+  "counts": {
+    "aiCompletion": 0,
+    "aiChat": 0,
+    "aiAgent": 7,
+    "aiModified": 0,
+    "pasted": 0,
+    "typed": 0,
+    "untracked": 0
+  },
+  "ranges": {
+    "ai-agent": "199-203,207-208"
+  },
+  "ai": [
+    [199, "a", "aa3e0388", 0],
+    [200, "a", "7f72baa6", 0],
+    [201, "a", "05fbc8af", 0],
+    [202, "a", "d1835081", 0],
+    [203, "a", "8cfb1a5b", 0],
+    [207, "a", "ca99cb2f", 0],
+    [208, "a", "e463093f", 0]
+  ]
+}

@@ -1,8 +1,12 @@
 import { useMemo, useCallback } from 'react'
 import { Chart } from './Chart'
+import { Details } from '../govuk'
 import { getAppPalette } from '../../lib/palette'
 import {
+  BAR_LABEL_LIMIT,
+  barLabels,
   categoryAxis,
+  categoryZoom,
   escapeHtml,
   textStyle,
   tooltip,
@@ -10,8 +14,9 @@ import {
 } from '../../lib/chart-style'
 
 /**
- * Bar chart comparing a single value across categories, each bar labelled with
- * its value. When `onSelect` is provided each bar is clickable and a
+ * Bar chart comparing a single value across categories. Bars carry value labels
+ * while they fit; a long axis scrolls through a slider window from `zoomAnchor`.
+ * When `onSelect` is provided each bar is clickable and a
  * keyboard-navigable fallback list keeps the drill-down accessible.
  */
 export function CategoryBar({
@@ -25,7 +30,8 @@ export function CategoryBar({
   horizontal = false,
   colorByValue = false,
   hideCategoryLabels = false,
-  showSelectList = true
+  showSelectList = true,
+  zoomAnchor = 'start'
 }) {
   const option = useMemo(() => {
     const p = getAppPalette()
@@ -35,10 +41,17 @@ export function CategoryBar({
       if (v >= 50) return p.warning
       return p.error
     }
+    // A word unit (" lines") is already on the value axis; repeating it widens every label.
+    const labelUnit = unit.trim().length > 2 ? '' : unit
+    const zoom = categoryZoom(p, categories.length, {
+      axis: horizontal ? 'y' : 'x',
+      anchor: zoomAnchor
+    })
     const catAxis = categoryAxis(p, categories, {
       axisLabel: textStyle(p, {
         show: !hideCategoryLabels,
-        color: p.muted
+        color: p.muted,
+        hideOverlap: true
       })
     })
     const valAxis = valueAxis(p, '', {
@@ -50,11 +63,12 @@ export function CategoryBar({
     return {
       grid: {
         left: 8,
-        right: horizontal ? 56 : 16,
+        right: (horizontal ? 56 : 16) + (horizontal ? zoom.gap : 0),
         top: 32,
-        bottom: 8,
+        bottom: 8 + (horizontal ? 0 : zoom.gap),
         containLabel: true
       },
+      dataZoom: zoom.dataZoom,
       tooltip: tooltip(p, {
         trigger: 'axis',
         axisPointer: { type: 'shadow' },
@@ -71,12 +85,15 @@ export function CategoryBar({
           type: 'bar',
           barMaxWidth: 42,
           itemStyle: { color: (params) => bandColor(params.value) },
-          label: textStyle(p, {
-            show: true,
+          ...barLabels(p, categories.length, {
             position: horizontal ? 'right' : 'top',
-            formatter: `{c}${unit}`
+            formatter: `{c}${labelUnit}`
           }),
-          emphasis: { focus: 'series', itemStyle: { opacity: 0.85 } },
+          emphasis: {
+            focus: 'series',
+            itemStyle: { opacity: 0.85 },
+            label: { show: true }
+          },
           cursor: onSelect ? 'pointer' : 'default',
           data: values
         }
@@ -90,7 +107,8 @@ export function CategoryBar({
     horizontal,
     colorByValue,
     onSelect,
-    hideCategoryLabels
+    hideCategoryLabels,
+    zoomAnchor
   ])
 
   const handleEvents = useMemo(
@@ -107,6 +125,25 @@ export function CategoryBar({
   const selectByIndex = useCallback(
     (i) => onSelect?.(i, categories[i]),
     [onSelect, categories]
+  )
+
+  const selectList = onSelect && showSelectList && (
+    <ul
+      className="app-quick app-select-list"
+      aria-label={`Open a ${seriesName} category`}
+    >
+      {categories.map((c, i) => (
+        <li key={c}>
+          <button
+            type="button"
+            className="app-chip app-chip--s"
+            onClick={() => selectByIndex(i)}
+          >
+            {c}
+          </button>
+        </li>
+      ))}
+    </ul>
   )
 
   return (
@@ -140,24 +177,17 @@ export function CategoryBar({
           </table>
         }
       />
-      {onSelect && showSelectList && (
-        <ul
-          className="app-quick app-select-list"
-          aria-label={`Open a ${seriesName} category`}
-        >
-          {categories.map((c, i) => (
-            <li key={c}>
-              <button
-                type="button"
-                className="app-chip app-chip--s"
-                onClick={() => selectByIndex(i)}
-              >
-                {c}
-              </button>
-            </li>
-          ))}
-        </ul>
-      )}
+      {selectList &&
+        (categories.length > BAR_LABEL_LIMIT ? (
+          <Details
+            className="govuk-!-margin-bottom-0"
+            summary={`List all ${categories.length} bars`}
+          >
+            {selectList}
+          </Details>
+        ) : (
+          selectList
+        ))}
     </div>
   )
 }

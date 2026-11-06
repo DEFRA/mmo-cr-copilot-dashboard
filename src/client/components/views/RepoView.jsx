@@ -431,6 +431,7 @@ export function RepoView({
                 values={timeline.map((m) => m.avgCommitSize)}
                 seriesName="average batch size"
                 unit=" lines"
+                zoomAnchor="end"
                 onSelect={(i) => onOpenPR(repository, timeline[i].prNumber)}
               />
             </ChartFigure>

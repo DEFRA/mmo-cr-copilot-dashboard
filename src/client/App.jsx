@@ -779,7 +779,8 @@ export default function App() {
       case 'pr':
         return (
           <PRView
-            payloads={visiblePayloads}
+            // The whole PR, not only this window's commits: it may span sprints.
+            payloads={allPayloads}
             repository={nav.repository}
             prNumber={nav.prNumber}
             onOpenContributor={openContributor}

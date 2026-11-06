@@ -44,6 +44,8 @@ export function HotspotScatter({ points, title, xName, yName, height = 340 }) {
       series: GROUPS.map((g) => ({
         name: classificationLabel(g.category),
         type: 'scatter',
+        // Draw in one pass: progressive chunks (from 3,000 points) can leave the SVG blank.
+        progressive: 0,
         symbol: g.symbol,
         symbolSize: (data) => 10 + (data.size / maxSize) * 42,
         itemStyle: {

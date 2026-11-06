@@ -1,0 +1,29 @@
+{
+  "schema": "ai-attribution-file/2",
+  "path": "src/client/components/charts/ActivityHeatmap.jsx",
+  "added": 10,
+  "counts": {
+    "aiCompletion": 0,
+    "aiChat": 0,
+    "aiAgent": 10,
+    "aiModified": 0,
+    "pasted": 0,
+    "typed": 0,
+    "untracked": 0
+  },
+  "ranges": {
+    "ai-agent": "14-16,21,28,32-33,66-67,133"
+  },
+  "ai": [
+    [14, "a", "39dd3c6e", 0],
+    [15, "a", "f7f91d41", 0],
+    [16, "a", "18817ab2", 0],
+    [21, "a", "38036aeb", 0],
+    [28, "a", "231096fa", 0],
+    [32, "a", "c1fe1ec9", 0],
+    [33, "a", "a84804be", 0],
+    [66, "a", "773a7b8c", 0],
+    [67, "a", "18ebd4dd", 0],
+    [133, "a", "72860048", 0]
+  ]
+}

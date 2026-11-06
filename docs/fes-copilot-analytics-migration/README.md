@@ -7,48 +7,64 @@ authenticated with GitHub OIDC). Ticket: **FI0-11625**. Environment: **ext-test*
 
 State verified on 2026-11-06. Re-check any `VERIFY` step before acting on it.
 
-| Tag           | Meaning                                                         |
-| :------------ | :-------------------------------------------------------------- |
-| `REQUIRED`    | Do this step.                                                   |
-| `DONE`        | Already complete. Do nothing.                                   |
-| `VERIFY`      | Probably already in place. Check it; act only if it is missing. |
-| `CONDITIONAL` | Do it only when the stated condition is true.                   |
-| `SKIP`        | Not needed for this migration. Do not perform it.               |
+| Tag        | Meaning                                                         |
+| :--------- | :-------------------------------------------------------------- |
+| `REQUIRED` | Do this step.                                                   |
+| `DONE`     | Already complete. Do nothing.                                   |
+| `VERIFY`   | Probably already in place. Check it; act only if it is missing. |
+| `SKIP`     | Not needed for this migration. Do not perform it.               |
 
-- [Status at a glance](#status-at-a-glance)
-- [Scope](#scope)
-- [Shell variables](#shell-variables)
-- [Phase 0: Platform](#phase-0-platform)
-- [Phase 1: Code changes](#phase-1-code-changes)
-- [Phase 2: Deploy](#phase-2-deploy)
-- [Phase 3: Dashboard onboarding](#phase-3-dashboard-onboarding)
-- [Phase 4: Repository variables](#phase-4-repository-variables)
-- [Phase 5: FES pull requests](#phase-5-fes-pull-requests)
-- [Phase 6: Backfill](#phase-6-backfill)
-- [Phase 7: Decommission Azure](#phase-7-decommission-azure)
-- [Phase 8: Legacy data migration and cutover](#phase-8-legacy-data-migration-and-cutover)
-- [Not part of this migration](#not-part-of-this-migration)
-- [Known risks](#known-risks)
+- [FES Copilot Analytics Migration](#fes-copilot-analytics-migration)
+  - [Status at a glance](#status-at-a-glance)
+  - [Scope](#scope)
+  - [Shell variables](#shell-variables)
+  - [Phase 0: Platform](#phase-0-platform)
+    - [0.1 Entra groups for FES — `VERIFY`](#01-entra-groups-for-fes--verify)
+    - [0.2 CDP Portal secrets — `REQUIRED`](#02-cdp-portal-secrets--required)
+    - [0.3 Configuration — `DONE`](#03-configuration--done)
+    - [0.4 Egress — `DONE`](#04-egress--done)
+  - [Phase 1: Code changes](#phase-1-code-changes)
+    - [1a Backfill base-branch filter — `REQUIRED`](#1a-backfill-base-branch-filter--required)
+    - [1b Accept backfill tokens — `REQUIRED`](#1b-accept-backfill-tokens--required)
+    - [1c FES caller workflows — `DONE`](#1c-fes-caller-workflows--done)
+    - [1d Rename the CR project and make it AI-Native](#1d-rename-the-cr-project-and-make-it-ai-native)
+      - [1d.1 Code — `DONE`](#1d1-code--done)
+      - [1d.2 Deploy and verify — `REQUIRED`](#1d2-deploy-and-verify--required)
+      - [1d.3 Remove the one-off code — `REQUIRED`](#1d3-remove-the-one-off-code--required)
+  - [Phase 2: Deploy — `REQUIRED`](#phase-2-deploy--required)
+  - [Phase 3: Dashboard onboarding — `REQUIRED`](#phase-3-dashboard-onboarding--required)
+  - [Phase 4: Repository variables — `REQUIRED`](#phase-4-repository-variables--required)
+  - [Phase 5: FES pull requests — `REQUIRED`](#phase-5-fes-pull-requests--required)
+  - [Phase 6: Backfill — `REQUIRED`](#phase-6-backfill--required)
+  - [Phase 7: Decommission Azure](#phase-7-decommission-azure)
+  - [Phase 8: Cutover](#phase-8-cutover)
+    - [8.1 Legacy data migration — `SKIP`](#81-legacy-data-migration--skip)
+    - [8.2 Cutover sign-off — `REQUIRED`](#82-cutover-sign-off--required)
+  - [Not part of this migration](#not-part-of-this-migration)
+  - [Known risks](#known-risks)
 
 ## Status at a glance
 
-| Step                                                      | Tag           |
-| :-------------------------------------------------------- | :------------ |
-| 0.1 Entra groups for FES                                  | `VERIFY`      |
-| 0.2 CDP Portal secrets                                    | `REQUIRED`    |
-| 0.3 `cdp-app-config` (Entra, Jira, OIDC owner id)         | `DONE`        |
-| 0.4 Egress allow-list                                     | `DONE`        |
-| 1a Backfill `base-branch` filter (`mmo-cr-devops-common`) | `REQUIRED`    |
-| 1b Accept backfill tokens (this repository)               | `REQUIRED`    |
-| 1c FES caller workflows                                   | `DONE`        |
-| 2 Deploy dashboard and backend                            | `REQUIRED`    |
-| 3 Dashboard onboarding                                    | `REQUIRED`    |
-| 4 Repository variables                                    | `REQUIRED`    |
-| 5 FES pull requests                                       | `REQUIRED`    |
-| 6 Backfill since 2026-07-16                               | `REQUIRED`    |
-| 7 Decommission Azure                                      | `REQUIRED`    |
-| 8 Legacy data migration                                   | `CONDITIONAL` |
-| 8.6 Cutover sign-off                                      | `REQUIRED`    |
+| Step                                                      | Tag        |
+| :-------------------------------------------------------- | :--------- |
+| 0.1 Entra groups for FES                                  | `VERIFY`   |
+| 0.2 CDP Portal secrets                                    | `REQUIRED` |
+| 0.3 `cdp-app-config` (Entra, Jira, OIDC owner id)         | `DONE`     |
+| 0.4 Egress allow-list                                     | `DONE`     |
+| 1a Backfill `base-branch` filter (`mmo-cr-devops-common`) | `REQUIRED` |
+| 1b Accept backfill tokens (this repository)               | `REQUIRED` |
+| 1c FES caller workflows                                   | `DONE`     |
+| 1d.1 Rename the CR project to `CRAR`, AI-Native (code)    | `DONE`     |
+| 1d.2 Deploy backend 0.12.0 and verify the CR project      | `REQUIRED` |
+| 1d.3 Remove the one-off code and redeploy the backend     | `REQUIRED` |
+| 2 Deploy the dashboard                                    | `REQUIRED` |
+| 3 Dashboard onboarding                                    | `REQUIRED` |
+| 4 Repository variables                                    | `REQUIRED` |
+| 5 FES pull requests                                       | `REQUIRED` |
+| 6 Backfill since 2026-07-16                               | `REQUIRED` |
+| 7 Decommission Azure                                      | `REQUIRED` |
+| 8.1 Legacy data migration                                 | `SKIP`     |
+| 8.2 Cutover sign-off                                      | `REQUIRED` |
 
 ```mermaid
 flowchart LR
@@ -59,7 +75,7 @@ flowchart LR
   P4 --> P5[5 FES PRs]
   P5 --> P6[6 Backfill]
   P6 --> P7[7 Decommission Azure]
-  P7 --> P8[8 Legacy gate and cutover]
+  P7 --> P8[8 Cutover sign-off]
 ```
 
 ## Scope
@@ -107,7 +123,7 @@ if not ([Entra ID setup runbook](../runbooks/entra-id-setup.md), steps 1 and 2.3
 
 The dashboard release now in `main` refuses to start in ext-test without its Entra secret. Set these
 in the CDP Portal → service → **Secrets** tab for **ext-test**. Values are never shown after saving,
-so record each generated value in the team's password store; Phase 8 needs `INGEST_TOKEN`.
+so record each generated value in the team's password store.
 
 | Service                    | Secret                    | Tag        | Value                                                                                             |
 | :------------------------- | :------------------------ | :--------- | :------------------------------------------------------------------------------------------------ |
@@ -185,14 +201,88 @@ Staged on `$B` in all 13 repositories; committed in Phase 5:
   job and `COPILOT_ANALYTICS` variable group in four includes; the ad-hoc pipeline in `core-infra`;
   `.azurepipeline/copilot-analytics.yml` in `frontend-test-automation`.
 
+### 1d Rename the CR project and make it AI-Native
+
+The backend created the CR project as `FES` and AI-Adopted (`migrateDefaultProject`, since
+CRAR-271). It should be `CRAR` and AI-Native, and the slug is unique, so the FES project cannot be
+created until it is renamed. Admins cannot change a slug, so `mmo-cr-copilot-backend` does it once
+at start-up.
+
+#### 1d.1 Code — `DONE`
+
+On `main` of `mmo-cr-copilot-backend`; **0.12.0** is the first version with both steps.
+
+- **Permanent:** `migrateDefaultProject` creates the default project as `CRAR`, AI-Native, with no
+  adoption date.
+- **One-off:** `src/plugins/rename-default-project-slug.js`, called once from `mongodb.js`, runs two
+  independent steps:
+  1. **Rename**, only while project `FES` has Jira key `MMOCR` and no `CRAR` project exists. It
+     moves the slug in repositories, payloads, Jira issues, sprint scope, PR–Jira links, survival
+     records and persona mappings, then renames the project. It moves role mappings to `CRAR`
+     except `AG-Users-CopilotAnalytics-FES-*` groups, which stay on `FES` for the real FES project,
+     and adds `AG-Users-CopilotAnalytics-CRAR-Admin` (`project-admin`) and `-CRAR-Reader`
+     (`project-user`). A start-up lock stops two instances running it together.
+  2. **AI-Native**, for project `CRAR` with Jira key `MMOCR` that is not yet AI-Native: sets the
+     type and clears the adoption date. This also fixes a project renamed by 0.10.0, which did not
+     change the type.
+
+  Existing audit entries keep `FES`; each step adds one audit event.
+
+#### 1d.2 Deploy and verify — `REQUIRED`
+
+- [ ] CDP Portal → `mmo-cr-copilot-backend` → deploy **0.12.0** to ext-test.
+- [ ] _Manage projects_ lists **MMO Catch Recording** with slug `CRAR`, type AI-Native and no
+      adoption date.
+- [ ] The backend log shows `Set project CRAR to AI-Native`, and `Renamed project FES to CRAR` if
+      the project was still `FES`.
+- [ ] _Settings → Role Mappings_ shows `AG-Users-CopilotAnalytics-CRAR-Admin` and `-CRAR-Reader` on
+      `CRAR`.
+
+Repeat in every other environment that holds the CR project as `FES` or AI-Adopted before 1d.3.
+
+#### 1d.3 Remove the one-off code — `REQUIRED`
+
+Only after 1d.2 passes in every environment that needs it. The one-off then finds nothing to do on
+any start, so it is dead code.
+
+| Path                                                                        | Action                                                    |
+| :-------------------------------------------------------------------------- | :-------------------------------------------------------- |
+| `src/plugins/rename-default-project-slug.js`                                | Delete                                                    |
+| `src/plugins/rename-default-project-slug.test.js`                           | Delete                                                    |
+| `src/plugins/mongodb.js` — the `renameDefaultProjectSlug` import line       | Delete                                                    |
+| `src/plugins/mongodb.js` — the `await renameDefaultProjectSlug(...)` line   | Delete                                                    |
+| `src/plugins/mongodb.js` — `DEFAULT_PROJECT_SLUG` and the AI-Native default | Keep: creates a correct CR project on an empty database   |
+| `src/plugins/mongodb.test.js` — the default-project test                    | Keep: covers the permanent default                        |
+| `.analytics/**` records for the deleted files                               | Keep: committed attribution history, never edited by hand |
+| Database: audit events and `CRAR` role mappings                             | Keep: the record of the change and the access it granted  |
+
+```bash
+cd ~/workspace-fes-cr/copilot-dashboard/mmo-cr-copilot-backend
+git switch main && git pull
+git switch -c chore/FI0-11625-remove-cr-project-one-off
+git rm src/plugins/rename-default-project-slug.js src/plugins/rename-default-project-slug.test.js
+sed -i '/renameDefaultProjectSlug/d' src/plugins/mongodb.js   # removes exactly the import and the call
+grep -rn "renameDefaultProjectSlug\|rename-default-project-slug" src && echo "STOP: references remain"
+npm run format:check && npm run lint && npm test
+git add src/plugins/mongodb.js
+git commit -m $'chore(projects): remove the one-off CR project migration\n\nThe FES to CRAR rename and AI-Native conversion have run. FI0-11625\n\nCopilot-Assisted: true'
+git push -u origin chore/FI0-11625-remove-cr-project-one-off
+gh pr create -R DEFRA/mmo-cr-copilot-backend --base main --head chore/FI0-11625-remove-cr-project-one-off \
+  --title "chore(projects): remove the one-off CR project migration" \
+  --body "The FES to CRAR rename and AI-Native conversion have run (FI0-11625). Keeps the CRAR, AI-Native default for empty databases."
+gh pr merge -R DEFRA/mmo-cr-copilot-backend chore/FI0-11625-remove-cr-project-one-off --squash --delete-branch
+```
+
+Then deploy the resulting backend version to ext-test and check that _Manage projects_ still shows
+`CRAR` as AI-Native.
+
 ## Phase 2: Deploy — `REQUIRED`
 
 The dashboard running in ext-test is an old build (no Entra sign-in, shared-token ingest only), so
 OIDC ingest cannot work until it is replaced.
 
-- [ ] CDP Portal → `mmo-cr-copilot-dashboard` → deploy the version built from the 1b merge to
-      ext-test.
-- [ ] CDP Portal → `mmo-cr-copilot-backend` → deploy the latest version (0.9.0 or later) to ext-test.
+- [ ] CDP Portal → `mmo-cr-copilot-dashboard` → deploy **0.13.0 or later** to ext-test (0.13.0 is
+      the 1b merge). The backend is already deployed in 1d.
 - [ ] Check: `https://mmo-cr-copilot-dashboard.ext-test.cdp.defra.gov.uk/` sends you to Microsoft
       sign-in, and you can sign in as a member of the bootstrap admin group
       (`AG-Users-CopilotAnalytics-Dashboard-Admin`).
@@ -208,9 +298,10 @@ There is no CLI. Unmapped repositories are refused with `403`, so finish this be
 - [ ] `REQUIRED` **SonarCloud keys**: `DEFRA_<name>` for the nine repositories with a SonarCloud
       project. `SKIP` for `logic-apps`, `frontend-test-automation`, `core-infra` and
       `pipeline-common`; they have none.
-- [ ] `REQUIRED` **Role mappings** (_Settings → Role Mappings_):
+- [ ] `VERIFY` **Role mappings** (_Settings → Role Mappings_):
       `AG-Users-CopilotAnalytics-FES-Admin` → `project-admin` on `FES`;
-      `AG-Users-CopilotAnalytics-FES-Reader` → `project-user` on `FES`.
+      `AG-Users-CopilotAnalytics-FES-Reader` → `project-user` on `FES`. Mappings for these groups
+      that were already on `FES` stay there after 1d; add only the ones missing.
 - [ ] `SKIP` **Persona mappings**: optional enrichment, not needed for the migration.
 
 ## Phase 4: Repository variables — `REQUIRED`
@@ -280,8 +371,16 @@ done
 for r in $FES_REPOS; do gh run list -R DEFRA/$r --workflow copilot-analytics-backfill.yml --limit 1; done
 ```
 
-Each run's job summary lists every pull request with `published`, `skipped` or `failed`. Re-run a
-single pull request with:
+Each run's job summary lists every pull request with `published`, `skipped` or `failed`.
+
+| Backfill shows                                                     | Cause and fix                                                                                                                                                                                      |
+| :----------------------------------------------------------------- | :------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `HTTP 401` on every pull request while per-PR runs publish (`201`) | The dashboard rejects the backfill workflow ref: a version before 0.13.0 is deployed, or `INGEST_OIDC_WORKFLOW_REF_PREFIX` is overridden without `copilot-analytics-backfill.yml@`. Deploy 0.13.0+ |
+| `HTTP 403`                                                         | Repository not mapped to `FES` (Phase 3)                                                                                                                                                           |
+| `skipped (no countable commits)`                                   | Expected for merge-only or Dependabot pull requests                                                                                                                                                |
+
+After a fix, re-run the backfill; pull requests already published are kept. Re-run a single pull
+request with:
 
 ```bash
 gh workflow run copilot-analytics.yml -R DEFRA/<repo> --ref <default-branch> -f pr_number=<n>
@@ -296,7 +395,7 @@ After the `pipeline-common` pull request is merged.
 - [ ] `REQUIRED` Delete the `COPILOT_ANALYTICS` variable group; it holds the Service Bus connection
       string and nothing references it now.
 - [ ] `SKIP` Deleting the Service Bus queue and the old dashboard database. They belong to the old
-      dashboard, and Phase 8 may need the database. Retire them separately, after the Phase 8 gate.
+      dashboard and are retired by its owner (8.2); this migration no longer needs them.
 
 ```bash
 ORG=https://dev.azure.com/<organisation>; PROJECT=<project>
@@ -306,134 +405,28 @@ az pipelines variable-group list --group-name COPILOT_ANALYTICS --org $ORG -p $P
 az pipelines variable-group delete --group-id <id> --org $ORG -p $PROJECT --yes
 ```
 
-## Phase 8: Legacy data migration and cutover
+## Phase 8: Cutover
 
-Moves FES records from the old dashboard's MongoDB (`copilot_analytics.payloads`, fed by the Azure
-template through Service Bus) into this dashboard, using the tooling in
-`mmo-cr-devops-common/.github/scripts/copilot-analytics/legacy-migration`.
+### 8.1 Legacy data migration — `SKIP`
 
-### 8.1 Gate — `REQUIRED`
+Decided 2026-11-06: not needed. The Phase 6 backfill republished every FES pull request since
+2026-07-16, when the Azure producer first ran, so the old dashboard's database
+(`copilot_analytics.payloads`) holds nothing the dashboard is missing. Its records classify commits
+only by the `Copilot-Assisted` trailer, which the backfill reads from the same commits. Skipping it
+also avoids switching on break-glass shared-token ingest and copying personal data to a
+workstation.
 
-Phase 6 already rebuilds every pull request the legacy database can hold for FES. No FES record can
-predate 2026-07-16, when the Azure producer first ran, and the legacy records classify commits only
-by the `Copilot-Assisted` trailer, which the backfill reads from the same commits. Records the
-backfill already published are kept: a legacy record is older, so the backend ignores it.
+If a FES pull request is ever found missing, re-run it with a single-PR run (Phase 6). The legacy
+tooling stays in `mmo-cr-devops-common/.github/scripts/copilot-analytics/legacy-migration` with its
+own README.
 
-Run 8.2 to 8.5 **only if** after Phase 6 a FES pull request merged on or after 2026-07-16 is
-missing from the dashboard and cannot be fixed with a single-PR run (Phase 6). For example, its
-commits are no longer on GitHub. Otherwise mark 8.2 to 8.5 `SKIP` and go to 8.6.
-
-Why the gate matters: this path switches on the break-glass shared-token ingest for the whole
-dashboard, and puts a database copy holding contributor identities (personal data) on a workstation.
-
-### 8.2 Back up, restore and export — `CONDITIONAL`
-
-Prerequisites: PowerShell 7.2 or later, Docker, MongoDB Database Tools, and an encrypted disk. Get
-the legacy connection string from the old dashboard's owner.
-
-```bash
-cd ~/workspace-fes-cr/mmo-cr-devops-common/.github/scripts/copilot-analytics/legacy-migration
-mongodump --uri "$LEGACY_MONGO_URI" --db copilot_analytics --collection payloads --gzip --out ./dump
-pwsh ./Invoke-LegacyRestore.ps1 -ToolsPath "$(dirname "$(command -v mongorestore)")" -DumpPath ./dump -Recreate
-```
-
-This restores into a local `copilot-v1-db` container (bound to `127.0.0.1:27018`) and writes
-`output/payloads.ndjson` and `output/payloads.ndjson.profile.json` (counts, duplicates, repository
-list).
-
-### 8.3 Keep only FES records — `CONDITIONAL`
-
-The legacy collection also holds other repositories, and the Azure CI run on `main` recorded
-promotion pull requests. Keep FES repositories and their measured branch only (see [Scope](#scope)).
-
-```bash
-REPOS_JSON=$(printf 'DEFRA/%s\n' $FES_REPOS | jq -R . | jq -sc .)
-jq -c --argjson repos "$REPOS_JSON" '
-  select(.repository as $r | $repos | index($r))
-  | ((.targetBranch // "") | sub("^refs/heads/"; "")) as $t
-  | select(if (.repository | test("frontend-test-automation$|core-infra$|pipeline-common$"))
-           then $t == "main" else $t == "develop" end)' \
-  output/payloads.ndjson > output/fes-payloads.ndjson
-wc -l output/payloads.ndjson output/fes-payloads.ndjson
-```
-
-### 8.4 Transform and validate (dry run) — `CONDITIONAL`
-
-`Publish-LegacyPayloads.ps1` converts each legacy (v1) document to contract v2 and validates it
-against the backend contract. Nothing is sent with `-DryRun`.
-
-- Mongo-internal fields are dropped; only allow-listed fields are copied.
-- `schemaVersion: 2`, `source: backfill`; dates become ISO 8601; `buildId` becomes a string.
-- `prTitle` and the `files` block are read from GitHub, applying each repository's
-  `.analyticsignore`.
-- `jiraKeys` come from the branch, title and commit subjects, filtered to `FI0`.
-- Each commit gets `attribution`: `legacy-trailer` when Copilot-assisted, otherwise `none`.
-- Only the newest document per pull request is used.
-
-```bash
-export GITHUB_TOKEN=$(gh auth token)   # must read the private pipeline-common
-pwsh ./Publish-LegacyPayloads.ps1 -InputPath ./output/fes-payloads.ndjson -JiraProjectKey FI0 -DryRun
-```
-
-Continue only when the summary shows no `invalid` and no `skipped`.
-
-### 8.5 Publish — `CONDITIONAL`
-
-1. Switch on break-glass ingest in ext-test:
-
-   ```bash
-   cd ~/workspace-fes-cr/cdp-app-config && git switch main && git pull
-   git switch -c config/mmo-cr-copilot-legacy-ingest-on
-   echo "INGEST_ALLOW_SHARED_TOKEN=true" >> services/mmo-cr-copilot-dashboard/ext-test/mmo-cr-copilot-dashboard.env
-   git commit -am "Temporarily allow shared-token ingest for the FES legacy migration (ext-test)"
-   git push -u origin config/mmo-cr-copilot-legacy-ingest-on
-   gh pr create -R DEFRA/cdp-app-config --base main --head config/mmo-cr-copilot-legacy-ingest-on \
-     --title "Temporarily allow shared-token ingest for mmo-cr-copilot-dashboard (ext-test)" \
-     --body "Break-glass for the one-off FES legacy migration (FI0-11625). Reverted immediately afterwards."
-   ```
-
-   After the merge, redeploy the dashboard.
-
-2. Publish in batches of 10. `INGEST_TOKEN` is the dashboard's value from the password store (0.2).
-
-   ```bash
-   read -rs INGEST_TOKEN && export INGEST_TOKEN
-   TOTAL=<pull requests reported by the dry run>
-   for ((skip=0; skip<TOTAL; skip+=10)); do
-     pwsh ./Publish-LegacyPayloads.ps1 -InputPath ./output/fes-payloads.ndjson -IngestUrl "$URL" \
-       -JiraProjectKey FI0 -SkipRecords $skip -MaxRecords 10 -RunId "fes-batch-$((skip/10+1))" || break
-   done
-   ```
-
-   `stored` and `ignored` are both success; `ignored` means the dashboard already holds a newer
-   record. Stop on any `rejected`, `failed` or `auth-failed`; the audit file for each batch is in
-   `output/`.
-
-3. Switch break-glass off at once: revert the config pull request, merge, and redeploy the
-   dashboard.
-
-   ```bash
-   gh pr list -R DEFRA/cdp-app-config --state merged --search "head:config/mmo-cr-copilot-legacy-ingest-on"
-   # Revert that merge commit on a new branch, then:
-   gh pr create -R DEFRA/cdp-app-config --base main --title "Revert temporary shared-token ingest (ext-test)" --body "FES legacy migration complete."
-   ```
-
-4. Clean up the personal data:
-
-   ```bash
-   docker rm -f copilot-v1-db
-   rm -rf ./dump ./output
-   unset INGEST_TOKEN GITHUB_TOKEN
-   ```
-
-### 8.6 Cutover sign-off — `REQUIRED`
+### 8.2 Cutover sign-off — `REQUIRED`
 
 - [ ] A new FES pull request publishes (Phase 5 smoke test, then normal use).
 - [ ] The backfill summaries show no `failed` pull requests (Phase 6).
 - [ ] Azure analytics pipelines and the `COPILOT_ANALYTICS` variable group are gone (Phase 7).
-- [ ] Phase 8 skipped by the gate, or completed with break-glass switched off and local data deleted.
-- [ ] The old dashboard's owner is told FES no longer feeds the Service Bus queue, so it can be
-      retired.
+- [ ] The old dashboard's owner is told FES no longer feeds the Service Bus queue and its data is
+      not needed for the migration, so the queue and database can be retired.
 
 ## Not part of this migration
 

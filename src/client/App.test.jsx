@@ -196,11 +196,16 @@ describe('#App navigation', () => {
     return [
       buildPayloadFromCommits(
         [
-          buildCommit({ commit: 'a1', author: 'ada' }),
+          buildCommit({
+            commit: 'a1',
+            author: 'ada',
+            committedAt: earlier.toISOString()
+          }),
           buildCommit({
             commit: 'g1',
             author: 'grace',
-            classification: 'Human-authored'
+            classification: 'Human-authored',
+            committedAt: middle.toISOString()
           })
         ],
         {

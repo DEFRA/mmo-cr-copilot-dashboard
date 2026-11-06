@@ -110,3 +110,53 @@ export function valueAxis(p, name, extra = {}) {
     ...extra
   }
 }
+
+// Above BAR_LABEL_LIMIT bars the value labels collide; above BAR_WINDOW the bars scroll.
+export const BAR_LABEL_LIMIT = 12
+export const BAR_WINDOW = 30
+const SLIDER_SIZE = 20
+
+/** Per-bar value labels only while they fit; hover still shows each value. */
+export function barLabels(p, count, label = {}) {
+  return {
+    label: textStyle(p, { show: count <= BAR_LABEL_LIMIT, ...label }),
+    labelLayout: { hideOverlap: true }
+  }
+}
+
+/**
+ * A slider over a long category axis showing BAR_WINDOW bars at a time.
+ * Always returned (hidden when not needed) so a merged setOption resets it.
+ */
+export function categoryZoom(p, count, { axis = 'x', anchor = 'start' } = {}) {
+  const dense = count > BAR_WINDOW
+  const span = dense ? (BAR_WINDOW / count) * 100 : 100
+  const start = anchor === 'end' ? 100 - span : 0
+  const placement =
+    axis === 'x'
+      ? { xAxisIndex: 0, bottom: 8, height: SLIDER_SIZE }
+      : { yAxisIndex: 0, orient: 'vertical', right: 8, width: SLIDER_SIZE }
+  return {
+    dense,
+    gap: dense ? SLIDER_SIZE + 24 : 0,
+    dataZoom: [
+      {
+        type: 'slider',
+        ...placement,
+        show: dense,
+        start,
+        end: start + span,
+        showDetail: false,
+        brushSelect: false,
+        borderColor: p.grid,
+        fillerColor: withAlpha(p.brand, 0.15),
+        handleStyle: { color: p.white, borderColor: p.muted },
+        moveHandleStyle: { color: p.muted },
+        dataBackground: {
+          lineStyle: { color: p.grid },
+          areaStyle: { color: withAlpha(p.muted, 0.15) }
+        }
+      }
+    ]
+  }
+}

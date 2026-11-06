@@ -2,7 +2,9 @@ import { useMemo } from 'react'
 import { Chart } from './Chart'
 import { getAppPalette } from '../../lib/palette'
 import {
+  barLabels,
   categoryAxis,
+  categoryZoom,
   decal,
   legend,
   textStyle,
@@ -19,12 +21,14 @@ const formatMerged = (iso) =>
 /**
  * Delivery-time bar chart. Completed PRs are solid green; in-progress PRs are
  * hatched orange. Status is also in the legend, tooltip and data table, and
- * each bar is labelled with its hours, so meaning never relies on colour.
+ * bars carry their hours while they fit, so meaning never relies on colour.
+ * Items run oldest first, so a long axis opens on the newest window.
  */
 export function DeliveryTimeBar({ items, title, height = 340, onSelect }) {
   // items: [{ prNumber, cycleHours, completed, prMergedAt }]
   const option = useMemo(() => {
     const p = getAppPalette()
+    const zoom = categoryZoom(p, items.length, { anchor: 'end' })
     const statusSeries = (name, completed, itemStyle) => ({
       name,
       type: 'bar',
@@ -32,15 +36,25 @@ export function DeliveryTimeBar({ items, title, height = 340, onSelect }) {
       barMaxWidth: 44,
       cursor: onSelect ? 'pointer' : 'default',
       itemStyle,
-      label: textStyle(p, { show: true, position: 'top', formatter: '{c}h' }),
-      emphasis: { itemStyle: { opacity: 0.85 } },
+      ...barLabels(p, items.length, {
+        position: 'top',
+        formatter: (d) => (d.value ? `${d.value}h` : '')
+      }),
+      emphasis: { itemStyle: { opacity: 0.85 }, label: { show: true } },
       data: items.map((it) =>
         it.completed === completed ? it.cycleHours : null
       )
     })
 
     return {
-      grid: { left: 8, right: 16, top: 48, bottom: 8, containLabel: true },
+      grid: {
+        left: 8,
+        right: 16,
+        top: 48,
+        bottom: 8 + zoom.gap,
+        containLabel: true
+      },
+      dataZoom: zoom.dataZoom,
       legend: legend(p),
       tooltip: tooltip(p, {
         trigger: 'item',
