@@ -161,7 +161,7 @@ this runbook. The change is uncommitted on your local `main`.
 ```bash
 cd ~/workspace-fes-cr/copilot-dashboard/mmo-cr-copilot-dashboard
 git switch -c feature/FI0-11625-backfill-oidc
-git add .gitignore README.md docs/adr/0003-ingest-authentication-github-oidc.md \
+git add .env.example .gitignore README.md docs/adr/0003-ingest-authentication-github-oidc.md \
   docs/fes-copilot-analytics-migration/README.md src/config/config.js \
   src/server/common/helpers/github-oidc.js src/server/common/helpers/ingest-auth.test.js
 git commit -m $'feat(ingest): accept OIDC tokens from the backfill workflow\n\nAdd the FES migration runbook. FI0-11625\n\nCopilot-Assisted: true'
