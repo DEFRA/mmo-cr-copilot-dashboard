@@ -69,8 +69,8 @@ never commit secrets.
 | `INGEST_TOKEN`                             | Yes      | Service-to-service secret sent to the backend as `x-ingest-token`; the same value is set on the backend. GitHub workflows do not use it and need no repository secret. Set once per environment in the CDP Portal. |
 | `INGEST_ALLOW_SHARED_TOKEN`                | No       | Break-glass: also accept `INGEST_TOKEN` as `x-ingest-token` on `POST /api/ingest` from callers with no OIDC token (for example the legacy migration), default `false` (ADR 0003).                                  |
 | `INGEST_OIDC_AUDIENCE`                     | No       | Audience the analytics workflow requests for its GitHub OIDC token, default `mmo-cr-copilot-dashboard`                                                                                                             |
-| `INGEST_OIDC_OWNER_ID`                     | For OIDC | Numeric GitHub id of the DEFRA organisation (`5528822`), set once in `cdp-app-config` `defaults.env`. OIDC ingest is refused while it is empty.                                                                                                                             |
-| `INGEST_OIDC_WORKFLOW_REF_PREFIX`          | No       | Required prefix of the token's `job_workflow_ref`, default the shared `copilot-analytics.yml` workflow in `mmo-cr-devops-common`                                                                                   |
+| `INGEST_OIDC_OWNER_ID`                     | For OIDC | Numeric GitHub id of the DEFRA organisation (`5528822`), set once in `cdp-app-config` `defaults.env`. OIDC ingest is refused while it is empty.                                                                    |
+| `INGEST_OIDC_WORKFLOW_REF_PREFIX`          | No       | Comma-separated prefixes, one of which the token's `job_workflow_ref` must start with, default the shared `copilot-analytics.yml` and `copilot-analytics-backfill.yml` workflows in `mmo-cr-devops-common`         |
 | `INGEST_OIDC_ALLOWED_EVENTS`               | No       | Comma-separated events allowed to publish, default `pull_request,workflow_dispatch`                                                                                                                                |
 | `INGEST_OIDC_SURVIVAL_WORKFLOW_REF_PREFIX` | No       | Required prefix of the `job_workflow_ref` for `POST /api/ingest/survival`, default the `copilot-analytics-survival.yml` workflow in `mmo-cr-devops-common`                                                         |
 | `INGEST_OIDC_SURVIVAL_ALLOWED_EVENTS`      | No       | Comma-separated events allowed to publish survival records, default `schedule,workflow_dispatch`                                                                                                                   |
@@ -132,7 +132,8 @@ analytics-workflow token is refused. The record is relayed to the backend, which
 
 ## Onboard a project
 
-You need the `Dashboard.Admin` role.
+You need the `Dashboard.Admin` role. The FES repositories have an end-to-end migration runbook:
+[docs/fes-copilot-analytics-migration](docs/fes-copilot-analytics-migration/README.md).
 
 1. **Create the project.** Choose _Manage projects_ in the project switcher and add the project
    (name, slug, type and, for AI-Adopted projects, the Copilot adoption date).

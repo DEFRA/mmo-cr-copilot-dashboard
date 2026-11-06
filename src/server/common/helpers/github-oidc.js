@@ -15,19 +15,20 @@ export class IngestTokenError extends Error {
   }
 }
 
-const splitEvents = (value) =>
+const splitList = (value) =>
   value
     .split(',')
     .map((e) => e.trim())
     .filter(Boolean)
 
-const allowedEvents = () => splitEvents(config.get('ingest.oidc.allowedEvents'))
+const allowedEvents = () => splitList(config.get('ingest.oidc.allowedEvents'))
 
 /**
  * Verifies a GitHub Actions OIDC token (dashboard ADR 0003): signature, issuer,
  * audience and lifetime, then that it came from the DEFRA organisation, through
- * the expected workflow, on an allowed event. Returns the claims. The workflow
- * and events default to the analytics workflow; the survival route passes its own.
+ * one of the expected workflows, on an allowed event. Returns the claims. The
+ * workflows and events default to the analytics and backfill workflows; the
+ * survival route passes its own.
  */
 export async function verifyGithubToken(token, keySet = jwks, options = {}) {
   let payload
@@ -47,9 +48,10 @@ export async function verifyGithubToken(token, keySet = jwks, options = {}) {
     throw new IngestTokenError('owner')
   }
   const workflowRef = String(payload.job_workflow_ref ?? '')
-  const prefix =
+  const prefixes = splitList(
     options.workflowRefPrefix ?? config.get('ingest.oidc.workflowRefPrefix')
-  if (!workflowRef.startsWith(prefix)) {
+  )
+  if (!prefixes.some((prefix) => workflowRef.startsWith(prefix))) {
     throw new IngestTokenError('workflow')
   }
   const events = options.allowedEvents ?? allowedEvents()

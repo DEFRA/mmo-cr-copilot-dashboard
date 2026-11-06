@@ -147,6 +147,34 @@ describe('#requireIngestToken', () => {
       )
     })
 
+    test('Should accept a token from the backfill workflow', async () => {
+      const jwt = await token({
+        job_workflow_ref:
+          'DEFRA/mmo-cr-devops-common/.github/workflows/copilot-analytics-backfill.yml@refs/heads/main',
+        event_name: 'workflow_dispatch'
+      })
+
+      expect(await requireIngestToken(bearer(jwt), h)).toBe(h.continue)
+    })
+
+    test('Should accept any workflow in a configured prefix list', async () => {
+      settings['ingest.oidc.workflowRefPrefix'] =
+        ' DEFRA/one/.github/workflows/a.yml@ , DEFRA/two/.github/workflows/b.yml@'
+      const jwt = await token({
+        job_workflow_ref: 'DEFRA/two/.github/workflows/b.yml@refs/heads/main'
+      })
+
+      expect(await requireIngestToken(bearer(jwt), h)).toBe(h.continue)
+    })
+
+    test('Should reject every token when no workflow prefix is configured', async () => {
+      settings['ingest.oidc.workflowRefPrefix'] = ' , '
+
+      await expect(
+        requireIngestToken(bearer(await token()), h)
+      ).rejects.toThrow('Invalid ingest credentials')
+    })
+
     test.each([
       ['a wrong audience', {}, { audience: 'someone-else' }],
       ['a wrong issuer', {}, { issuer: 'https://evil.example' }],
@@ -158,6 +186,14 @@ describe('#requireIngestToken', () => {
         {
           job_workflow_ref:
             'DEFRA/other/.github/workflows/x.yml@refs/heads/main'
+        },
+        {}
+      ],
+      [
+        'the survival workflow',
+        {
+          job_workflow_ref:
+            'DEFRA/mmo-cr-devops-common/.github/workflows/copilot-analytics-survival.yml@refs/heads/main'
         },
         {}
       ],

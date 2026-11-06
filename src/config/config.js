@@ -361,10 +361,10 @@ export const config = convict({
         env: 'INGEST_OIDC_OWNER_ID'
       },
       workflowRefPrefix: {
-        doc: 'Required prefix of the token job_workflow_ref claim: the shared analytics workflow',
+        doc: 'Comma-separated prefixes, one of which the token job_workflow_ref claim must start with: the shared analytics and backfill workflows',
         format: String,
         default:
-          'DEFRA/mmo-cr-devops-common/.github/workflows/copilot-analytics.yml@',
+          'DEFRA/mmo-cr-devops-common/.github/workflows/copilot-analytics.yml@,DEFRA/mmo-cr-devops-common/.github/workflows/copilot-analytics-backfill.yml@',
         env: 'INGEST_OIDC_WORKFLOW_REF_PREFIX'
       },
       allowedEvents: {

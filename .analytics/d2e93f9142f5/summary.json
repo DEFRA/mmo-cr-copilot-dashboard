@@ -1,17 +1,17 @@
 {
   "schema": "ai-attribution/2",
-  "id": "501111b709c3",
+  "id": "d2e93f9142f5",
   "extensionVersion": "1.0.0",
   "totals": {
     "aiCompletion": 0,
     "aiChat": 0,
-    "aiAgent": 30,
+    "aiAgent": 45,
     "aiModified": 0,
     "pasted": 0,
     "typed": 0,
     "untracked": 1
   },
-  "fileCount": 1,
+  "fileCount": 5,
   "signals": {
     "agentHooks": "installed",
     "completionKeys": "enabled",
@@ -27,29 +27,29 @@
         "models": [
           {
             "model": "claude-opus-5.5",
-            "requests": 14.5,
-            "inputTokens": 954660,
-            "outputTokens": 8914,
-            "cacheReadTokens": 865374,
-            "cacheCreationTokens": 89255,
-            "reasoningTokens": 3450,
-            "credits": 79.7755
+            "requests": 11.5,
+            "inputTokens": 3489996,
+            "outputTokens": 13631,
+            "cacheReadTokens": 3337247,
+            "cacheCreationTokens": 152724,
+            "reasoningTokens": 2780,
+            "credits": 170.3787
           }
         ]
       }
     ],
     "totals": {
-      "requests": 14.5,
-      "inputTokens": 954660,
-      "outputTokens": 8914,
-      "cacheReadTokens": 865374,
-      "cacheCreationTokens": 89255,
-      "reasoningTokens": 3450,
-      "credits": 79.7755
+      "requests": 11.5,
+      "inputTokens": 3489996,
+      "outputTokens": 13631,
+      "cacheReadTokens": 3337247,
+      "cacheCreationTokens": 152724,
+      "reasoningTokens": 2780,
+      "credits": 170.3787
     },
     "window": {
-      "from": "2026-11-06T16:02:59.556Z",
-      "to": "2026-11-06T16:38:30.065Z"
+      "from": "2026-11-06T17:47:23.257Z",
+      "to": "2026-11-06T17:56:41.331Z"
     }
   }
 }

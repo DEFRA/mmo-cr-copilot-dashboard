@@ -64,7 +64,9 @@ Resolved (B2.5):
   refused while it is empty.
 - **Events:** `pull_request,workflow_dispatch` (`INGEST_OIDC_ALLOWED_EVENTS`).
 - **Workflow ref:** any ref after the `@` is accepted, so callers may pin a tag or SHA
-  (`INGEST_OIDC_WORKFLOW_REF_PREFIX`).
+  (`INGEST_OIDC_WORKFLOW_REF_PREFIX`). The setting is a comma-separated list; its default accepts
+  `copilot-analytics.yml` and `copilot-analytics-backfill.yml`, whose tokens otherwise failed this
+  check. The survival workflow is not in the list; it has its own route (ADR 0005).
 - **`jti` store:** the session Catbox cache (Redis in CDP), segment `ingest-jti`, kept until
   `exp`. The publish script asks for a fresh token on every retry.
 - **Unmapped repositories:** rejected with 403. Repositories are mapped in the admin screen before
