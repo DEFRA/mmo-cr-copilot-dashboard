@@ -3,7 +3,7 @@ description: 'Plans and coordinates complex, multi-step work on the DEFRA/MMO Co
 name: 'Dashboard Orchestrator'
 tools: [read, search, todo, agent]
 argument-hint: 'Describe the complex dashboard task, feature or change to plan and coordinate.'
-model: Gemini 3.8 Flash (copilot)
+model: Claude Sonnet 5.5 (copilot)
 agents:
   [
     'Dashboard Planner',

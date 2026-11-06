@@ -600,6 +600,20 @@
   }
 }
 
+// Table on the left half, pie on the right; one column on narrow viewports.
+.app-usage-split {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: govuk-spacing(4);
+  align-items: start;
+}
+
+@media (max-width: 48em) {
+  .app-usage-split {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
 // A wrapped tag keeps GOV.UK's full max-width, leaving an empty coloured band.
 .govuk-table .govuk-tag {
   max-width: none;
@@ -1188,8 +1202,9 @@ $app-rating-text: (
   top: calc(100% + 6px);
   right: 0;
   z-index: 30;
-  width: min(380px, 92vw);
+  width: min(17rem, 92vw);
   padding: govuk-spacing(3) 16px 16px;
+  overflow: hidden;
   border-top: 6px solid var(--app-colour-brand);
   border-radius: var(--app-radius);
   background: var(--app-colour-white);
@@ -1200,6 +1215,15 @@ $app-rating-text: (
 
   &[hidden] {
     display: none;
+  }
+
+  // Content keeps its wide layout while the width animates, so it clips rather than reflows.
+  &--wide {
+    width: min(380px, 92vw);
+
+    > * {
+      min-width: calc(min(380px, 92vw) - 32px);
+    }
   }
 
   .govuk-button {
@@ -1246,12 +1270,16 @@ $app-rating-text: (
 }
 
 .app-options {
+  display: flex;
+  flex-direction: column;
+  gap: 6px; // Clears the focus shadow (2px above, 4px below) so it never overlaps a neighbour.
   margin: 0;
   padding: 0;
   list-style: none;
 }
 
 .app-option {
+  position: relative;
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -1267,7 +1295,12 @@ $app-rating-text: (
   font-size: 0.8125rem;
   font-weight: 600;
   text-align: left;
+  white-space: nowrap;
   cursor: pointer;
+
+  &:focus {
+    z-index: 1;
+  }
 
   &:hover,
   &[aria-current='true'] {
@@ -1516,6 +1549,10 @@ $app-rating-text: (
 
 // ---------- Motion: initial states only exist when motion is welcome ----------
 @media (prefers-reduced-motion: no-preference) {
+  .app-popover {
+    transition: width 100ms ease-out;
+  }
+
   .app-anim-rise {
     animation: app-rise 500ms var(--app-motion-ease) var(--d, 0ms) both;
   }

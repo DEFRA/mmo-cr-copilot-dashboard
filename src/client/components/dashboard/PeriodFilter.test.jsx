@@ -85,7 +85,7 @@ describe('#PeriodFilter', () => {
     const dialog = screen.getByRole('dialog', { name: 'Previous sprints' })
     const options = within(dialog).getAllByRole('listitem')
     expect(options).toHaveLength(3)
-    expect(options[0]).toHaveTextContent('Previous sprint')
+    expect(options[0]).toHaveTextContent('Last Sprint')
     expect(options[2]).toHaveTextContent('3 sprints ago')
     expect(within(options[0]).getByRole('button')).toHaveFocus()
 
@@ -111,7 +111,7 @@ describe('#PeriodFilter', () => {
 
     const range = formatSprintRange(PREVIOUS.start, PREVIOUS.end)
     expect(menuButton()).toHaveAccessibleName(
-      `Time period: Previous sprint, ${range}`
+      `Time period: Last Sprint, ${range}`
     )
     expect(menuButton()).toHaveClass('app-chip--selected')
     expect(screen.getByRole('button', { name: /Live sprint/ })).toHaveAttribute(
@@ -124,7 +124,7 @@ describe('#PeriodFilter', () => {
 
     await openMenu()
     expect(
-      screen.getByRole('button', { name: /^Previous sprint/ })
+      screen.getByRole('button', { name: /^Last Sprint/ })
     ).toHaveAttribute('aria-current', 'true')
   })
 
@@ -143,6 +143,27 @@ describe('#PeriodFilter', () => {
     await userEvent.click(screen.getByRole('button', { name: /Custom period/ }))
     expect(screen.getByLabelText('From')).toHaveValue('01/10/2026')
     expect(screen.getByLabelText('To time')).toHaveValue('17:00')
+  })
+
+  test('Should widen the popover for the custom panel and narrow it again', async () => {
+    renderFilter()
+
+    await openMenu()
+    const dialog = screen.getByRole('dialog', { name: 'Previous sprints' })
+    expect(dialog).toHaveClass('app-popover')
+    expect(dialog).not.toHaveClass('app-popover--wide')
+
+    await userEvent.click(screen.getByRole('button', { name: /Custom period/ }))
+    expect(screen.getByRole('dialog', { name: 'Custom period' })).toHaveClass(
+      'app-popover--wide'
+    )
+
+    await userEvent.click(
+      screen.getByRole('button', { name: '‹ Back to previous sprints' })
+    )
+    expect(
+      screen.getByRole('dialog', { name: 'Previous sprints' })
+    ).not.toHaveClass('app-popover--wide')
   })
 
   test('Should move focus into the custom panel and back again', async () => {

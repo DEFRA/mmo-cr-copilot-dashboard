@@ -135,7 +135,7 @@ analytics-workflow token is refused. The record is relayed to the backend, which
 You need the `Dashboard.Admin` role.
 
 1. **Create the project.** Choose _Manage projects_ in the project switcher and add the project
-   (name, slug, type and, for AI-adopted projects, the Copilot adoption date).
+   (name, slug, type and, for AI-Adopted projects, the Copilot adoption date).
 2. **Map the repositories.** In _Repository mapping_, map each repository (`owner/name`) to the
    project. Data from unmapped repositories is refused.
 3. **Add the caller workflow** to each repository, as in the `mmo-cr-devops-common` README, with

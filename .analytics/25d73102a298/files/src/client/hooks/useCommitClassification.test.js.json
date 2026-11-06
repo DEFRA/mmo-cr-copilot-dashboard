@@ -1,0 +1,23 @@
+{
+  "schema": "ai-attribution-file/2",
+  "path": "src/client/hooks/useCommitClassification.test.js",
+  "added": 4,
+  "counts": {
+    "aiCompletion": 0,
+    "aiChat": 0,
+    "aiAgent": 4,
+    "aiModified": 0,
+    "pasted": 0,
+    "typed": 0,
+    "untracked": 0
+  },
+  "ranges": {
+    "ai-agent": "40,45-47"
+  },
+  "ai": [
+    [40, "a", "db0ef91b", 0],
+    [45, "a", "e98389e1", 0],
+    [46, "a", "70562af4", 0],
+    [47, "a", "a31996cd", 0]
+  ]
+}

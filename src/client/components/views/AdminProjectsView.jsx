@@ -7,11 +7,14 @@ import {
   NotificationBanner,
   Select,
   Table,
-  Tag
+  Tag,
+  TextInput
 } from '../govuk'
 import { cx, isPlainClick } from '../govuk/utils.js'
 import { apiFetch, jsonWrite } from '../../lib/api'
-import { formatDate, typeLabel } from '../../lib/onboarding'
+import { checkedWrite, toApiError } from '../../lib/api-errors'
+import { jiraKeyEdit } from '../../lib/jira'
+import { formatDate, jiraKeyError, typeLabel } from '../../lib/onboarding'
 import { toHash } from '../../lib/routes'
 
 export { validateProject } from '../../lib/onboarding'
@@ -171,12 +174,17 @@ function ComplexityModel({ projects, onSaved }) {
     setAttempt((a) => a + 1)
     if (Object.keys(found).length > 0) return
     try {
-      const res = await jsonWrite(
-        `/api/projects/${encodeURIComponent(slug)}/complexity-model`,
-        'PUT',
-        model
+      const res = await checkedWrite(
+        jsonWrite(
+          `/api/projects/${encodeURIComponent(slug)}/complexity-model`,
+          'PUT',
+          model
+        ),
+        {
+          fallback: 'The model could not be saved',
+          notFound: 'That project no longer exists'
+        }
       )
-      if (!res.ok) throw new Error('The model could not be saved')
       const saved = await res.json()
       setVersion(saved.version)
       onSaved(
@@ -251,6 +259,114 @@ function ComplexityModel({ projects, onSaved }) {
   )
 }
 
+const JIRA_KEY_FAILED = 'The Jira project key could not be saved'
+
+// A stored key is read-only; a key-less AI-Adopted project may add one once.
+function ProjectJiraKey({ projects, onSaved }) {
+  const baseId = useId()
+  const projectId = `${baseId}-project`
+  const keyId = `${baseId}-key`
+  const [slug, setSlug] = useState('')
+  const [value, setValue] = useState('')
+  const [error, setError] = useState(null)
+  const [attempt, setAttempt] = useState(0)
+  const [saving, setSaving] = useState(false)
+
+  const project = projects.find((p) => p.slug === slug)
+  const edit = project ? jiraKeyEdit(project) : null
+
+  const handleProject = (event) => {
+    setSlug(event.target.value)
+    setValue('')
+    setError(null)
+  }
+
+  const handleSubmit = async (event) => {
+    event.preventDefault()
+    if (saving) return
+    const key = value.trim().toUpperCase()
+    const problem = jiraKeyError(key, true)
+    setAttempt((a) => a + 1)
+    if (problem) {
+      setError({ field: true, text: problem })
+      return
+    }
+    setSaving(true)
+    setError(null)
+    try {
+      await checkedWrite(
+        jsonWrite(`/api/projects/${encodeURIComponent(slug)}`, 'PUT', {
+          jira: { projectKeys: [key] }
+        }),
+        {
+          context: 'project',
+          fallback: JIRA_KEY_FAILED,
+          notFound: 'That project no longer exists'
+        }
+      )
+      setValue('')
+      onSaved(`Jira project key ${key} added to ${project.name}.`)
+    } catch (err) {
+      const { field, message } = toApiError(err, JIRA_KEY_FAILED)
+      setError({ field: field === 'jiraKey', text: message })
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  return (
+    <form onSubmit={handleSubmit} noValidate>
+      {error && (
+        <ErrorSummary
+          key={attempt}
+          errors={[
+            { href: error.field ? `#${keyId}` : undefined, text: error.text }
+          ]}
+        />
+      )}
+      <Select
+        id={projectId}
+        label="Project to change"
+        value={slug}
+        onChange={handleProject}
+        options={[
+          { value: '', text: 'Select a project' },
+          ...projects.map((p) => ({ value: p.slug, text: p.name }))
+        ]}
+      />
+      {edit?.mode === 'fixed' && (
+        <>
+          <h3 className="govuk-heading-s">Jira project key</h3>
+          <p className="govuk-body govuk-!-margin-bottom-1">
+            {edit.key ?? 'None'}
+          </p>
+          <p className="govuk-hint">{edit.hint}</p>
+        </>
+      )}
+      {edit?.mode === 'add' && (
+        <>
+          <TextInput
+            id={keyId}
+            label="Jira project key"
+            labelSize="s"
+            hint={edit.hint}
+            errorMessage={error?.field ? error.text : undefined}
+            autoCapitalize="characters"
+            spellCheck={false}
+            autoComplete="off"
+            width="10"
+            value={value}
+            onChange={(event) => setValue(event.target.value.toUpperCase())}
+          />
+          <Button type="submit" disabled={saving}>
+            Add Jira project key
+          </Button>
+        </>
+      )}
+    </form>
+  )
+}
+
 function RecomputeComplexity({ onDone }) {
   const [error, setError] = useState(null)
   const [busy, setBusy] = useState(false)
@@ -259,8 +375,10 @@ function RecomputeComplexity({ onDone }) {
     setBusy(true)
     setError(null)
     try {
-      const res = await jsonWrite('/api/admin/complexity/recompute', 'POST')
-      if (!res.ok) throw new Error('Complexity could not be recomputed')
+      const res = await checkedWrite(
+        jsonWrite('/api/admin/complexity/recompute', 'POST'),
+        { fallback: 'Complexity could not be recomputed' }
+      )
       const { updated } = await res.json()
       onDone(`Complexity recomputed: ${updated} pull requests rescored.`)
     } catch (err) {
@@ -284,7 +402,11 @@ function RecomputeComplexity({ onDone }) {
   )
 }
 
-export function AdminProjectsView({ onNavigateHome, onOnboardProject }) {
+export function AdminProjectsView({
+  onNavigateHome,
+  onOnboardProject,
+  onProjectsChanged
+}) {
   const [projects, setProjects] = useState([])
   const [status, setStatus] = useState('loading')
   const [success, setSuccess] = useState(null)
@@ -363,7 +485,7 @@ export function AdminProjectsView({ onNavigateHome, onOnboardProject }) {
           aria-labelledby="admin-create"
         >
           <h2 className="govuk-heading-l" id="admin-create">
-            Add a project
+            Add a Project
           </h2>
           <p className="govuk-body">
             Projects are added in steps: the project&apos;s details, then the
@@ -397,10 +519,27 @@ export function AdminProjectsView({ onNavigateHome, onOnboardProject }) {
 
         <section
           className="govuk-!-margin-bottom-8 govuk-!-width-two-thirds"
+          aria-labelledby="admin-jira"
+        >
+          <h2 className="govuk-heading-l" id="admin-jira">
+            Jira Project Key
+          </h2>
+          <ProjectJiraKey
+            projects={projects}
+            onSaved={(message) => {
+              setSuccess(message)
+              loadData()
+              onProjectsChanged?.()
+            }}
+          />
+        </section>
+
+        <section
+          className="govuk-!-margin-bottom-8 govuk-!-width-two-thirds"
           aria-labelledby="admin-complexity"
         >
           <h2 className="govuk-heading-l" id="admin-complexity">
-            Complexity model
+            Complexity Model
           </h2>
           <ComplexityModel projects={projects} onSaved={setSuccess} />
           <RecomputeComplexity onDone={setSuccess} />

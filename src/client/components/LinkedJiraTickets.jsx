@@ -4,6 +4,7 @@ import { Panel } from './dashboard'
 import { Button, ErrorMessage } from './govuk'
 import { cx } from './govuk/utils.js'
 import { apiFetch, jsonWrite } from '../lib/api'
+import { checkedWrite } from '../lib/api-errors'
 
 const ISSUE_KEY = /^[A-Z][A-Z0-9_]+-\d+$/
 const MAX_KEYS = 20
@@ -96,8 +97,10 @@ export function LinkedJiraTickets({
     }
     setSaving(true)
     try {
-      const res = await jsonWrite(path, 'PUT', { jiraKeys: keys })
-      if (!res.ok) throw new Error('The links could not be saved')
+      const res = await checkedWrite(
+        jsonWrite(path, 'PUT', { jiraKeys: keys }),
+        { fallback: 'The links could not be saved' }
+      )
       const data = await res.json()
       setLinks(Array.isArray(data?.links) ? data.links : [])
       setEditing(false)

@@ -36,6 +36,7 @@ import {
 } from '../../lib/selectors'
 import {
   KpiDrillGrid,
+  JiraHiddenNotice,
   Meter,
   OpenButton,
   PERIOD_CHIP,
@@ -161,6 +162,8 @@ export function OverviewView({
   leverageData,
   sonarAsOf,
   sprintWindows,
+  jiraConnected = false,
+  canAdminister = false,
   jiraDelivery,
   deliveryWindow,
   deliveryHref,
@@ -588,16 +591,14 @@ export function OverviewView({
           </div>
         </Subsection>
 
-        <Subsection
-          title="Copilot Usage"
-          family="leverage"
-          icon="sparkle"
+        <CopilotUsagePanel
+          usage={usage}
+          insightsHref={insightsHref}
+          headingLevel={3}
           meta="Model level, never per person"
-        >
-          <CopilotUsagePanel usage={usage} insightsHref={insightsHref} />
-        </Subsection>
+        />
 
-        {jiraDelivery && (
+        {jiraConnected ? (
           <DeliverySnapshot
             delivery={jiraDelivery}
             payloads={payloads}
@@ -606,6 +607,8 @@ export function OverviewView({
             onOpenTicket={onOpenTicket}
             onOpenPR={onOpenPR}
           />
+        ) : (
+          <JiraHiddenNotice canAdminister={canAdminister} />
         )}
 
         <Subsection

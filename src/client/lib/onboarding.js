@@ -1,23 +1,31 @@
-export const SLUG_PATTERN = /^[A-Z][A-Z0-9]{2,3}$/
+// A subset of the backend's /^[A-Z][A-Z0-9]{2,3}$/.
+export const SLUG_PATTERN = /^[A-Z]{3,4}$/
 export const JIRA_KEY_PATTERN = /^[A-Z][A-Z0-9_]+$/
 export const REPOSITORY_PATTERN = /^[\w.-]+\/[\w.-]+$/
-export const SONAR_KEY_PATTERN = /^[\w.:-]+$/
 
 export const EMPTY_DETAILS = {
   name: '',
   slug: '',
   type: '',
   adoption: { day: '', month: '', year: '' },
-  jiraKeys: ''
+  jiraKey: ''
 }
 
-export const EMPTY_REPOSITORIES = [{ fullName: '', sonarProjectKey: '' }]
+const jiraKeyOf = (form) => form.jiraKey.trim().toUpperCase()
 
-export const splitKeys = (value) =>
-  value
-    .split(',')
-    .map((key) => key.trim())
-    .filter(Boolean)
+/** An AI-Native project needs its Jira key; an AI-Adopted one may go without. */
+export const jiraKeyRequired = (type) => type === 'ai-native'
+
+/** The label and hint for the Jira key field, which follow the project type. */
+export const jiraKeyField = (type) => {
+  const hint = 'The one Jira project for this project, like MMOCR.'
+  return jiraKeyRequired(type)
+    ? {
+        label: 'Jira project key',
+        hint: `${hint} Required for an AI-Native project.`
+      }
+    : { label: 'Jira project key (optional)', hint }
+}
 
 /** A real calendar date from day, month and year strings, or null. */
 export function parseDate({ day, month, year }) {
@@ -39,7 +47,7 @@ export const isRepositoryName = (value) =>
   typeof value === 'string' && REPOSITORY_PATTERN.test(value)
 
 export const typeLabel = (type) =>
-  type === 'ai-native' ? 'AI-native' : 'AI-adopted'
+  type === 'ai-native' ? 'AI-Native' : 'AI-Adopted'
 
 export const formatDate = (iso) =>
   iso
@@ -50,6 +58,18 @@ export const formatDate = (iso) =>
       })
     : 'Not set'
 
+/** What is wrong with an upper-cased, trimmed Jira key, or null. */
+export function jiraKeyError(jiraKey, required = false) {
+  if (/[,\s]/.test(jiraKey)) {
+    return 'Enter one Jira project key, with no commas or spaces, like MMOCR'
+  }
+  if (!jiraKey && required) return 'Enter a Jira project key'
+  if (jiraKey && !JIRA_KEY_PATTERN.test(jiraKey)) {
+    return 'Jira project key must start with a letter and only contain letters, numbers or underscores'
+  }
+  return null
+}
+
 /** Field errors for the project details step, keyed by field. */
 export function validateProject(form, now = new Date()) {
   const errors = {}
@@ -59,10 +79,12 @@ export function validateProject(form, now = new Date()) {
     errors.name = 'Project name must be 80 characters or fewer'
   }
 
-  if (!form.slug) errors.slug = 'Enter a project slug'
-  else if (!SLUG_PATTERN.test(form.slug)) {
-    errors.slug =
-      'Project slug must be 3 or 4 capital letters or numbers, starting with a letter, like CRAR'
+  const slug = form.slug.toUpperCase()
+  if (!slug) errors.slug = 'Enter a project slug'
+  else if (!/^[A-Z]+$/.test(slug)) {
+    errors.slug = 'Slug must only contain letters, no numbers'
+  } else if (!SLUG_PATTERN.test(slug)) {
+    errors.slug = 'Slug must be 3 to 4 letters'
   }
 
   if (!form.type) errors.type = 'Select the project type'
@@ -79,78 +101,57 @@ export function validateProject(form, now = new Date()) {
     }
   }
 
-  if (splitKeys(form.jiraKeys).some((key) => !JIRA_KEY_PATTERN.test(key))) {
-    errors.jiraKeys =
-      'Jira project keys must be capital letters, numbers or underscores, separated by commas, like MMOCR, FES'
-  }
+  const jiraError = jiraKeyError(jiraKeyOf(form), jiraKeyRequired(form.type))
+  if (jiraError) errors.jiraKey = jiraError
   return errors
 }
 
+const sameName = (a, b) => a.toLowerCase() === b.toLowerCase()
+
 /**
- * Errors for the repositories step: `list` for the whole step and `rows` for
- * the rows at fault. An empty object means valid. Rows with no repository
- * name are ignored, so a spare blank row never blocks the step.
+ * Add a typed or chosen repository to the list. `error` says why it was
+ * refused; a name already in the list (any case) leaves it unchanged and
+ * is flagged `duplicate`.
  */
-export function validateRepositories(rows, mapped = []) {
-  const taken = new Set(mapped.map((name) => name.toLowerCase()))
-  const seen = new Set()
-  const rowErrors = {}
-  let filled = 0
-
-  rows.forEach((row, index) => {
-    const fullName = row.fullName.trim()
-    const sonarKey = row.sonarProjectKey.trim()
-    const found = {}
-    if (fullName) {
-      filled += 1
-      const key = fullName.toLowerCase()
-      if (!REPOSITORY_PATTERN.test(fullName)) {
-        found.fullName =
-          'Enter the repository as owner/name, like DEFRA/mmo-cr-pdf'
-      } else if (taken.has(key)) {
-        found.fullName = `${fullName} is already mapped to a project`
-      } else if (seen.has(key)) {
-        found.fullName = `${fullName} is listed more than once`
-      }
-      seen.add(key)
-    } else if (sonarKey) {
-      found.fullName = 'Enter the repository this Sonar project key is for'
+export function addRepository(list, value, mapped = []) {
+  const name = value.trim()
+  if (!isRepositoryName(name)) {
+    return {
+      list,
+      name,
+      error: 'Enter the repository as owner/name, like DEFRA/mmo-cr-pdf'
     }
-    if (sonarKey && !SONAR_KEY_PATTERN.test(sonarKey)) {
-      found.sonarProjectKey =
-        'Sonar project key must only include letters, numbers, hyphens, underscores, dots and colons'
-    }
-    if (Object.keys(found).length > 0) rowErrors[index] = found
-  })
+  }
+  if (mapped.some((taken) => sameName(taken, name))) {
+    return { list, name, error: `${name} is already mapped to a project` }
+  }
+  if (list.some((added) => sameName(added, name))) {
+    return { list, name, duplicate: true }
+  }
+  return { list: [...list, name], name }
+}
 
-  const errors = {}
-  if (filled === 0) errors.list = 'Add at least one repository'
-  if (Object.keys(rowErrors).length > 0) errors.rows = rowErrors
-  return errors
+/** `{ list }` says what is wrong with the added repositories; `{}` is valid. */
+export function validateRepositories(names, mapped = []) {
+  if (names.length === 0) return { list: 'Add at least one repository' }
+  const taken = names.find((name) => mapped.some((m) => sameName(m, name)))
+  return taken ? { list: `${taken} is already mapped to a project` } : {}
 }
 
 /** The body for creating the project from the details step. */
 export function toProjectRequest(form) {
   const date = parseDate(form.adoption)
+  const jiraKey = jiraKeyOf(form)
   return {
     name: form.name.trim(),
-    slug: form.slug,
+    slug: form.slug.toUpperCase(),
     type: form.type,
     ...(date && { adoptionStartDate: date.toISOString() }),
-    jira: { projectKeys: splitKeys(form.jiraKeys) }
+    jira: { projectKeys: jiraKey ? [jiraKey] : [] }
   }
 }
 
-/** One `{ fullName, body }` per named repository, ready to PUT. */
-export function toRepositoryMappings(projectSlug, rows) {
-  return rows
-    .map((row) => ({
-      fullName: row.fullName.trim(),
-      sonarProjectKey: row.sonarProjectKey.trim()
-    }))
-    .filter((row) => row.fullName)
-    .map(({ fullName, sonarProjectKey }) => ({
-      fullName,
-      body: { projectSlug, ...(sonarProjectKey && { sonarProjectKey }) }
-    }))
+/** One `{ fullName, body }` per repository name, ready to PUT. */
+export function toRepositoryMappings(projectSlug, names) {
+  return names.map((fullName) => ({ fullName, body: { projectSlug } }))
 }

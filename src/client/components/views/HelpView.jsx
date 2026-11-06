@@ -84,7 +84,7 @@ const CHECKLIST = [
   'The COPILOT_ANALYTICS_INGEST_URL variable is set in each repository.',
   'The workflow job has id-token: write.',
   'Entra groups are mapped to Project Admin and Project User in Settings, under Role Mappings.',
-  'Each repository has a SonarCloud project key and the project has its Jira keys, if you use them.',
+  'Each repository can have one SonarCloud project key, set by a project admin in Settings, under Repositories. The project has its Jira key, if you use Jira.',
   'A pull request has been opened or updated and the workflow run summary says the payload was published.',
   'The pull request shows on the project overview.'
 ]

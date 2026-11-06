@@ -1,19 +1,13 @@
 import { useCallback, useEffect, useState } from 'react'
 
 import { apiFetch, jsonWrite } from '../lib/api'
+import { checkedWrite } from '../lib/api-errors'
 
 const isMapping = (m) =>
   m &&
   typeof m.id === 'string' &&
   typeof m.groupName === 'string' &&
   typeof m.role === 'string'
-
-async function failure(res, fallback) {
-  const body = await res.json().catch(() => null)
-  return Object.assign(new Error(body?.message || fallback), {
-    status: res.status
-  })
-}
 
 /** Role mappings from the Dashboard-Admin-only BFF routes; malformed rows are dropped. */
 export function useRoleMappings(enabled = true) {
@@ -47,8 +41,9 @@ export function useRoleMappings(enabled = true) {
 
   const create = useCallback(
     async (input) => {
-      const res = await jsonWrite('/api/role-mappings', 'POST', input)
-      if (!res.ok) throw await failure(res, 'The role mapping was not saved')
+      await checkedWrite(jsonWrite('/api/role-mappings', 'POST', input), {
+        fallback: 'The role mapping was not saved'
+      })
       refresh()
     },
     [refresh]
@@ -56,11 +51,13 @@ export function useRoleMappings(enabled = true) {
 
   const remove = useCallback(
     async (id) => {
-      const res = await jsonWrite(
-        `/api/role-mappings/${encodeURIComponent(id)}`,
-        'DELETE'
+      await checkedWrite(
+        jsonWrite(`/api/role-mappings/${encodeURIComponent(id)}`, 'DELETE'),
+        {
+          fallback: 'The role mapping was not removed',
+          notFound: 'That role mapping no longer exists'
+        }
       )
-      if (!res.ok) throw await failure(res, 'The role mapping was not removed')
       refresh()
     },
     [refresh]

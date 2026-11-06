@@ -73,6 +73,27 @@ describe('#OverviewView', () => {
     expect(screen.getAllByRole('table').length).toBeGreaterThan(0)
   })
 
+  test('Should show the Jira delivery snapshot only with a Jira key', () => {
+    const jiraDelivery = { metrics: null, issues: [], status: 'loading' }
+    const { unmount } = renderOverview({ jiraDelivery })
+    expect(screen.queryByText('Measured to Jira Done')).toBeNull()
+    expect(screen.queryByText(/no Jira project key/)).toBeNull()
+    unmount()
+
+    renderOverview({ jiraDelivery, jiraConnected: true })
+    expect(screen.getByText('Measured to Jira Done')).toBeInTheDocument()
+  })
+
+  test('Should tell only a project admin why the Jira snapshot is hidden', () => {
+    renderOverview({ canAdminister: true })
+
+    expect(
+      screen.getByText(
+        'Jira delivery metrics are hidden because this project has no Jira project key.'
+      )
+    ).toBeInTheDocument()
+  })
+
   test('Should list every repository in the window', () => {
     renderOverview()
 
@@ -91,10 +112,10 @@ describe('#OverviewView', () => {
     renderOverview({ insightsHref: '#/projects/p/copilot-usage' })
 
     expect(
-      screen.getByRole('heading', { name: 'Copilot Usage' })
-    ).toBeInTheDocument()
-    expect(
-      screen.getByRole('heading', { name: 'Copilot Model Usage' })
+      screen.getByRole('heading', {
+        level: 3,
+        name: 'GitHub Copilot Usage Metrics'
+      })
     ).toBeInTheDocument()
     expect(
       screen.getByText('Model level, never per person')
@@ -429,6 +450,7 @@ describe('#RepoView', () => {
     const onOpenPR = vi.fn()
     renderRepo({
       onOpenPR,
+      jiraConnected: true,
       payloads: [
         ...payloads,
         buildPayloadFromCommits([buildCommit({ commit: 'c1' })], {
@@ -462,6 +484,18 @@ describe('#RepoView', () => {
       within(table).getByRole('button', { name: '#44 Add landing dates' })
     )
     expect(onOpenPR).toHaveBeenCalledWith(REPOSITORY, 44)
+  })
+
+  test('Should leave out the Jira column when the project has no Jira key', () => {
+    renderRepo()
+
+    const table = screen.getByRole('table', {
+      name: /Pull requests in mmo-cr-pdf/
+    })
+    expect(
+      within(table).queryByRole('columnheader', { name: 'Jira' })
+    ).toBeNull()
+    expect(within(table).queryByText('No Jira key')).toBeNull()
   })
 
   test('Should put every chart in a figure with its data table', () => {
@@ -607,6 +641,20 @@ describe('#PRView', () => {
     renderPr()
 
     expect(screen.getAllByText(/a1/).length).toBeGreaterThan(0)
+  })
+
+  test('Should offer linked Jira tickets only when the project has a Jira key', () => {
+    fetchMock.mockResponse(JSON.stringify({ links: [] }))
+    const { unmount } = renderPr({ projectSlug: 'ALPH' })
+    expect(
+      screen.queryByRole('heading', { name: /Linked Jira Tickets/i })
+    ).toBeNull()
+    unmount()
+
+    renderPr({ projectSlug: 'ALPH', jiraConnected: true })
+    expect(
+      screen.getByRole('heading', { name: /Linked Jira Tickets/i })
+    ).toBeInTheDocument()
   })
 
   test('Should show the contributors to the pull request', () => {

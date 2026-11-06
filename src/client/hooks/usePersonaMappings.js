@@ -15,6 +15,7 @@
  */
 import { useCallback, useEffect, useState } from 'react'
 import { apiFetch, apiUrl, jsonWrite } from '../lib/api'
+import { checkedWrite, readApiError, toApiError } from '../lib/api-errors'
 
 const endpointFor = (slug) =>
   `/api/projects/${encodeURIComponent(slug)}/persona-mappings`
@@ -76,16 +77,15 @@ export function usePersonaMappings(projectSlug) {
 
   const upsert = useCallback(
     async (githubHandle, persona) => {
-      const res = await jsonWrite(
-        `${endpointFor(projectSlug)}/${encodeURIComponent(githubHandle)}`,
-        'PUT',
-        { persona }
+      const res = await checkedWrite(
+        jsonWrite(
+          `${endpointFor(projectSlug)}/${encodeURIComponent(githubHandle)}`,
+          'PUT',
+          { persona }
+        ),
+        { fallback: 'The mapping could not be saved' }
       )
-
       const body = await parseJson(res)
-      if (!res.ok) {
-        throw new Error(body?.message || `Request failed (${res.status})`)
-      }
 
       setState((s) => ({
         ...s,
@@ -104,13 +104,19 @@ export function usePersonaMappings(projectSlug) {
 
   const remove = useCallback(
     async (githubHandle) => {
-      const res = await jsonWrite(
-        `${endpointFor(projectSlug)}/${encodeURIComponent(githubHandle)}`,
-        'DELETE'
-      )
-
+      const fallback = 'The mapping could not be removed'
+      let res
+      try {
+        res = await jsonWrite(
+          `${endpointFor(projectSlug)}/${encodeURIComponent(githubHandle)}`,
+          'DELETE'
+        )
+      } catch (err) {
+        throw toApiError(err, fallback)
+      }
+      // Already gone is the outcome the user asked for.
       if (!res.ok && res.status !== 404) {
-        throw new Error(`Request failed (${res.status})`)
+        throw await readApiError(res, { fallback })
       }
 
       setState((s) => ({

@@ -461,6 +461,192 @@ describe('#SettingsView', () => {
       ).not.toBeInTheDocument()
     })
 
+    describe('Jira workflow tab', () => {
+      const JIRA_PROJECT = { ...PROJECT, jira: { projectKeys: ['ALPHA'] } }
+      const jiraLink = () =>
+        screen.queryByRole('link', { name: 'Jira Workflow' })
+
+      test('Should offer a project admin the tab when the project has a Jira key', () => {
+        renderSettings({ project: JIRA_PROJECT })
+
+        expect(jiraLink()).toHaveAttribute('href', '#/settings/jira-workflow')
+      })
+
+      test('Should not offer the tab to a project without a Jira key', () => {
+        renderSettings({ tab: 'jira-workflow' })
+
+        expect(jiraLink()).toBeNull()
+        expect(
+          screen.queryByRole('heading', { name: 'Jira Workflow' })
+        ).toBeNull()
+        expect(
+          screen.getByRole('link', { name: 'Persona Mappings' })
+        ).toHaveAttribute('aria-current', 'page')
+      })
+
+      test('Should not offer the tab to a project user even with a Jira key', () => {
+        renderSettings({
+          project: JIRA_PROJECT,
+          role: 'project-user',
+          tab: 'jira-workflow'
+        })
+
+        expect(jiraLink()).toBeNull()
+        expect(
+          screen.queryByRole('heading', { name: 'Jira Workflow' })
+        ).toBeNull()
+        expect(screen.getByRole('link', { name: 'Audit Log' })).toHaveAttribute(
+          'aria-current',
+          'page'
+        )
+      })
+
+      describe('Unsaved changes', () => {
+        const workflowFor = (slug) => ({
+          source: 'project',
+          version: 1,
+          stages: [
+            {
+              id: 'todo',
+              label: 'To Do',
+              kind: 'todo',
+              required: true,
+              statuses: [`${slug} Backlog`]
+            },
+            {
+              id: 'done',
+              label: 'Done',
+              kind: 'done',
+              required: true,
+              statuses: ['Done']
+            }
+          ],
+          suggestions: {}
+        })
+
+        beforeEach(() => {
+          fetchMock.mockResponse(async (req) => {
+            const { pathname } = new URL(req.url, 'http://localhost')
+            if (pathname.endsWith('/jira/statuses')) {
+              return JSON.stringify({ jiraAvailable: true, statuses: [] })
+            }
+            const slug = pathname.split('/')[3]
+            if (pathname.endsWith('/jira/workflow')) {
+              return JSON.stringify(workflowFor(slug))
+            }
+            return JSON.stringify({
+              entries: [],
+              page: 1,
+              pageSize: 25,
+              total: 0,
+              totalPages: 1
+            })
+          })
+        })
+
+        const editWorkflow = async () => {
+          await screen.findByRole('group', { name: 'To Do' })
+          await userEvent.type(
+            screen.getByRole('combobox', { name: 'Add a status to To Do' }),
+            'Triage{Enter}'
+          )
+        }
+
+        test('Should keep the user on the tab when they cancel leaving', async () => {
+          vi.spyOn(window, 'confirm').mockReturnValue(false)
+          const onTabChange = vi.fn()
+          renderSettings({
+            project: JIRA_PROJECT,
+            tab: 'jira-workflow',
+            onTabChange
+          })
+          await editWorkflow()
+
+          await userEvent.click(
+            screen.getByRole('link', { name: 'Persona Mappings' })
+          )
+
+          expect(window.confirm).toHaveBeenCalledWith(
+            expect.stringContaining('unsaved changes')
+          )
+          expect(onTabChange).not.toHaveBeenCalled()
+        })
+
+        test('Should leave the tab when the user accepts losing the changes', async () => {
+          vi.spyOn(window, 'confirm').mockReturnValue(true)
+          const onTabChange = vi.fn()
+          renderSettings({
+            project: JIRA_PROJECT,
+            tab: 'jira-workflow',
+            onTabChange
+          })
+          await editWorkflow()
+
+          await userEvent.click(
+            screen.getByRole('link', { name: 'Persona Mappings' })
+          )
+
+          expect(onTabChange).toHaveBeenCalledWith('personas')
+        })
+
+        test('Should not ask when nothing has changed', async () => {
+          vi.spyOn(window, 'confirm').mockReturnValue(false)
+          const onTabChange = vi.fn()
+          renderSettings({
+            project: JIRA_PROJECT,
+            tab: 'jira-workflow',
+            onTabChange
+          })
+          await screen.findByRole('group', { name: 'To Do' })
+
+          await userEvent.click(
+            screen.getByRole('link', { name: 'Persona Mappings' })
+          )
+
+          expect(window.confirm).not.toHaveBeenCalled()
+          expect(onTabChange).toHaveBeenCalledWith('personas')
+        })
+
+        test('Should tell the app about unsaved changes and clear them on unmount', async () => {
+          const onUnsavedChange = vi.fn()
+          const { unmount } = renderSettings({
+            project: JIRA_PROJECT,
+            tab: 'jira-workflow',
+            onUnsavedChange
+          })
+          await editWorkflow()
+          expect(onUnsavedChange).toHaveBeenLastCalledWith(true)
+
+          unmount()
+
+          expect(onUnsavedChange).toHaveBeenLastCalledWith(false)
+        })
+
+        test('Should show the new project’s workflow, not the old one, after a project switch', async () => {
+          const view = renderSettings({
+            project: { ...JIRA_PROJECT, slug: 'alpha' },
+            tab: 'jira-workflow'
+          })
+          expect(await screen.findByText('alpha Backlog')).toBeVisible()
+
+          view.rerender(
+            <SettingsView
+              project={{ ...JIRA_PROJECT, slug: 'beta' }}
+              role="project-admin"
+              mappings={MAPPINGS}
+              status="success"
+              onSave={vi.fn()}
+              onRemove={vi.fn()}
+              tab="jira-workflow"
+            />
+          )
+
+          expect(screen.queryByText('alpha Backlog')).toBeNull()
+          expect(await screen.findByText('beta Backlog')).toBeVisible()
+        })
+      })
+    })
+
     test('Should treat a missing role as no administration rights', () => {
       renderSettings({ role: null })
 

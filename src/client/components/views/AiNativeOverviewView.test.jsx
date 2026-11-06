@@ -169,7 +169,7 @@ describe('#AiNativeOverviewView', () => {
     renderView({ payloads: [usagePayload()] })
 
     expect(
-      screen.getByRole('heading', { name: 'Copilot Model Usage' })
+      screen.getByRole('heading', { name: 'GitHub Copilot Usage Metrics' })
     ).toBeInTheDocument()
     expect(screen.getByText('gpt-5')).toBeInTheDocument()
     expect(screen.getAllByText('0.42').length).toBeGreaterThan(0)
@@ -223,11 +223,28 @@ describe('#AiNativeOverviewView', () => {
     expect(names).toEqual(['alpha', 'zeta'])
   })
 
-  test('Should say when Jira is not connected', () => {
+  test('Should hide every Jira metric when the project has no Jira key', () => {
     renderView({ jiraConnected: false })
 
     expect(
-      screen.getAllByText('Jira is not connected for this project.').length
-    ).toBeGreaterThan(0)
+      screen.getByRole('heading', { name: 'Project Activity' })
+    ).toBeInTheDocument()
+    expect(
+      screen.queryByRole('heading', { name: 'Flow and Predictability' })
+    ).toBeNull()
+    expect(screen.queryByText(/measured to Jira Done/)).toBeNull()
+    expect(screen.queryByText('Delivery Quality')).toBeNull()
+    expect(screen.queryByText(/Where Tickets Are/i)).toBeNull()
+    expect(screen.queryByText(/no Jira project key/)).toBeNull()
+  })
+
+  test('Should tell a project admin why the Jira metrics are hidden', () => {
+    renderView({ jiraConnected: false, canAdminister: true })
+
+    expect(
+      screen.getByText(
+        'Jira delivery metrics are hidden because this project has no Jira project key.'
+      )
+    ).toBeInTheDocument()
   })
 })

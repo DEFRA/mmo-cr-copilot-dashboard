@@ -113,6 +113,7 @@ describe('#fromHash', () => {
 
   test.each([
     ['#/settings/roles', { level: 'settings', tab: 'roles' }],
+    ['#/settings/jira-workflow', { level: 'settings', tab: 'jira-workflow' }],
     [
       '#/onboarding/confirmation',
       { level: 'onboarding', step: 'confirmation' }

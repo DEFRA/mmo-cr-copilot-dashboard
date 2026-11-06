@@ -15,7 +15,7 @@ export function ContributorsView({
   const isNative = projectType === 'ai-native'
   const rows = useMemo(() => {
     const summaries = selectContributorSummaries(payloads)
-    // Team framing (E7-S5): AI-native lists people by name, never by rank.
+    // Team framing (E7-S5): AI-Native lists people by name, never by rank.
     return isNative
       ? [...summaries].sort((a, b) =>
           a.contributor.localeCompare(b.contributor)

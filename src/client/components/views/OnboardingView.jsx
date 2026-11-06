@@ -3,7 +3,7 @@ import { useEffect, useRef, useState } from 'react'
 import {
   BackLink,
   Button,
-  Checkboxes,
+  Combobox,
   DateInput,
   ErrorSummary,
   InsetText,
@@ -17,13 +17,14 @@ import {
 import { isPlainClick } from '../govuk/utils.js'
 import { useRepositories } from '../../hooks/useRepositories'
 import { jsonWrite } from '../../lib/api'
+import { ensureOk, readApiError, toApiError } from '../../lib/api-errors'
 import {
   EMPTY_DETAILS,
-  EMPTY_REPOSITORIES,
+  addRepository,
   formatDate,
   isRepositoryName,
+  jiraKeyField,
   parseDate,
-  splitKeys,
   toProjectRequest,
   toRepositoryMappings,
   typeLabel,
@@ -33,7 +34,6 @@ import {
 import { toHash } from '../../lib/routes'
 
 const SERVICE_NAME = 'Copilot Delivery Insights'
-const EMPTY_MANUAL = EMPTY_REPOSITORIES[0]
 
 const TITLES = {
   tasks: 'Onboard a Project',
@@ -46,12 +46,12 @@ const TITLES = {
 const TYPE_ITEMS = [
   {
     value: 'ai-adopted',
-    text: 'AI-adopted',
+    text: 'AI-Adopted',
     hint: 'An existing team adopting GitHub Copilot.'
   },
   {
     value: 'ai-native',
-    text: 'AI-native',
+    text: 'AI-Native',
     hint: 'A team building with an agentic delivery lifecycle from the start.'
   }
 ]
@@ -61,7 +61,7 @@ const DETAIL_FIELDS = {
   slug: 'project-slug',
   type: 'project-type',
   adoption: 'project-adoption-day',
-  jiraKeys: 'project-jira-keys'
+  jiraKey: 'project-jira-key'
 }
 
 const hasErrors = (errors) => Object.keys(errors).length > 0
@@ -69,11 +69,23 @@ const hasErrors = (errors) => Object.keys(errors).length > 0
 const stepHash = (step) =>
   toHash({ level: 'onboarding', step: step === 'tasks' ? undefined : step })
 
-// An AI-native project has no adoption date, whatever was typed before switching.
-const settled = (details) =>
-  details.type === 'ai-native'
-    ? { ...details, adoption: EMPTY_DETAILS.adoption }
-    : details
+// An AI-Native project has no adoption date, whatever was typed before
+// switching. The slug and Jira key are upper-cased defensively.
+const settled = (details) => ({
+  ...details,
+  slug: details.slug.toUpperCase(),
+  jiraKey: details.jiraKey.trim().toUpperCase(),
+  ...(details.type === 'ai-native' && { adoption: EMPTY_DETAILS.adoption })
+})
+
+// Upper-case what is typed without moving the caret.
+function upperCased(event) {
+  const input = event.target
+  const { selectionStart, selectionEnd } = input
+  input.value = input.value.toUpperCase()
+  input.setSelectionRange(selectionStart, selectionEnd)
+  return input.value
+}
 
 const COMPLETED = { text: 'Completed', tag: true, colour: 'green' }
 const IN_PROGRESS = { text: 'In progress', tag: true, colour: 'light-blue' }
@@ -95,12 +107,7 @@ function resolveStep(requested, { result, detailsOk, reposOk }) {
   return 'tasks'
 }
 
-async function failureMessage(res, fallback) {
-  const body = await res.json().catch(() => null)
-  return typeof body?.message === 'string' && body.message
-    ? body.message
-    : fallback
-}
+const PROJECT_FAILED = 'The project could not be added'
 
 async function createProject(details) {
   const res = await jsonWrite(
@@ -108,9 +115,7 @@ async function createProject(details) {
     'POST',
     toProjectRequest(details)
   )
-  if (!res.ok) {
-    throw new Error(await failureMessage(res, 'The project could not be added'))
-  }
+  await ensureOk(res, { context: 'project', fallback: PROJECT_FAILED })
 }
 
 async function connectRepository({ fullName, body }) {
@@ -121,21 +126,53 @@ async function connectRepository({ fullName, body }) {
       'PUT',
       body
     )
-    if (!res.ok) return { fullName, error: await failureMessage(res, fallback) }
-    return { fullName, sonarProjectKey: body.sonarProjectKey ?? '' }
+    if (res.ok) return { fullName }
+    const { message } = await readApiError(res, { fallback })
+    return {
+      fullName,
+      error: message.includes(fullName) ? message : `${fullName}: ${message}`
+    }
   } catch {
     return { fullName, error: fallback }
   }
 }
 
-function DetailsStep({ details, onChange, onContinue }) {
-  const [errors, setErrors] = useState({})
+// A details answer the backend refused stays an error until it is changed.
+function withRejected(errors, project, rejected) {
+  const found = { ...errors }
+  for (const [key, { value, text }] of Object.entries(rejected)) {
+    if (!found[key] && project[key] === value) found[key] = text
+  }
+  return found
+}
+
+function DetailsStep({ details, rejected, onChange, onContinue }) {
+  const [errors, setErrors] = useState(() =>
+    withRejected({}, settled(details), rejected)
+  )
   const [attempt, setAttempt] = useState(0)
   const set = (key) => (value) => onChange({ ...details, [key]: value })
+  const jiraField = jiraKeyField(details.type)
 
+  // The Jira key rule follows the type, so an error shown for it is re-checked.
+  const handleType = (type) => {
+    set('type')(type)
+    if (!errors.jiraKey) return
+    const { jiraKey } = withRejected(
+      validateProject(settled({ ...details, type })),
+      settled({ ...details, type }),
+      rejected
+    )
+    setErrors((current) => {
+      const next = { ...current }
+      delete next.jiraKey
+      return jiraKey ? { ...next, jiraKey } : next
+    })
+  }
   const handleSubmit = (event) => {
     event.preventDefault()
-    const found = validateProject(settled(details))
+    const project = settled(details)
+    const found = withRejected(validateProject(project), project, rejected)
     setErrors(found)
     setAttempt((a) => a + 1)
     if (!hasErrors(found)) onContinue()
@@ -162,13 +199,13 @@ function DetailsStep({ details, onChange, onContinue }) {
         id="project-slug"
         label="Project slug"
         labelSize="s"
-        hint="Used in links. 3 or 4 capital letters or numbers, like CRAR."
+        hint="Used in links. 3 or 4 letters, like CRAR."
         errorMessage={errors.slug}
-        width="20"
+        autoCapitalize="characters"
         spellCheck={false}
         autoComplete="off"
         value={details.slug}
-        onChange={(event) => set('slug')(event.target.value)}
+        onChange={(event) => set('slug')(upperCased(event))}
       />
       <Radios
         idPrefix="project-type"
@@ -178,7 +215,7 @@ function DetailsStep({ details, onChange, onContinue }) {
         errorMessage={errors.type}
         items={TYPE_ITEMS}
         value={details.type}
-        onChange={set('type')}
+        onChange={handleType}
       />
       {details.type === 'ai-adopted' && (
         <DateInput
@@ -192,94 +229,95 @@ function DetailsStep({ details, onChange, onContinue }) {
         />
       )}
       <TextInput
-        id="project-jira-keys"
-        label="Jira project keys (optional)"
+        id="project-jira-key"
+        label={jiraField.label}
         labelSize="s"
-        hint="Separate keys with commas, like MMOCR, FES."
-        errorMessage={errors.jiraKeys}
-        width="20"
+        hint={jiraField.hint}
+        errorMessage={errors.jiraKey}
+        autoCapitalize="characters"
         spellCheck={false}
         autoComplete="off"
-        value={details.jiraKeys}
-        onChange={(event) => set('jiraKeys')(event.target.value)}
+        value={details.jiraKey}
+        onChange={(event) => set('jiraKey')(upperCased(event))}
       />
       <Button type="submit">Save and continue</Button>
     </form>
   )
 }
 
+const sameName = (a, b) => a.toLowerCase() === b.toLowerCase()
+
 function RepositoriesStep({
   suggestions,
   status,
   selected,
   onSelect,
-  sonarKeys,
-  onSonarKey,
-  manual,
-  onManual,
-  rows,
   mapped,
   onContinue
 }) {
   const [attempt, setAttempt] = useState(0)
-  const [errors, setErrors] = useState({})
-  const rowErrors = errors.rows ?? {}
-  const manualIndex = selected.length
+  const [query, setQuery] = useState('')
+  const [error, setError] = useState(null)
+  const [notice, setNotice] = useState('')
+  const inputRef = useRef(null)
+
+  const options = suggestions.filter(
+    (name) => !selected.some((added) => sameName(added, name))
+  )
+  const hint = [
+    suggestions.length > 0
+      ? 'Choose a repository that is already sending data, or type a new one as owner/name, like DEFRA/mmo-cr-pdf, and press Enter.'
+      : 'Type the repository as owner/name, like DEFRA/mmo-cr-pdf, and press Enter.',
+    'Map a repository before adding the analytics workflow to it.'
+  ].join(' ')
+
+  const add = (text, fromSubmit = false) => {
+    const result = addRepository(selected, text, mapped)
+    if (result.error) {
+      setError({ text: result.error, summary: fromSubmit })
+      return result
+    }
+    setError(null)
+    setQuery('')
+    onSelect(result.list)
+    setNotice(
+      result.duplicate
+        ? `${result.name} is already added`
+        : `Added ${result.name}`
+    )
+    return result
+  }
+
+  const remove = (name) => {
+    onSelect(selected.filter((added) => added !== name))
+    setNotice(`Removed ${name}`)
+    inputRef.current?.focus()
+  }
 
   const handleSubmit = (event) => {
     event.preventDefault()
-    const found = validateRepositories(rows, mapped)
-    setErrors(found)
+    let list = selected
+    if (query.trim()) {
+      const result = add(query, true)
+      if (result.error) {
+        setAttempt((a) => a + 1)
+        return
+      }
+      list = result.list
+    }
+    const found = validateRepositories(list, mapped)
+    setError(found.list ? { text: found.list, summary: true } : null)
     setAttempt((a) => a + 1)
     if (!hasErrors(found)) onContinue()
   }
 
-  const sonarId = (name) => `sonar-key-${suggestions.indexOf(name)}`
-  const errorList = [
-    errors.list && {
-      href:
-        suggestions.length > 0 ? '#repository-select' : '#manual-repository',
-      text: errors.list
-    },
-    ...selected
-      .map((name, index) => ({ name, found: rowErrors[index] }))
-      .filter(({ found }) => found?.sonarProjectKey)
-      .map(({ name, found }) => ({
-        href: `#${sonarId(name)}`,
-        text: `${name}: ${found.sonarProjectKey}`
-      })),
-    rowErrors[manualIndex]?.fullName && {
-      href: '#manual-repository',
-      text: rowErrors[manualIndex].fullName
-    },
-    rowErrors[manualIndex]?.sonarProjectKey && {
-      href: '#manual-sonar-key',
-      text: rowErrors[manualIndex].sonarProjectKey
-    }
-  ].filter(Boolean)
-
-  const items = suggestions.map((name) => ({
-    value: name,
-    text: name,
-    conditional: (
-      <TextInput
-        id={sonarId(name)}
-        label="SonarCloud project key (optional)"
-        hint={`For ${name}. Leave blank if it has no SonarCloud project.`}
-        width="30"
-        spellCheck={false}
-        autoComplete="off"
-        errorMessage={rowErrors[selected.indexOf(name)]?.sonarProjectKey}
-        value={sonarKeys[name] ?? ''}
-        onChange={(event) => onSonarKey(name, event.target.value)}
-      />
-    )
-  }))
-
   return (
     <form onSubmit={handleSubmit} noValidate>
-      {errorList.length > 0 && (
-        <ErrorSummary key={attempt} errors={errorList} />
+      {error?.summary && (
+        <ErrorSummary
+          key={attempt}
+          errors={[{ href: '#repository-input', text: error.text }]}
+        />
       )}
       {status === 'loading' && (
         <p className="govuk-body" role="status">
@@ -292,55 +330,43 @@ function RepositoriesStep({
           still add one below.
         </InsetText>
       )}
-      {suggestions.length > 0 && (
-        <Checkboxes
-          idPrefix="repository-select"
-          name="repository-select"
-          legend="Repositories sending data"
-          legendSize="s"
-          hint="These repositories are sending data but are not in a project yet. Select any that belong to this one."
-          errorMessage={errors.list}
-          items={items}
-          value={selected}
-          onChange={onSelect}
-        />
-      )}
-      {status === 'success' && suggestions.length === 0 && (
-        <p className="govuk-body">
-          No repository is sending data without a project. Add the repository
-          below.
-        </p>
-      )}
-      <TextInput
-        id="manual-repository"
-        label="Another repository (optional)"
+      <Combobox
+        id="repository-input"
+        label="Add a repository"
         labelSize="s"
-        hint="As owner/name, like DEFRA/mmo-cr-pdf. Map a repository before adding the analytics workflow to it."
-        errorMessage={
-          rowErrors[manualIndex]?.fullName ??
-          (suggestions.length === 0 ? errors.list : undefined)
-        }
-        width="30"
-        spellCheck={false}
-        autoComplete="off"
-        value={manual.fullName}
-        onChange={(event) =>
-          onManual({ ...manual, fullName: event.target.value })
-        }
+        hint={hint}
+        errorMessage={error?.text}
+        value={query}
+        onChange={setQuery}
+        options={options}
+        onSelect={(text) => add(text)}
+        allowCustom
+        itemName="repository"
+        itemNamePlural="repositories"
+        inputRef={inputRef}
       />
-      <TextInput
-        id="manual-sonar-key"
-        label="SonarCloud project key for that repository (optional)"
-        labelSize="s"
-        errorMessage={rowErrors[manualIndex]?.sonarProjectKey}
-        width="30"
-        spellCheck={false}
-        autoComplete="off"
-        value={manual.sonarProjectKey}
-        onChange={(event) =>
-          onManual({ ...manual, sonarProjectKey: event.target.value })
-        }
-      />
+      <h2 className="govuk-heading-s">Repositories to Connect</h2>
+      {selected.length === 0 ? (
+        <p className="govuk-body">No repositories added yet.</p>
+      ) : (
+        <ul className="app-repo-list">
+          {selected.map((name) => (
+            <li className="app-repo-list__item" key={name}>
+              {name}
+              <button
+                type="button"
+                className="app-link-button app-repo-list__remove"
+                onClick={() => remove(name)}
+              >
+                Remove <span className="govuk-visually-hidden">{name}</span>
+              </button>
+            </li>
+          ))}
+        </ul>
+      )}
+      <div className="govuk-visually-hidden" aria-live="polite">
+        {notice}
+      </div>
       <Button type="submit">Save and continue</Button>
     </form>
   )
@@ -355,7 +381,6 @@ function CheckStep({
   onSubmit
 }) {
   const date = parseDate(details.adoption)
-  const jiraKeys = splitKeys(details.jiraKeys)
   const detailRows = [
     { key: 'Project name', value: details.name.trim() },
     { key: 'Project slug', value: details.slug },
@@ -369,13 +394,14 @@ function CheckStep({
         ]
       : []),
     {
-      key: 'Jira project keys',
-      value: jiraKeys.length > 0 ? jiraKeys.join(', ') : 'None'
+      key: 'Jira project key',
+      value: details.jiraKey || 'None'
     }
   ]
-  const repositoryRows = repositories.map((row) => ({
-    key: row.fullName,
-    value: row.sonarProjectKey || 'No SonarCloud project key'
+  const repositoryRows = repositories.map((fullName) => ({
+    id: fullName,
+    key: 'Repository',
+    value: fullName
   }))
 
   return (
@@ -464,22 +490,10 @@ function ConfirmationStep({ result, headingRef, onLaunch, onAnother }) {
           <Table
             caption="Connected repositories"
             captionHidden
-            head={[
-              { id: 'repo', label: 'Repository' },
-              { id: 'sonar', label: 'SonarCloud project key' }
-            ]}
+            head={[{ id: 'repo', label: 'Repository' }]}
             rows={connected.map((row) => ({
               id: row.fullName,
-              cells: [
-                row.fullName,
-                row.sonarProjectKey ? (
-                  <code key="k" className="app-code">
-                    {row.sonarProjectKey}
-                  </code>
-                ) : (
-                  'None'
-                )
-              ]
+              cells: [row.fullName]
             }))}
           />
         </>
@@ -533,27 +547,22 @@ export function OnboardingView({
   const { repositories, unassigned, status, refresh } = useRepositories(allowed)
   const [details, setDetails] = useState(EMPTY_DETAILS)
   const [selected, setSelected] = useState([])
-  const [sonarKeys, setSonarKeys] = useState({})
-  const [manual, setManual] = useState(EMPTY_MANUAL)
   const [result, setResult] = useState(null)
   const [saving, setSaving] = useState(false)
   const [submitError, setSubmitError] = useState(null)
+  const [rejected, setRejected] = useState({})
   const submitting = useRef(false)
   const headingRef = useRef(null)
   const mounted = useRef(false)
+  const summaryTakesFocus = useRef(false)
 
   const suggestions = unassigned.filter(isRepositoryName)
   const project = settled(details)
-  const rows = [
-    ...selected.map((fullName) => ({
-      fullName,
-      sonarProjectKey: sonarKeys[fullName] ?? ''
-    })),
-    manual
-  ]
   const mapped = repositories.map((r) => r.fullName)
-  const detailsOk = !hasErrors(validateProject(project))
-  const reposOk = !hasErrors(validateRepositories(rows, mapped))
+  const detailsOk = !hasErrors(
+    withRejected(validateProject(project), project, rejected)
+  )
+  const reposOk = !hasErrors(validateRepositories(selected, mapped))
   const current = resolveStep(step, { result, detailsOk, reposOk })
 
   useEffect(() => {
@@ -564,32 +573,34 @@ export function OnboardingView({
     document.title = `${allowed ? page : 'Access Refused'} – ${SERVICE_NAME}`
   }, [allowed, current])
 
-  // Move focus to the new step's heading, but not when the page first opens.
+  // Move focus to the new step's heading, but not when the page first opens
+  // or when an error summary has already taken it.
   useEffect(() => {
-    if (mounted.current) headingRef.current?.focus()
+    if (mounted.current && !summaryTakesFocus.current) {
+      headingRef.current?.focus()
+    }
     mounted.current = true
+    summaryTakesFocus.current = false
   }, [current])
 
   if (!allowed) {
     return (
-      <div className="govuk-grid-row">
-        <div className="govuk-grid-column-two-thirds">
-          <BackLink
-            href={toHash({ level: 'overview' })}
-            onClick={onNavigateHome}
-            className="govuk-!-margin-bottom-6"
-          >
-            Back to overview
-          </BackLink>
-          <h1 className="govuk-heading-xl">You Cannot Onboard Projects</h1>
-          <p className="govuk-body">
-            You need the Dashboard Admin role to onboard a project.
-          </p>
-          <p className="govuk-body">
-            If you think you should be able to, ask a dashboard admin or the
-            service team.
-          </p>
-        </div>
+      <div className="app-onboarding">
+        <BackLink
+          href={toHash({ level: 'overview' })}
+          onClick={onNavigateHome}
+          className="govuk-!-margin-bottom-6"
+        >
+          Back to overview
+        </BackLink>
+        <h1 className="govuk-heading-xl">You Cannot Onboard Projects</h1>
+        <p className="govuk-body">
+          You need the Dashboard Admin role to onboard a project.
+        </p>
+        <p className="govuk-body">
+          If you think you should be able to, ask a dashboard admin or the
+          service team.
+        </p>
       </div>
     )
   }
@@ -609,14 +620,13 @@ export function OnboardingView({
 
   const changeLink = (target) => ({ text: 'Change', ...stepLink(target) })
 
-  const named = rows.filter((row) => row.fullName.trim())
   const detailsStarted =
     JSON.stringify(details) !== JSON.stringify(EMPTY_DETAILS)
-  const reposStarted = selected.length > 0 || named.length > 0
+  const reposStarted = selected.length > 0
   const taskItems = [
     {
       title: TITLES.details,
-      hint: 'Name, slug, type, adoption date and Jira keys',
+      hint: 'Name, slug, type, adoption date and Jira key',
       ...stepLink('details'),
       status: progress(detailsOk, detailsStarted)
     },
@@ -645,7 +655,7 @@ export function OnboardingView({
     try {
       await createProject(project)
       const outcomes = await Promise.all(
-        toRepositoryMappings(project.slug, rows).map(connectRepository)
+        toRepositoryMappings(project.slug, selected).map(connectRepository)
       )
       await onProjectCreated?.(project.slug)
       refresh()
@@ -657,7 +667,17 @@ export function OnboardingView({
       })
       go('confirmation')
     } catch (err) {
-      setSubmitError(err.message)
+      const error = toApiError(err, PROJECT_FAILED)
+      if (error.field && DETAIL_FIELDS[error.field]) {
+        setRejected((current) => ({
+          ...current,
+          [error.field]: { value: project[error.field], text: error.message }
+        }))
+        summaryTakesFocus.current = true
+        go('details')
+      } else {
+        setSubmitError(error.message)
+      }
     } finally {
       submitting.current = false
       setSaving(false)
@@ -667,89 +687,80 @@ export function OnboardingView({
   const handleAnother = () => {
     setDetails(EMPTY_DETAILS)
     setSelected([])
-    setSonarKeys({})
-    setManual(EMPTY_MANUAL)
     setResult(null)
     setSubmitError(null)
+    setRejected({})
     go('tasks')
   }
 
   return (
-    <div className="govuk-grid-row">
-      <div className="govuk-grid-column-two-thirds">
-        {current === 'confirmation' ? (
-          <ConfirmationStep
-            result={result}
-            headingRef={headingRef}
-            onLaunch={onLaunch}
-            onAnother={handleAnother}
-          />
-        ) : (
-          <>
-            {back ? (
-              <BackLink {...back} className="govuk-!-margin-bottom-6">
-                Back to task list
-              </BackLink>
-            ) : (
-              <BackLink
-                href={toHash({ level: 'overview' })}
-                onClick={onNavigateHome}
-                className="govuk-!-margin-bottom-6"
-              >
-                Back to overview
-              </BackLink>
-            )}
-            {current === 'tasks' ? (
-              <TaskListStep
-                items={taskItems}
-                completed={completed}
-                headingRef={headingRef}
-              />
-            ) : (
-              <>
-                <span className="govuk-caption-l">{TITLES.tasks}</span>
-                <h1 className="govuk-heading-xl" ref={headingRef} tabIndex={-1}>
-                  {TITLES[current]}
-                </h1>
-              </>
-            )}
-            {current === 'details' && (
-              <DetailsStep
-                details={details}
-                onChange={setDetails}
-                onContinue={() => go('tasks')}
-              />
-            )}
-            {current === 'repositories' && (
-              <RepositoriesStep
-                suggestions={suggestions}
-                status={status}
-                selected={selected}
-                onSelect={setSelected}
-                sonarKeys={sonarKeys}
-                onSonarKey={(name, value) =>
-                  setSonarKeys((keys) => ({ ...keys, [name]: value }))
-                }
-                manual={manual}
-                onManual={setManual}
-                rows={rows}
-                mapped={mapped}
-                onContinue={() => go('tasks')}
-              />
-            )}
-            {current === 'check' && (
-              <CheckStep
-                details={project}
-                repositories={named}
-                submitError={submitError}
-                saving={saving}
-                changeLink={changeLink}
-                onSubmit={handleSubmit}
-              />
-            )}
-          </>
-        )}
-      </div>
+    <div className="app-onboarding">
+      {current === 'confirmation' ? (
+        <ConfirmationStep
+          result={result}
+          headingRef={headingRef}
+          onLaunch={onLaunch}
+          onAnother={handleAnother}
+        />
+      ) : (
+        <>
+          {back ? (
+            <BackLink {...back} className="govuk-!-margin-bottom-6">
+              Back to task list
+            </BackLink>
+          ) : (
+            <BackLink
+              href={toHash({ level: 'overview' })}
+              onClick={onNavigateHome}
+              className="govuk-!-margin-bottom-6"
+            >
+              Back to overview
+            </BackLink>
+          )}
+          {current === 'tasks' ? (
+            <TaskListStep
+              items={taskItems}
+              completed={completed}
+              headingRef={headingRef}
+            />
+          ) : (
+            <>
+              <span className="govuk-caption-l">{TITLES.tasks}</span>
+              <h1 className="govuk-heading-xl" ref={headingRef} tabIndex={-1}>
+                {TITLES[current]}
+              </h1>
+            </>
+          )}
+          {current === 'details' && (
+            <DetailsStep
+              details={details}
+              rejected={rejected}
+              onChange={setDetails}
+              onContinue={() => go('tasks')}
+            />
+          )}
+          {current === 'repositories' && (
+            <RepositoriesStep
+              suggestions={suggestions}
+              status={status}
+              selected={selected}
+              onSelect={setSelected}
+              mapped={mapped}
+              onContinue={() => go('tasks')}
+            />
+          )}
+          {current === 'check' && (
+            <CheckStep
+              details={project}
+              repositories={selected}
+              submitError={submitError}
+              saving={saving}
+              changeLink={changeLink}
+              onSubmit={handleSubmit}
+            />
+          )}
+        </>
+      )}
     </div>
   )
 }

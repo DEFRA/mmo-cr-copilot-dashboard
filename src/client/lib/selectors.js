@@ -1290,37 +1290,80 @@ export function selectPrsByTicket(payloads) {
   return byKey
 }
 
-/** Ticket table rows: cycle time is started to resolved, in days. */
+// Workflow stage kinds as the Jira status categories the ticket views group by.
+const STAGE_CATEGORY = {
+  todo: 'new',
+  active: 'indeterminate',
+  waiting: 'indeterminate',
+  done: 'done'
+}
+
+const finiteOrNull = (n) => (isFiniteNum(n) ? n : null)
+const timeOrNull = (value) => {
+  const t = Date.parse(value)
+  return Number.isFinite(t) ? t : null
+}
+
+/** A ticket's start, end and timings from the backend `flow`, else from Jira fields. */
+function ticketTimings(issue) {
+  const created = timeOrNull(issue.created)
+  const flow = issue.flow
+  if (flow && typeof flow === 'object') {
+    return {
+      created,
+      category:
+        STAGE_CATEGORY[flow.stageKind] ?? issue.status?.categoryKey ?? '',
+      stageKind: typeof flow.stageKind === 'string' ? flow.stageKind : null,
+      started: timeOrNull(flow.startedAt),
+      resolved: timeOrNull(flow.doneAt),
+      firstDone: timeOrNull(flow.firstDoneAt),
+      cycleDays: finiteOrNull(flow.cycleDays),
+      leadDays: finiteOrNull(flow.leadDays),
+      flowEfficiency: finiteOrNull(flow.flowEfficiency),
+      reopenCount: Number(flow.reopenCount) || 0
+    }
+  }
+  const started = timeOrNull(issue.started ?? issue.created)
+  const resolved = timeOrNull(issue.resolved)
+  return {
+    created,
+    category: issue.status?.categoryKey ?? '',
+    stageKind: null,
+    started,
+    resolved,
+    firstDone: timeOrNull(issue.firstDoneAt) ?? resolved,
+    cycleDays:
+      started !== null && resolved !== null
+        ? round(Math.max(0, resolved - started) / DAY_MS, 1)
+        : null,
+    leadDays:
+      created !== null && resolved !== null
+        ? round(Math.max(0, resolved - created) / DAY_MS, 1)
+        : null,
+    flowEfficiency: null,
+    reopenCount: Number(issue.reopenCount) || 0
+  }
+}
+
+/**
+ * Ticket table rows. With the backend's per-issue `flow` the workflow stages
+ * set start, Done and cycle time; without it, Jira's started and resolved do.
+ */
 export function selectTicketRows(issues, payloads) {
   const prs = selectPrsByTicket(payloads)
   return (issues ?? [])
     .filter((issue) => typeof issue?.key === 'string')
     .map((issue) => {
-      const created = Date.parse(issue.created)
-      const started = Date.parse(issue.started ?? issue.created)
-      const resolved = Date.parse(issue.resolved)
-      const cycleDays =
-        Number.isFinite(started) && Number.isFinite(resolved)
-          ? round(Math.max(0, resolved - started) / DAY_MS, 1)
-          : null
-      const leadDays =
-        Number.isFinite(created) && Number.isFinite(resolved)
-          ? round(Math.max(0, resolved - created) / DAY_MS, 1)
-          : null
+      const timings = ticketTimings(issue)
       return {
         key: issue.key,
         summary: issue.summary ?? '',
         type: issue.issueType ?? '',
         status: issue.status?.name ?? '',
-        category: issue.status?.categoryKey ?? '',
         storyPoints: Number.isFinite(Number(issue.storyPoints))
           ? Number(issue.storyPoints)
           : null,
-        created: Number.isFinite(created) ? created : null,
-        cycleDays,
-        leadDays,
-        resolved: Number.isFinite(resolved) ? resolved : null,
-        reopenCount: Number(issue.reopenCount) || 0,
+        ...timings,
         links: (Array.isArray(issue.issueLinks) ? issue.issueLinks : [])
           .filter((l) => typeof l?.key === 'string')
           .map((l) => ({
@@ -1400,7 +1443,7 @@ const medianOf = (values) => {
   return nums.length % 2 ? nums[mid] : (nums[mid - 1] + nums[mid]) / 2
 }
 
-/** Per-repository delivery comparison with no adoption measures (AI-native). */
+/** Per-repository delivery comparison with no adoption measures (AI-Native). */
 export function selectNativeRepoComparison(payloads) {
   const byRepo = new Map()
   for (const p of payloads ?? []) {
@@ -1814,6 +1857,28 @@ export function foldModels(models, limit, key) {
       [key]: rest.reduce((s, m) => s + num(m[key]), 0)
     }
   ]
+}
+
+export const OTHER_MODELS_ID = 'other'
+
+/**
+ * Each model's share of Copilot requests, largest first, with the tail folded
+ * into 'Other models' past `limit`. Models without requests are left out.
+ */
+export function selectModelRequestShares(models, limit = 5) {
+  const folded = foldModels(
+    (models ?? []).filter((m) => num(m.requests) > 0),
+    limit,
+    'requests'
+  )
+  const total = folded.reduce((s, m) => s + num(m.requests), 0)
+  // The id keeps the folded bucket apart from a model that is itself called 'Other models'.
+  return folded.map((m, i) => ({
+    id: i === limit ? OTHER_MODELS_ID : `model:${m.model}`,
+    model: m.model,
+    requests: num(m.requests),
+    share: round((num(m.requests) / total) * 100, 1)
+  }))
 }
 
 export { round, rate }

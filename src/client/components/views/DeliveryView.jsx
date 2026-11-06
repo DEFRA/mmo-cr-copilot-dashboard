@@ -1,7 +1,13 @@
 import { useId, useMemo } from 'react'
 
 import { ChartFigure, JiraStatusTag, Panel, PanelState } from '../dashboard'
-import { SortableTable, SummaryList, Tag, WarningText } from '../govuk'
+import {
+  InsetText,
+  SortableTable,
+  SummaryList,
+  Tag,
+  WarningText
+} from '../govuk'
 import { CategoryBar } from '../charts/CategoryBar'
 import { TrendLine } from '../charts/TrendLine'
 import {
@@ -11,6 +17,7 @@ import {
   selectTicketRows,
   shortRepoName
 } from '../../lib/selectors'
+import { toHash } from '../../lib/routes'
 import {
   KpiDrillGrid,
   OpenButton,
@@ -56,7 +63,8 @@ const DELIVERY_GROUPS = [
 
 // Kept for the overview, which shows a short pick of the same cards.
 export const DELIVERY_KPIS = DELIVERY_GROUPS.flatMap((g) => g.kpis)
-const NOT_CONNECTED = 'Jira is not connected for this project.'
+const NOT_CONNECTED =
+  'Jira delivery metrics are not available because this project has no Jira project key.'
 
 const days = (n) => (n === null || n === undefined ? '–' : `${n} days`)
 
@@ -97,6 +105,28 @@ function DeliveryState({ status, jiraConnected, children }) {
   return children
 }
 
+/** Statuses outside every workflow stage; shown to project admins only. */
+export function UnmappedStatusesNotice({ workflow, canAdminister }) {
+  const unmapped = (workflow?.unmappedStatuses ?? []).filter(
+    (s) => typeof s?.name === 'string'
+  )
+  if (!canAdminister || unmapped.length === 0) return null
+  return (
+    <InsetText>
+      {plural(unmapped.length, 'Jira status', 'Jira statuses')} not in any
+      workflow stage: {unmapped.map((s) => s.name).join(', ')}. Tickets in these
+      statuses may be timed wrongly.{' '}
+      <a
+        className="govuk-link"
+        href={toHash({ level: 'settings', tab: 'jira-workflow' })}
+      >
+        Map them in Settings, under Jira Workflow
+      </a>
+      .
+    </InsetText>
+  )
+}
+
 /** Delivery measured to Jira Done for the selected period (E5-S8). */
 export function DeliveryView({
   delivery,
@@ -104,6 +134,7 @@ export function DeliveryView({
   payloads,
   window,
   jiraConnected,
+  canAdminister = false,
   onOpenTicket,
   onOpenPR
 }) {
@@ -157,6 +188,10 @@ export function DeliveryView({
         meta="Measured to Jira Done"
       />
       <DeliveryState status={status} jiraConnected={jiraConnected}>
+        <UnmappedStatusesNotice
+          workflow={metrics?.workflow}
+          canAdminister={canAdminister}
+        />
         {metrics?.warnings?.length > 0 && (
           <WarningText>
             {plural(metrics.warnings.length, 'ticket')} marked Done still{' '}

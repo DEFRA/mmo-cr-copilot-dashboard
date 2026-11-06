@@ -13,7 +13,13 @@ const GLOBAL_PATHS = {
   privacy: 'privacy'
 }
 
-export const SETTINGS_TABS = ['personas', 'repositories', 'roles', 'audit-log']
+export const SETTINGS_TABS = [
+  'personas',
+  'repositories',
+  'jira-workflow',
+  'roles',
+  'audit-log'
+]
 export const ONBOARDING_STEPS = [
   'details',
   'repositories',

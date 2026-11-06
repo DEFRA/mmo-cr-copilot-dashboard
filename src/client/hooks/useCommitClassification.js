@@ -9,22 +9,25 @@
  */
 import { useCallback } from 'react'
 import { jsonWrite } from '../lib/api'
+import { checkedWrite } from '../lib/api-errors'
 
 export function useCommitClassification(onUpdated) {
   return useCallback(
     async ({ repository, prNumber, commit, classification }) => {
-      const res = await jsonWrite(
-        `/api/payloads/${encodeURIComponent(repository)}/${prNumber}/commits/${encodeURIComponent(commit)}`,
-        'PATCH',
-        { classification }
+      const res = await checkedWrite(
+        jsonWrite(
+          `/api/payloads/${encodeURIComponent(repository)}/${prNumber}/commits/${encodeURIComponent(commit)}`,
+          'PATCH',
+          { classification }
+        ),
+        {
+          fallback: 'The classification could not be saved',
+          notFound: 'That commit no longer exists'
+        }
       )
 
       const text = await res.text()
       const body = text ? JSON.parse(text) : null
-
-      if (!res.ok) {
-        throw new Error(body?.message || `Request failed (${res.status})`)
-      }
 
       if (body?.payload) {
         onUpdated?.(body.payload)

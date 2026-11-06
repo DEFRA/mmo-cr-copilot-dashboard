@@ -8,6 +8,7 @@ import {
   useLiveStreamPaused
 } from '../dashboard'
 import { Table } from '../govuk'
+import { cx } from '../govuk/utils.js'
 import { AiCodeChurnPanel } from '../AiCodeChurnPanel'
 import { CopilotUsagePanel } from '../CopilotUsagePanel'
 import { CategoryBar } from '../charts/CategoryBar'
@@ -25,6 +26,7 @@ import {
 } from '../../lib/selectors'
 import { buildDeliveryKpis } from './delivery-kpis.js'
 import {
+  JiraHiddenNotice,
   KpiDrillGrid,
   METRICS_DOC,
   OpenButton,
@@ -41,14 +43,8 @@ const DELIVERY_KPIS = [
   'rework'
 ]
 const FLOW_KPIS = ['predictability', 'flow', 'cycle', 'prCycle']
-const NOT_CONNECTED = 'Jira is not connected for this project.'
 
-function MetricsState({ status, jiraConnected, children }) {
-  if (!jiraConnected) {
-    return (
-      <PanelState state="empty" icon="ticket" emptyMessage={NOT_CONNECTED} />
-    )
-  }
+function MetricsState({ status, children }) {
   if (status === 'error') {
     return (
       <PanelState
@@ -83,7 +79,7 @@ function Figure({ label, value }) {
 const pctOrDash = (n) => (n === null || n === undefined ? '–' : `${n}%`)
 
 /**
- * Overview for AI-native projects (ADR 0005 §4): delivery measured to Jira
+ * Overview for AI-Native projects (ADR 0005 §4): delivery measured to Jira
  * Done, with no adoption, assist-rate or classification measures.
  */
 export function AiNativeOverviewView({
@@ -93,7 +89,8 @@ export function AiNativeOverviewView({
   delivery,
   leverage,
   churn,
-  jiraConnected,
+  jiraConnected = false,
+  canAdminister = false,
   onOpenRepo,
   onOpenTicket,
   onOpenPR,
@@ -126,26 +123,35 @@ export function AiNativeOverviewView({
   const native = leverage.data
   const durability = native?.codeDurability
   const usage = useMemo(() => selectCopilotUsage(payloads), [payloads])
-
+  // The ticket funnel is figure 2 and is absent without a Jira key.
+  const figureShift = jiraConnected ? 0 : -1
   return (
     <>
       <section className="app-scope" aria-labelledby={projectId}>
         <ScopeHeader
           id={projectId}
-          level="Jira · at a glance"
-          icon="ticket"
-          title="Delivery performance"
-          meta={`${plural(repos.length, 'repository', 'repositories')} · measured to Jira Done · team view, not individuals`}
+          level={jiraConnected ? 'Jira · at a glance' : 'At a glance'}
+          icon={jiraConnected ? 'ticket' : 'layers'}
+          title={jiraConnected ? 'Delivery performance' : 'Project activity'}
+          meta={
+            jiraConnected
+              ? `${plural(repos.length, 'repository', 'repositories')} · measured to Jira Done · team view, not individuals`
+              : `${plural(repos.length, 'repository', 'repositories')} · team view, not individuals`
+          }
         />
-        <MetricsState status={status} jiraConnected={jiraConnected}>
-          {kpis && (
-            <KpiDrillGrid
-              kpis={DELIVERY_KPIS.map((id) => kpis[id])}
-              drillId="native-delivery-drill"
-              actionText="tickets"
-            />
-          )}
-        </MetricsState>
+        {jiraConnected ? (
+          <MetricsState status={status}>
+            {kpis && (
+              <KpiDrillGrid
+                kpis={DELIVERY_KPIS.map((id) => kpis[id])}
+                drillId="native-delivery-drill"
+                actionText="tickets"
+              />
+            )}
+          </MetricsState>
+        ) : (
+          <JiraHiddenNotice canAdminister={canAdminister} />
+        )}
 
         <div className="govuk-!-margin-top-6">
           <ChartFigure
@@ -182,44 +188,46 @@ export function AiNativeOverviewView({
           </ChartFigure>
         </div>
 
-        <Subsection
-          title="Flow And Predictability"
-          family="leverage"
-          icon="flow"
-        >
-          <MetricsState status={status} jiraConnected={jiraConnected}>
-            {kpis && (
-              <KpiDrillGrid
-                kpis={FLOW_KPIS.map((id) => kpis[id])}
-                drillId="native-flow-drill"
-                actionText="tickets"
-              />
-            )}
-            <div className="govuk-!-margin-top-5">
-              <ChartFigure
-                number={2}
-                title="Where Tickets Are"
-                subtitle="Number of the project's Jira tickets at each stage."
-                family="leverage"
-                icon="funnel"
-                columns={[
-                  { id: 'stage', label: 'Stage' },
-                  { id: 'tickets', label: 'Tickets', numeric: true }
-                ]}
-                rows={FUNNEL_STAGES.map((stage, i) => [stage, funnel[i]])}
-              >
-                <CategoryBar
-                  title="Where tickets are"
-                  categories={FUNNEL_STAGES}
-                  values={funnel}
-                  seriesName="Tickets"
-                  horizontal
-                  height={220}
+        {jiraConnected && (
+          <Subsection
+            title="Flow And Predictability"
+            family="leverage"
+            icon="flow"
+          >
+            <MetricsState status={status}>
+              {kpis && (
+                <KpiDrillGrid
+                  kpis={FLOW_KPIS.map((id) => kpis[id])}
+                  drillId="native-flow-drill"
+                  actionText="tickets"
                 />
-              </ChartFigure>
-            </div>
-          </MetricsState>
-        </Subsection>
+              )}
+              <div className="govuk-!-margin-top-5">
+                <ChartFigure
+                  number={2}
+                  title="Where Tickets Are"
+                  subtitle="Number of the project's Jira tickets at each stage."
+                  family="leverage"
+                  icon="funnel"
+                  columns={[
+                    { id: 'stage', label: 'Stage' },
+                    { id: 'tickets', label: 'Tickets', numeric: true }
+                  ]}
+                  rows={FUNNEL_STAGES.map((stage, i) => [stage, funnel[i]])}
+                >
+                  <CategoryBar
+                    title="Where tickets are"
+                    categories={FUNNEL_STAGES}
+                    values={funnel}
+                    seriesName="Tickets"
+                    horizontal
+                    height={220}
+                  />
+                </ChartFigure>
+              </div>
+            </MetricsState>
+          </Subsection>
+        )}
 
         <Subsection
           title="Quality At Sprint End"
@@ -229,7 +237,10 @@ export function AiNativeOverviewView({
           <SonarPortfolioPanel onOpenRepo={onOpenRepo} asOf={sonarAsOf} />
           {sprintWindows?.length > 0 && (
             <div className="govuk-!-margin-top-5">
-              <SonarSprintTrend sprints={sprintWindows} number={3} />
+              <SonarSprintTrend
+                sprints={sprintWindows}
+                number={3 + figureShift}
+              />
             </div>
           )}
         </Subsection>
@@ -238,20 +249,25 @@ export function AiNativeOverviewView({
           title="AI-Native Delivery Leverage"
           family="leverage"
           icon="rocket"
-          meta="4 components, side by side"
+          meta={`${jiraConnected ? 4 : 3} components, side by side`}
         >
           {leverage.status === 'error' && (
             <PanelState
               state="error"
               icon="rocket"
-              errorMessage="We could not load AI-native Delivery Leverage. Try again later."
+              errorMessage="We could not load AI-Native Delivery Leverage. Try again later."
             />
           )}
           {leverage.status !== 'error' && !native && (
             <PanelState state="loading" icon="rocket" />
           )}
           {native && (
-            <div className="app-kpi-grid">
+            <div
+              className={cx(
+                'app-kpi-grid',
+                !jiraConnected && 'app-kpi-grid--3'
+              )}
+            >
               <LeverageCard
                 title="Own-Baseline Trend"
                 footnote={`Baseline: the project's first ${plural(native.ownBaseline.baselineSprintCount, 'sprint')}.`}
@@ -296,23 +312,25 @@ export function AiNativeOverviewView({
                   {plural(native.mergedPullRequests, 'merged pull request')}.
                 </p>
               </LeverageCard>
-              <LeverageCard
-                title="Delivery Quality"
-                footnote="Read together, not summed."
-              >
-                <Figure
-                  label="Change fail rate"
-                  value={pctOrDash(native.deliveryQuality.changeFailRate)}
-                />
-                <Figure
-                  label="Delivery rework rate"
-                  value={pctOrDash(native.deliveryQuality.deliveryReworkRate)}
-                />
-                <Figure
-                  label="Ticket reopen rate"
-                  value={pctOrDash(native.deliveryQuality.reopenRate)}
-                />
-              </LeverageCard>
+              {jiraConnected && (
+                <LeverageCard
+                  title="Delivery Quality"
+                  footnote="Read together, not summed."
+                >
+                  <Figure
+                    label="Change fail rate"
+                    value={pctOrDash(native.deliveryQuality.changeFailRate)}
+                  />
+                  <Figure
+                    label="Delivery rework rate"
+                    value={pctOrDash(native.deliveryQuality.deliveryReworkRate)}
+                  />
+                  <Figure
+                    label="Ticket reopen rate"
+                    value={pctOrDash(native.deliveryQuality.reopenRate)}
+                  />
+                </LeverageCard>
+              )}
               <LeverageCard
                 title="AI Code Durability"
                 footnote={
@@ -347,7 +365,7 @@ export function AiNativeOverviewView({
             <AiCodeChurnPanel
               churn={churn?.data}
               status={churn?.status}
-              number={4}
+              number={4 + figureShift}
             />
           </div>
           <div className="govuk-!-margin-top-5">
@@ -358,7 +376,7 @@ export function AiNativeOverviewView({
               className="govuk-link"
               href={`${METRICS_DOC}#metric-own-baseline-trend`}
             >
-              How AI-native Delivery Leverage works
+              How AI-Native Delivery Leverage works
             </a>
           </p>
         </Subsection>

@@ -239,6 +239,155 @@ describe('#api proxy routes', () => {
     })
   })
 
+  describe('Path parameters', () => {
+    const paramsSchema = (method, path) =>
+      server.match(method, path).settings.validate.params
+
+    test.each([
+      ['PUT', '/api/repositories/x', 'fullName'],
+      ['PUT', '/api/repositories/x/sonar-key', 'fullName'],
+      ['DELETE', '/api/repositories/x', 'fullName'],
+      ['GET', '/api/payloads/x/1', 'repository'],
+      ['PATCH', '/api/payloads/x/1/commits/abc1234', 'repository'],
+      ['GET', '/api/projects/ALPH/pr-links/x/1', 'repository'],
+      ['PUT', '/api/projects/ALPH/pr-links/x/1', 'repository']
+    ])('Should refuse dot segments in %s %s', (method, path, key) => {
+      const schema = paramsSchema(method, path)
+      const base = { slug: 'ALPH', prNumber: 1, commit: 'abc1234' }
+      const check = (value) =>
+        schema.validate({ ...base, [key]: value }, { allowUnknown: true }).error
+
+      for (const value of ['..', '.', 'a/..', '../a', './a', 'a/.']) {
+        expect(check(value)?.message, value).toMatch(
+          /must not contain a \. or \.\. segment|fails to match/
+        )
+      }
+      expect(check('DEFRA/my.repo..v2')).toBeUndefined()
+    })
+
+    test.each([['..'], ['.']])(
+      'Should refuse the GitHub handle %s',
+      (handle) => {
+        const schema = paramsSchema(
+          'DELETE',
+          '/api/projects/ALPH/persona-mappings/x'
+        )
+
+        expect(
+          schema.validate({ slug: 'ALPH', githubHandle: handle }).error
+        ).toBeDefined()
+      }
+    )
+
+    // Raw path segments; '%2E' alone is a dot segment the URL parser removes before routing.
+    test.each([
+      ['%2E%2E', '%252E%252E'],
+      ['a/..', 'a%2F%2E%2E'],
+      ['../a', '%2E%2E%2Fa'],
+      ['owner only', 'DEFRA'],
+      ['a space', 'DEFRA%2Fmy%20repo']
+    ])(
+      'Should reject the repository %s with 400 and no upstream call',
+      async (_, segment) => {
+        const responses = await Promise.all([
+          write({
+            method: 'PUT',
+            url: `/api/repositories/${segment}`,
+            payload: { projectSlug: 'ALPH' }
+          }),
+          write({
+            method: 'PUT',
+            url: `/api/repositories/${segment}/sonar-key`,
+            payload: { sonarProjectKey: 'k' }
+          }),
+          write({ method: 'DELETE', url: `/api/repositories/${segment}` })
+        ])
+
+        expect(responses.map((r) => r.statusCode)).toEqual([400, 400, 400])
+        expect(fetchMock).not.toHaveBeenCalled()
+      }
+    )
+
+    test.each([['%2E%2E'], ['%2E']])(
+      'Should never forward the whole-segment repository %s',
+      async (segment) => {
+        const responses = await Promise.all([
+          write({
+            method: 'PUT',
+            url: `/api/repositories/${segment}`,
+            payload: { projectSlug: 'ALPH' }
+          }),
+          write({ method: 'DELETE', url: `/api/repositories/${segment}` }),
+          server.inject(`/api/payloads/${segment}/1`)
+        ])
+
+        for (const { statusCode } of responses) {
+          expect([400, 404]).toContain(statusCode)
+        }
+        expect(fetchMock).not.toHaveBeenCalled()
+      }
+    )
+
+    test.each([['a%2F%2E%2E'], ['%2E%2E%2Fa']])(
+      'Should reject the repository segment %s in every other repository route',
+      async (segment) => {
+        const responses = await Promise.all([
+          server.inject(`/api/payloads/${segment}/1`),
+          write({
+            method: 'PATCH',
+            url: `/api/payloads/${segment}/1/commits/abc1234`,
+            payload: { classification: 'Human-authored' }
+          }),
+          server.inject(`/api/projects/ALPH/pr-links/${segment}/1`)
+        ])
+
+        expect(responses.map((r) => r.statusCode)).toEqual([400, 400, 400])
+        expect(fetchMock).not.toHaveBeenCalled()
+      }
+    )
+
+    test('Should accept a repository name with dots inside it', async () => {
+      fetchMock.mockResponse(JSON.stringify({}))
+
+      const { statusCode } = await write({
+        method: 'DELETE',
+        url: '/api/repositories/DEFRA%2Fmy.repo..v2'
+      })
+
+      expect(statusCode).toBe(statusCodes.ok)
+      expect(upstreamUrl()).toBe(
+        `${BACKEND}/api/repositories/DEFRA%2Fmy.repo..v2`
+      )
+    })
+
+    test.each([['-octocat'], ['octocat-'], ['a'.repeat(40)], ['octo_cat']])(
+      'Should reject the GitHub handle %s',
+      async (handle) => {
+        const { statusCode } = await write({
+          method: 'DELETE',
+          url: `/api/projects/ALPH/persona-mappings/${handle}`
+        })
+
+        expect(statusCode).toBe(statusCodes.badRequest)
+        expect(fetchMock).not.toHaveBeenCalled()
+      }
+    )
+
+    test.each([['octocat'], ['Octo-Cat-2'], ['a'.repeat(39)]])(
+      'Should accept the GitHub handle %s',
+      async (handle) => {
+        fetchMock.mockResponse(null, { status: 204 })
+
+        const { statusCode } = await write({
+          method: 'DELETE',
+          url: `/api/projects/ALPH/persona-mappings/${handle}`
+        })
+
+        expect(statusCode).toBe(204)
+      }
+    )
+  })
+
   describe('Project persona mappings', () => {
     const base = '/api/projects/ALPH/persona-mappings'
 
@@ -334,6 +483,165 @@ describe('#api proxy routes', () => {
       const [, options] = fetchMock.mock.calls[0]
       expect(options.method).toBe('DELETE')
       expect(upstreamUrl()).toBe(`${BACKEND}${base}/octocat`)
+    })
+  })
+
+  describe('Project Jira workflow', () => {
+    const base = '/api/projects/ALPH/jira'
+    const body = {
+      version: 2,
+      stages: [
+        { id: 'todo', statuses: ['To Do'] },
+        { id: 'done', statuses: ['Done', 'Closed'] }
+      ]
+    }
+    const putWorkflow = (payload, headers) =>
+      write({
+        method: 'PUT',
+        url: `${base}/workflow`,
+        payload,
+        ...(headers ? { headers } : {})
+      })
+
+    test.each(['workflow', 'statuses'])(
+      'Should forward the %s read to the project route',
+      async (path) => {
+        fetchMock.mockResponse(JSON.stringify({ ok: true }))
+
+        const { statusCode, result } = await server.inject({
+          url: `${base}/${path}`,
+          headers: { 'x-dev-user-role': 'user' }
+        })
+
+        expect(statusCode).toBe(statusCodes.ok)
+        expect(result).toEqual({ ok: true })
+        expect(upstreamUrl()).toBe(`${BACKEND}${base}/${path}`)
+      }
+    )
+
+    test.each(['workflow', 'statuses'])(
+      'Should reject a bad slug on the %s read without calling the backend',
+      async (path) => {
+        const { statusCode } = await server.inject(
+          `/api/projects/bad!/jira/${path}`
+        )
+
+        expect(statusCode).toBe(statusCodes.badRequest)
+        expect(fetchMock).not.toHaveBeenCalled()
+      }
+    )
+
+    test('Should forward a PUT with only the known fields', async () => {
+      fetchMock.mockResponse(JSON.stringify({ source: 'project', version: 3 }))
+
+      const { statusCode, result } = await putWorkflow({
+        ...body,
+        stages: [
+          { id: 'todo', statuses: ['  To Do  '], label: 'x' },
+          body.stages[1]
+        ],
+        source: 'project'
+      })
+
+      expect(statusCode).toBe(statusCodes.ok)
+      expect(result).toEqual({ source: 'project', version: 3 })
+      expect(upstreamUrl()).toBe(`${BACKEND}${base}/workflow`)
+      const [, options] = fetchMock.mock.calls[0]
+      expect(options.method).toBe('PUT')
+      expect(JSON.parse(options.body)).toEqual(body)
+    })
+
+    test.each([
+      ['a missing version', { stages: body.stages }],
+      ['a negative version', { ...body, version: -1 }],
+      [
+        'an unknown stage',
+        { ...body, stages: [...body.stages, { id: 'qa', statuses: [] }] }
+      ],
+      [
+        'a repeated stage',
+        { ...body, stages: [...body.stages, { id: 'done', statuses: [] }] }
+      ],
+      ['one stage', { ...body, stages: [body.stages[0]] }],
+      [
+        'a status over 60 characters',
+        {
+          ...body,
+          stages: [{ id: 'todo', statuses: ['s'.repeat(61)] }, body.stages[1]]
+        }
+      ],
+      [
+        'a control character',
+        {
+          ...body,
+          stages: [{ id: 'todo', statuses: ['To\u0007Do'] }, body.stages[1]]
+        }
+      ],
+      [
+        'more than 40 statuses in a stage',
+        {
+          ...body,
+          stages: [
+            {
+              id: 'todo',
+              statuses: Array.from({ length: 41 }, (_, i) => `S${i}`)
+            },
+            body.stages[1]
+          ]
+        }
+      ]
+    ])('Should reject %s without calling the backend', async (_, payload) => {
+      const { statusCode } = await putWorkflow(payload)
+
+      expect(statusCode).toBe(statusCodes.badRequest)
+      expect(fetchMock).not.toHaveBeenCalled()
+    })
+
+    test('Should refuse a write without the CSRF header', async () => {
+      const { statusCode } = await server.inject({
+        method: 'PUT',
+        url: `${base}/workflow`,
+        payload: body
+      })
+
+      expect(statusCode).toBe(statusCodes.forbidden)
+      expect(fetchMock).not.toHaveBeenCalled()
+    })
+
+    test.each([
+      [400, 'Done needs at least one status'],
+      [403, 'Project admin role required'],
+      [404, "Project 'ALPH' not found"],
+      [
+        409,
+        'The Jira workflow was changed by someone else. Reload to see the latest version.'
+      ],
+      [422, 'Project has no Jira project key']
+    ])(
+      'Should pass a backend %i and its message through',
+      async (status, message) => {
+        fetchMock.mockResponse(
+          JSON.stringify({ statusCode: status, error: 'Error', message }),
+          { status }
+        )
+
+        const { statusCode, result } = await putWorkflow(body, {
+          'x-dev-user-role': 'user'
+        })
+
+        expect(statusCode).toBe(status)
+        expect(result.message).toBe(message)
+        expect(fetchMock).toHaveBeenCalledTimes(1)
+      }
+    )
+
+    test('Should not proxy any other Jira sub-path', async () => {
+      const read = await server.inject(`${base}/workflow/history`)
+      const remove = await write({ method: 'DELETE', url: `${base}/workflow` })
+
+      expect(read.statusCode).toBe(statusCodes.notFound)
+      expect(remove.statusCode).toBe(statusCodes.notFound)
+      expect(fetchMock).not.toHaveBeenCalled()
     })
   })
 
@@ -602,6 +910,148 @@ describe('#api proxy routes', () => {
       expect(statusCode).toBe(statusCodes.forbidden)
       expect(fetchMock).not.toHaveBeenCalled()
     })
+
+    test.each([
+      [{ projectKeys: ['MMOCR'] }],
+      [{ projectKeys: [] }],
+      [{ projectKeys: ['MMOCR'], storyPointsField: 'customfield_1' }]
+    ])('Should pass the Jira block %j through', async (jira) => {
+      fetchMock.mockResponse(JSON.stringify({}), { status: 201 })
+
+      const { statusCode } = await write({
+        method: 'POST',
+        url: '/api/projects',
+        payload: { ...validProject, jira }
+      })
+
+      expect(statusCode).toBe(201)
+      expect(JSON.parse(fetchMock.mock.calls[0][1].body).jira).toEqual(jira)
+    })
+
+    test('Should not forward keys the backend does not accept', async () => {
+      fetchMock.mockResponse(JSON.stringify({}), { status: 201 })
+
+      const { statusCode } = await write({
+        method: 'POST',
+        url: '/api/projects',
+        payload: {
+          ...validProject,
+          sonarProjectKey: 'DEFRA_alpha',
+          role: 'Dashboard.Admin',
+          sprintCalendar: { cadenceDays: 7, extra: true },
+          jira: { projectKeys: ['ALPH'], waitingStatuses: ['Blocked'] }
+        }
+      })
+
+      expect(statusCode).toBe(201)
+      expect(JSON.parse(fetchMock.mock.calls[0][1].body)).toEqual({
+        ...validProject,
+        sprintCalendar: { cadenceDays: 7 },
+        jira: { projectKeys: ['ALPH'] }
+      })
+    })
+
+    test.each([
+      ['more than one key', { projectKeys: ['ONE', 'TWO'] }],
+      ['a malformed key', { projectKeys: ['mmo cr'] }],
+      ['keys that are not a list', { projectKeys: 'MMOCR' }]
+    ])('Should reject %s without calling the backend', async (_, jira) => {
+      const { statusCode } = await write({
+        method: 'POST',
+        url: '/api/projects',
+        payload: { ...validProject, jira }
+      })
+
+      expect(statusCode).toBe(statusCodes.badRequest)
+      expect(fetchMock).not.toHaveBeenCalled()
+    })
+
+    test('Should pass the AI-Native Jira key refusal through', async () => {
+      const message = 'AI-Native projects require exactly one Jira project key'
+      fetchMock.mockResponse(
+        JSON.stringify({ statusCode: 400, error: 'Bad Request', message }),
+        { status: 400 }
+      )
+
+      const { statusCode, result } = await write({
+        method: 'POST',
+        url: '/api/projects',
+        payload: {
+          ...validProject,
+          type: 'ai-native',
+          jira: { projectKeys: [] }
+        }
+      })
+
+      expect(statusCode).toBe(statusCodes.badRequest)
+      expect(result.message).toBe(message)
+    })
+  })
+
+  describe('PUT /api/projects/{slug}', () => {
+    test('Should forward a single Jira key to the project', async () => {
+      fetchMock.mockResponse(JSON.stringify({ slug: 'ALPH' }))
+
+      const { statusCode } = await write({
+        method: 'PUT',
+        url: '/api/projects/ALPH',
+        payload: { type: 'ai-native', jira: { projectKeys: ['ALPH'] } }
+      })
+
+      expect(statusCode).toBe(statusCodes.ok)
+      expect(upstreamUrl()).toBe(`${BACKEND}/api/projects/ALPH`)
+      expect(JSON.parse(fetchMock.mock.calls[0][1].body).jira).toEqual({
+        projectKeys: ['ALPH']
+      })
+    })
+
+    test('Should reject more than one Jira key', async () => {
+      const { statusCode } = await write({
+        method: 'PUT',
+        url: '/api/projects/ALPH',
+        payload: { jira: { projectKeys: ['ONE', 'TWO'] } }
+      })
+
+      expect(statusCode).toBe(statusCodes.badRequest)
+      expect(fetchMock).not.toHaveBeenCalled()
+    })
+
+    test('Should not forward keys the backend does not accept', async () => {
+      fetchMock.mockResponse(JSON.stringify({ slug: 'ALPH' }))
+
+      const { statusCode } = await write({
+        method: 'PUT',
+        url: '/api/projects/ALPH',
+        payload: {
+          slug: 'BETA',
+          name: 'Alpha',
+          sonarProjectKey: 'DEFRA_alpha',
+          jira: { boardId: 7, waitingStatuses: ['Blocked'] }
+        }
+      })
+
+      expect(statusCode).toBe(statusCodes.ok)
+      expect(JSON.parse(fetchMock.mock.calls[0][1].body)).toEqual({
+        name: 'Alpha',
+        jira: { boardId: 7 }
+      })
+    })
+
+    test('Should pass the AI-Native Jira key refusal through', async () => {
+      const message = 'AI-Native projects require exactly one Jira project key'
+      fetchMock.mockResponse(JSON.stringify({ statusCode: 400, message }), {
+        status: 400
+      })
+
+      const { statusCode, result } = await write({
+        method: 'PUT',
+        url: '/api/projects/ALPH',
+        payload: { jira: { projectKeys: [] } }
+      })
+
+      expect(statusCode).toBe(statusCodes.badRequest)
+      expect(result.message).toBe(message)
+    })
   })
 
   describe('GET /api/projects/{slug}/payloads', () => {
@@ -799,10 +1249,22 @@ describe('#api proxy routes', () => {
   })
 
   describe('PUT /api/repositories/{fullName}', () => {
-    const payload = {
-      projectSlug: 'ALPH',
-      sonarProjectKey: 'defra_repo-one'
-    }
+    const payload = { projectSlug: 'ALPH' }
+
+    test('Should forward only the project slug, never a SonarCloud key', async () => {
+      fetchMock.mockResponse(JSON.stringify({ fullName: 'DEFRA/repo-one' }))
+
+      const { statusCode } = await write({
+        method: 'PUT',
+        url: '/api/repositories/DEFRA%2Frepo-one',
+        payload: { projectSlug: 'ALPH', sonarProjectKey: 'defra_repo-one' }
+      })
+
+      expect(statusCode).toBe(statusCodes.ok)
+      expect(JSON.parse(fetchMock.mock.calls[0][1].body)).toEqual({
+        projectSlug: 'ALPH'
+      })
+    })
 
     test('Should forward with PUT and body when admin', async () => {
       fetchMock.mockResponse(
@@ -848,6 +1310,176 @@ describe('#api proxy routes', () => {
       expect(statusCode).toBe(statusCodes.forbidden)
       expect(fetchMock).not.toHaveBeenCalled()
     })
+  })
+
+  describe('PUT /api/repositories/{fullName}/sonar-key', () => {
+    const url = '/api/repositories/DEFRA%2Frepo-one/sonar-key'
+    const putKey = (payload, headers) =>
+      write({ method: 'PUT', url, payload, ...(headers ? { headers } : {}) })
+
+    test('Should forward the trimmed key to the encoded repository', async () => {
+      const record = {
+        fullName: 'DEFRA/repo-one',
+        projectSlug: 'ALPH',
+        sonarProjectKey: 'DEFRA_repo-one'
+      }
+      fetchMock.mockResponse(JSON.stringify(record))
+
+      const { statusCode, result } = await putKey({
+        sonarProjectKey: '  DEFRA_repo-one  ',
+        projectSlug: 'BETA'
+      })
+
+      expect(statusCode).toBe(statusCodes.ok)
+      expect(result).toEqual(record)
+      expect(upstreamUrl()).toBe(
+        `${BACKEND}/api/repositories/DEFRA%2Frepo-one/sonar-key`
+      )
+      const [, options] = fetchMock.mock.calls[0]
+      expect(options.method).toBe('PUT')
+      expect(JSON.parse(options.body)).toEqual({
+        sonarProjectKey: 'DEFRA_repo-one'
+      })
+    })
+
+    test.each([null, ''])('Should forward %j to clear the key', async (key) => {
+      fetchMock.mockResponse(JSON.stringify({ sonarProjectKey: null }))
+
+      const { statusCode } = await putKey({ sonarProjectKey: key })
+
+      expect(statusCode).toBe(statusCodes.ok)
+      expect(JSON.parse(fetchMock.mock.calls[0][1].body)).toEqual({
+        sonarProjectKey: key
+      })
+    })
+
+    test.each([
+      ['a missing key', {}],
+      ['a key with spaces', { sonarProjectKey: 'bad key' }],
+      ['a key with a slash', { sonarProjectKey: 'DEFRA/repo' }],
+      ['a key over 255 characters', { sonarProjectKey: 'k'.repeat(256) }],
+      ['a key that is not a string', { sonarProjectKey: 42 }]
+    ])('Should reject %s without calling the backend', async (_, payload) => {
+      const { statusCode } = await putKey(payload)
+
+      expect(statusCode).toBe(statusCodes.badRequest)
+      expect(fetchMock).not.toHaveBeenCalled()
+    })
+
+    test.each([
+      [400, 'Invalid request input'],
+      [403, 'Project admin role required'],
+      [404, "Repository 'DEFRA/repo-one' not found"],
+      [
+        409,
+        'That SonarCloud project key is already linked to another repository'
+      ]
+    ])(
+      'Should pass a backend %i and its message through',
+      async (status, message) => {
+        fetchMock.mockResponse(
+          JSON.stringify({ statusCode: status, error: 'Error', message }),
+          { status }
+        )
+
+        const { statusCode, result } = await putKey(
+          { sonarProjectKey: 'DEFRA_repo-one' },
+          { 'x-dev-user-role': 'user' }
+        )
+
+        expect(statusCode).toBe(status)
+        expect(result.message).toBe(message)
+        expect(fetchMock).toHaveBeenCalledTimes(1)
+      }
+    )
+
+    test('Should refuse a write without the CSRF header', async () => {
+      const { statusCode } = await server.inject({
+        method: 'PUT',
+        url,
+        payload: { sonarProjectKey: 'DEFRA_repo-one' }
+      })
+
+      expect(statusCode).toBe(statusCodes.forbidden)
+      expect(fetchMock).not.toHaveBeenCalled()
+    })
+
+    test('Should not proxy any other repository sub-path', async () => {
+      const { statusCode } = await write({
+        method: 'PUT',
+        url: '/api/repositories/DEFRA%2Frepo-one/other',
+        payload: { sonarProjectKey: 'x' }
+      })
+
+      expect(statusCode).toBe(statusCodes.notFound)
+      expect(fetchMock).not.toHaveBeenCalled()
+    })
+  })
+
+  describe('Upstream error bodies', () => {
+    const boom = (status, message) =>
+      fetchMock.mockResponse(
+        JSON.stringify({ statusCode: status, error: 'Error', message }),
+        { status }
+      )
+
+    test.each([
+      ['POST', '/api/projects', 409, 'That project slug is already in use'],
+      [
+        'PUT',
+        '/api/projects/ALPH',
+        400,
+        'The Jira project key cannot be changed'
+      ],
+      [
+        'PUT',
+        '/api/projects/ALPH/jira/workflow',
+        422,
+        'Project has no Jira project key'
+      ]
+    ])(
+      'Should pass %s %s %i with its body unchanged',
+      async (method, url, status, message) => {
+        boom(status, message)
+        const payloads = {
+          '/api/projects': { slug: 'ALPH', name: 'Alpha', type: 'ai-adopted' },
+          '/api/projects/ALPH': { jira: { projectKeys: ['NEW'] } },
+          '/api/projects/ALPH/jira/workflow': {
+            version: 1,
+            stages: [
+              { id: 'todo', statuses: ['To Do'] },
+              { id: 'done', statuses: ['Done'] }
+            ]
+          }
+        }
+
+        const { statusCode, result } = await write({
+          method,
+          url,
+          payload: payloads[url]
+        })
+
+        expect(statusCode).toBe(status)
+        expect(result).toEqual({ statusCode: status, error: 'Error', message })
+      }
+    )
+
+    test.each([500, 502, 503])(
+      'Should keep the %i status but not the upstream body',
+      async (status) => {
+        boom(status, 'MongoServerError at mongodb://secret@db:27017 stack')
+
+        const { statusCode, result, payload } = await server.inject(
+          '/api/projects/ALPH/payloads'
+        )
+
+        expect(statusCode).toBe(status)
+        expect(result.message).toBe(
+          'The analytics backend could not complete the request'
+        )
+        expect(payload).not.toMatch(/mongodb|secret|stack/)
+      }
+    )
   })
 
   describe('DELETE /api/repositories/{fullName}', () => {

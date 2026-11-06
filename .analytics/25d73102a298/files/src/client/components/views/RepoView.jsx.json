@@ -1,0 +1,26 @@
+{
+  "schema": "ai-attribution-file/2",
+  "path": "src/client/components/views/RepoView.jsx",
+  "added": 7,
+  "counts": {
+    "aiCompletion": 0,
+    "aiChat": 0,
+    "aiAgent": 7,
+    "aiModified": 0,
+    "pasted": 0,
+    "typed": 0,
+    "untracked": 0
+  },
+  "ranges": {
+    "ai-agent": "77,657-659,690-692"
+  },
+  "ai": [
+    [77, "a", "066e279f", 0],
+    [657, "a", "f3a274ab", 0],
+    [658, "a", "5354bb4d", 0],
+    [659, "a", "d079598a", 0],
+    [690, "a", "f3a274ab", 0],
+    [691, "a", "56b0402d", 0],
+    [692, "a", "d079598a", 0]
+  ]
+}

@@ -2,6 +2,7 @@ import { useId, useState } from 'react'
 
 import { headingCase, Icon, KpiCard, PanelState } from '../dashboard'
 import { familyClass } from '../dashboard/families.js'
+import { InsetText } from '../govuk'
 
 // docs/metrics.md is not served by the app, so definitions link to the public repository.
 export const METRICS_DOC =
@@ -53,6 +54,17 @@ export function Subsection({ title, family, icon, meta, children }) {
       </div>
       {children}
     </section>
+  )
+}
+
+/** Says why the Jira metrics are missing; shown to project admins only. */
+export function JiraHiddenNotice({ canAdminister }) {
+  if (!canAdminister) return null
+  return (
+    <InsetText className="govuk-!-margin-top-4">
+      Jira delivery metrics are hidden because this project has no Jira project
+      key.
+    </InsetText>
   )
 }
 

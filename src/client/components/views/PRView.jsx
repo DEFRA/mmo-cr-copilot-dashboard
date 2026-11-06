@@ -61,7 +61,8 @@ export function PRView({
   onOpenContributor,
   onChangeClassification,
   canReclassify = false,
-  projectSlug
+  projectSlug,
+  jiraConnected = false
 }) {
   const prId = useId()
   const commitsId = useId()
@@ -206,7 +207,7 @@ export function PRView({
                 </MetaRow>
               </dl>
             </Panel>
-            {projectSlug && (
+            {projectSlug && jiraConnected && (
               <LinkedJiraTickets
                 projectSlug={projectSlug}
                 repository={repository}

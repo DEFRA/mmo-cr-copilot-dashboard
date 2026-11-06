@@ -15,7 +15,7 @@ import { cx, joinIds } from '../govuk/utils.js'
 import { Icon } from './Icon.jsx'
 
 const DAY_MS = 24 * 60 * 60 * 1000
-const SPRINT_NAMES = ['Previous sprint', '2 sprints ago', '3 sprints ago']
+const SPRINT_NAMES = ['Last Sprint', '2 sprints ago', '3 sprints ago']
 const MONTHS = [
   'January',
   'February',
@@ -433,7 +433,10 @@ export function PeriodFilter({
           </button>
           <div
             id={ids.popover}
-            className="app-popover"
+            className={cx(
+              'app-popover',
+              open && view === 'custom' && 'app-popover--wide'
+            )}
             role="dialog"
             aria-modal="false"
             aria-labelledby={view === 'sprints' ? ids.sprints : ids.custom}

@@ -1,0 +1,29 @@
+{
+  "schema": "ai-attribution-file/2",
+  "path": "src/client/hooks/useRoleMappings.js",
+  "added": 10,
+  "counts": {
+    "aiCompletion": 0,
+    "aiChat": 0,
+    "aiAgent": 10,
+    "aiModified": 0,
+    "pasted": 0,
+    "typed": 0,
+    "untracked": 0
+  },
+  "ranges": {
+    "ai-agent": "4,44-46,54-59"
+  },
+  "ai": [
+    [4, "a", "35530018", 0],
+    [44, "a", "9ed9326f", 0],
+    [45, "a", "e75a8077", 0],
+    [46, "a", "ee44a98c", 0],
+    [54, "a", "31e0eda1", 0],
+    [55, "a", "d86c36c1", 0],
+    [56, "a", "2c944dad", 0],
+    [57, "a", "396a03da", 0],
+    [58, "a", "b30a7bea", 0],
+    [59, "a", "9845a6a3", 0]
+  ]
+}

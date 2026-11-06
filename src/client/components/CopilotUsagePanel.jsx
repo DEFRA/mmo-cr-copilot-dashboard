@@ -1,3 +1,7 @@
+import { useMemo } from 'react'
+
+import { selectModelRequestShares } from '../lib/selectors'
+import { ModelSharePie } from './charts/ModelSharePie'
 import { Panel, PanelState } from './dashboard'
 import { Table } from './govuk'
 import { formatCredits, lines } from './views/scope.jsx'
@@ -7,9 +11,28 @@ import { formatCredits, lines } from './views/scope.jsx'
  * Credits are recorded on developers' machines by the attribution extension, so
  * the caveat and the coverage figures are always shown beside the numbers.
  */
-export function CopilotUsagePanel({ usage, headingLevel = 4, insightsHref }) {
-  const title = 'Copilot Model Usage'
+export function CopilotUsagePanel({
+  usage,
+  headingLevel = 4,
+  insightsHref,
+  meta
+}) {
+  const title = 'GitHub Copilot Usage Metrics'
   const hasUsage = usage.models.length > 0
+  const shares = useMemo(
+    () => selectModelRequestShares(usage.models),
+    [usage.models]
+  )
+  const shareByModel = useMemo(
+    () =>
+      new Map(
+        selectModelRequestShares(usage.models, Infinity).map((s) => [
+          s.model,
+          s.share
+        ])
+      ),
+    [usage.models]
+  )
 
   return (
     <Panel
@@ -17,6 +40,7 @@ export function CopilotUsagePanel({ usage, headingLevel = 4, insightsHref }) {
       family="leverage"
       icon="sparkle"
       headingLevel={headingLevel}
+      aside={meta && <span className="app-muted">{meta}</span>}
       className="app-compare"
     >
       {hasUsage ? (
@@ -29,19 +53,41 @@ export function CopilotUsagePanel({ usage, headingLevel = 4, insightsHref }) {
               <strong>{formatCredits(usage.medianCreditsPerPr)}</strong>
             </p>
           )}
-          <Table
-            caption="Copilot model usage by model"
-            captionHidden
-            head={[
-              { id: 'model', label: 'Model' },
-              { id: 'requests', label: 'Requests', numeric: true },
-              { id: 'credits', label: 'AI credits', numeric: true }
-            ]}
-            rows={usage.models.map((m) => ({
-              id: m.model,
-              cells: [m.model, lines(m.requests), formatCredits(m.credits)]
-            }))}
-          />
+          <div className={shares.length > 0 ? 'app-usage-split' : undefined}>
+            <Table
+              caption="Requests and AI credits by model"
+              captionHidden
+              head={[
+                { id: 'model', label: 'Model' },
+                { id: 'requests', label: 'Requests', numeric: true },
+                {
+                  id: 'share',
+                  label: 'Share of requests',
+                  numeric: true
+                },
+                { id: 'credits', label: 'AI credits', numeric: true }
+              ]}
+              rows={usage.models.map((m) => ({
+                id: m.model,
+                cells: [
+                  m.model,
+                  lines(m.requests),
+                  shareByModel.has(m.model)
+                    ? `${shareByModel.get(m.model)}%`
+                    : '—',
+                  formatCredits(m.credits)
+                ]
+              }))}
+            />
+            {shares.length > 0 && (
+              <div>
+                <p className="govuk-body-s app-muted govuk-!-margin-bottom-1">
+                  Share of Requests by Model
+                </p>
+                <ModelSharePie shares={shares} />
+              </div>
+            )}
+          </div>
         </>
       ) : (
         <PanelState

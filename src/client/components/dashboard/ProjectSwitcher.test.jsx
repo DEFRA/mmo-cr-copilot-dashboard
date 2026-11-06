@@ -23,15 +23,15 @@ describe('#ProjectSwitcher', () => {
   test('Should name the toggle with the project type and name, as in the mock-up', () => {
     renderSwitcher()
 
-    expect(toggle()).toHaveAccessibleName('AI-adopted Project: Project One')
+    expect(toggle()).toHaveAccessibleName('AI-Adopted Project: Project One')
     expect(toggle()).toHaveClass('app-switcher')
     expect(toggle()).toHaveAttribute('aria-expanded', 'false')
   })
 
-  test('Should mark an AI-native project with the native tag', () => {
+  test('Should mark an AI-Native project with the native tag', () => {
     renderSwitcher({ activeProject: projects[1] })
 
-    expect(screen.getByText('AI-native')).toHaveClass(
+    expect(screen.getByText('AI-Native')).toHaveClass(
       'app-switcher__type',
       'app-switcher__type--native'
     )

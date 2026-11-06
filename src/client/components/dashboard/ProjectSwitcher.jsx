@@ -57,10 +57,10 @@ export function ProjectSwitcher({
             isNative && 'app-switcher__type--native'
           )}
         >
-          {isNative ? 'AI-native' : 'AI-adopted'}
+          {isNative ? 'AI-Native' : 'AI-Adopted'}
         </span>{' '}
         <span>
-          <span className="app-switcher__label">Project:</span>{' '}
+          <span className="govuk-visually-hidden">Project:</span>{' '}
           {activeProject?.name || 'Select project'}
         </span>
         <Icon name="chevron" size={18} />
@@ -91,7 +91,7 @@ export function ProjectSwitcher({
                     proj.type === 'ai-native' && 'app-switcher__type--native'
                   )}
                 >
-                  {proj.type === 'ai-native' ? 'AI-native' : 'AI-adopted'}
+                  {proj.type === 'ai-native' ? 'AI-Native' : 'AI-Adopted'}
                 </span>
               </button>
             </li>

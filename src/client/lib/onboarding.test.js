@@ -1,14 +1,15 @@
 import {
   EMPTY_DETAILS,
-  EMPTY_REPOSITORIES,
   JIRA_KEY_PATTERN,
   REPOSITORY_PATTERN,
   SLUG_PATTERN,
-  SONAR_KEY_PATTERN,
+  addRepository,
   formatDate,
   isRepositoryName,
+  jiraKeyError,
+  jiraKeyField,
+  jiraKeyRequired,
   parseDate,
-  splitKeys,
   toProjectRequest,
   toRepositoryMappings,
   typeLabel,
@@ -24,50 +25,37 @@ const details = (overrides = {}) => ({
   slug: 'CRAR',
   type: 'ai-adopted',
   adoption: { day: '1', month: '10', year: '2025' },
-  jiraKeys: 'MMOCR, FES',
+  jiraKey: 'MMOCR',
   ...overrides
-})
-
-const row = (fullName = '', sonarProjectKey = '') => ({
-  fullName,
-  sonarProjectKey
 })
 
 describe('#patterns', () => {
   test.each([
     [SLUG_PATTERN, 'CRAR', true],
-    [SLUG_PATTERN, 'A1B', true],
+    [SLUG_PATTERN, 'ABC', true],
+    [SLUG_PATTERN, 'A1B', false],
     [SLUG_PATTERN, 'crar', false],
-    [SLUG_PATTERN, '1ABC', false],
+    [SLUG_PATTERN, 'AB', false],
     [SLUG_PATTERN, 'ABCDE', false],
     [JIRA_KEY_PATTERN, 'MMO_CR', true],
     [JIRA_KEY_PATTERN, 'mmo', false],
     [REPOSITORY_PATTERN, 'DEFRA/mmo-cr-pdf', true],
     [REPOSITORY_PATTERN, 'no-owner', false],
-    [REPOSITORY_PATTERN, 'a/b/c', false],
-    [SONAR_KEY_PATTERN, 'DEFRA_mmo-cr.pdf:main', true],
-    [SONAR_KEY_PATTERN, 'has space', false]
+    [REPOSITORY_PATTERN, 'a/b/c', false]
   ])('Should test %s against %s as %s', (pattern, value, expected) => {
     expect(pattern.test(value)).toBe(expected)
   })
 })
 
 describe('#empty values', () => {
-  test('Should start with no details and one blank repository row', () => {
+  test('Should start with no details and one empty Jira key', () => {
     expect(EMPTY_DETAILS.name).toBe('')
+    expect(EMPTY_DETAILS.jiraKey).toBe('')
     expect(EMPTY_DETAILS.adoption).toStrictEqual({
       day: '',
       month: '',
       year: ''
     })
-    expect(EMPTY_REPOSITORIES).toStrictEqual([row()])
-  })
-})
-
-describe('#splitKeys', () => {
-  test('Should trim and drop empty entries', () => {
-    expect(splitKeys(' MMOCR , ,FES,')).toStrictEqual(['MMOCR', 'FES'])
-    expect(splitKeys('')).toStrictEqual([])
   })
 })
 
@@ -104,8 +92,8 @@ describe('#isRepositoryName', () => {
 
 describe('#typeLabel', () => {
   test('Should label each project type', () => {
-    expect(typeLabel('ai-native')).toBe('AI-native')
-    expect(typeLabel('ai-adopted')).toBe('AI-adopted')
+    expect(typeLabel('ai-native')).toBe('AI-Native')
+    expect(typeLabel('ai-adopted')).toBe('AI-Adopted')
   })
 })
 
@@ -136,19 +124,48 @@ describe('#validateProject', () => {
     )
   })
 
-  test('Should reject a malformed slug', () => {
-    expect(validateProject(details({ slug: 'crar' }), NOW).slug).toMatch(
-      /3 or 4 capital letters/
+  test('Should reject a slug that is not 3 or 4 letters', () => {
+    expect(validateProject(details({ slug: 'AB' }), NOW).slug).toBe(
+      'Slug must be 3 to 4 letters'
+    )
+    expect(validateProject(details({ slug: 'ABCDE' }), NOW).slug).toBe(
+      'Slug must be 3 to 4 letters'
     )
   })
 
-  test('Should need an adoption date for an AI-adopted project only', () => {
+  test('Should reject a slug with digits or other characters', () => {
+    for (const slug of ['AB1C', 'A1B', '1234', 'AB C', 'AB-C']) {
+      expect(validateProject(details({ slug }), NOW).slug).toBe(
+        'Slug must only contain letters, no numbers'
+      )
+    }
+  })
+
+  test('Should accept a lower case slug as it is upper-cased on submit', () => {
+    expect(validateProject(details({ slug: 'crar' }), NOW)).toStrictEqual({})
+  })
+
+  test('Should never tell the user to use capital letters', () => {
+    const messages = [
+      validateProject(details({ slug: 'a' }), NOW).slug,
+      validateProject(details({ slug: 'a1' }), NOW).slug,
+      validateProject(details({ jiraKey: '1a' }), NOW).jiraKey,
+      validateProject(details({ jiraKey: 'a,b' }), NOW).jiraKey
+    ]
+
+    for (const message of messages) expect(message).not.toMatch(/capital/i)
+  })
+
+  test('Should need an adoption date for an AI-Adopted project only', () => {
     const blank = { day: '', month: '', year: '' }
     expect(validateProject(details({ adoption: blank }), NOW).adoption).toBe(
       'Enter the date the team adopted Copilot'
     )
     expect(
-      validateProject(details({ type: 'ai-native', adoption: blank }), NOW)
+      validateProject(
+        details({ type: 'ai-native', adoption: blank, jiraKey: 'MMOCR' }),
+        NOW
+      )
     ).toStrictEqual({})
   })
 
@@ -167,11 +184,45 @@ describe('#validateProject', () => {
     ).toBe('Adoption start date must be today or in the past')
   })
 
-  test('Should reject a malformed Jira key but allow none', () => {
-    expect(validateProject(details({ jiraKeys: 'mmo' }), NOW).jiraKeys).toMatch(
-      /capital letters/
+  test('Should allow no Jira key and accept one in any case', () => {
+    expect(validateProject(details({ jiraKey: '' }), NOW)).toStrictEqual({})
+    expect(validateProject(details({ jiraKey: 'mmo_cr' }), NOW)).toStrictEqual(
+      {}
     )
-    expect(validateProject(details({ jiraKeys: '' }), NOW)).toStrictEqual({})
+    expect(validateProject(details({ jiraKey: ' MMOCR ' }), NOW)).toStrictEqual(
+      {}
+    )
+  })
+
+  test.each(['MMOCR,FES', 'MMOCR, FES', 'MMOCR FES', 'MMOCR,'])(
+    'Should reject %j as more than one Jira key',
+    (jiraKey) => {
+      expect(validateProject(details({ jiraKey }), NOW).jiraKey).toBe(
+        'Enter one Jira project key, with no commas or spaces, like MMOCR'
+      )
+    }
+  )
+
+  test('Should need a Jira key for an AI-Native project only', () => {
+    const native = { type: 'ai-native', adoption: EMPTY_DETAILS.adoption }
+    expect(
+      validateProject(details({ ...native, jiraKey: '  ' }), NOW).jiraKey
+    ).toBe('Enter a Jira project key')
+    expect(
+      validateProject(details({ ...native, jiraKey: 'mmocr' }), NOW)
+    ).toStrictEqual({})
+    expect(
+      validateProject(details({ jiraKey: '' }), NOW).jiraKey
+    ).toBeUndefined()
+  })
+
+  test('Should reject a malformed Jira key', () => {
+    expect(validateProject(details({ jiraKey: '1MMO' }), NOW).jiraKey).toMatch(
+      /must start with a letter/
+    )
+    expect(validateProject(details({ jiraKey: 'M' }), NOW).jiraKey).toMatch(
+      /must start with a letter/
+    )
   })
 
   test('Should default the clock to now', () => {
@@ -183,65 +234,68 @@ describe('#validateProject', () => {
   })
 })
 
+describe('#jiraKeyField', () => {
+  test('Should require the key only for an AI-Native project', () => {
+    expect(jiraKeyRequired('ai-native')).toBe(true)
+    expect(jiraKeyRequired('ai-adopted')).toBe(false)
+    expect(jiraKeyRequired('')).toBe(false)
+  })
+
+  test('Should label the field by project type', () => {
+    expect(jiraKeyField('ai-native').label).toBe('Jira project key')
+    expect(jiraKeyField('ai-native').hint).toMatch(/Required for an AI-Native/)
+    expect(jiraKeyField('ai-adopted').label).toBe('Jira project key (optional)')
+    expect(jiraKeyField('').label).toBe('Jira project key (optional)')
+  })
+})
+
+describe('#addRepository', () => {
+  test('Should add a valid repository, trimmed', () => {
+    expect(addRepository(['DEFRA/one'], ' DEFRA/two ')).toStrictEqual({
+      list: ['DEFRA/one', 'DEFRA/two'],
+      name: 'DEFRA/two'
+    })
+  })
+
+  test('Should refuse a name that is not owner/name', () => {
+    expect(addRepository(['DEFRA/one'], 'nope')).toStrictEqual({
+      list: ['DEFRA/one'],
+      name: 'nope',
+      error: 'Enter the repository as owner/name, like DEFRA/mmo-cr-pdf'
+    })
+    expect(addRepository([], '   ').error).toMatch(/owner\/name/)
+  })
+
+  test('Should refuse an already mapped repository ignoring case', () => {
+    expect(addRepository([], 'defra/Mapped', ['DEFRA/mapped']).error).toBe(
+      'defra/Mapped is already mapped to a project'
+    )
+  })
+
+  test('Should ignore a repository already added ignoring case', () => {
+    expect(addRepository(['DEFRA/one'], 'defra/ONE')).toStrictEqual({
+      list: ['DEFRA/one'],
+      name: 'defra/ONE',
+      duplicate: true
+    })
+  })
+})
+
 describe('#validateRepositories', () => {
-  test('Should accept named repositories with optional Sonar keys', () => {
-    expect(
-      validateRepositories([
-        row('DEFRA/one', 'DEFRA_one'),
-        row('DEFRA/two'),
-        row()
-      ])
-    ).toStrictEqual({})
+  test('Should accept added repositories', () => {
+    expect(validateRepositories(['DEFRA/one', 'DEFRA/two'])).toStrictEqual({})
   })
 
   test('Should need at least one repository', () => {
-    expect(validateRepositories([row(), row()])).toStrictEqual({
-      list: 'Add at least one repository'
-    })
     expect(validateRepositories([])).toStrictEqual({
       list: 'Add at least one repository'
     })
   })
 
-  test('Should flag a name that is not owner/name', () => {
-    expect(validateRepositories([row('DEFRA/one'), row('nope')])).toStrictEqual(
-      {
-        rows: {
-          1: {
-            fullName:
-              'Enter the repository as owner/name, like DEFRA/mmo-cr-pdf'
-          }
-        }
-      }
-    )
-  })
-
   test('Should flag an already mapped repository ignoring case', () => {
     expect(
-      validateRepositories([row('defra/Mapped')], ['DEFRA/mapped']).rows[0]
-        .fullName
-    ).toBe('defra/Mapped is already mapped to a project')
-  })
-
-  test('Should flag a repository listed twice', () => {
-    expect(
-      validateRepositories([row('DEFRA/one'), row('defra/one')]).rows
-    ).toStrictEqual({ 1: { fullName: 'defra/one is listed more than once' } })
-  })
-
-  test('Should flag a Sonar key with no repository', () => {
-    expect(
-      validateRepositories([row('DEFRA/one'), row('', 'KEY')]).rows[1]
-    ).toStrictEqual({
-      fullName: 'Enter the repository this Sonar project key is for'
-    })
-  })
-
-  test('Should flag a malformed Sonar key', () => {
-    expect(
-      validateRepositories([row('DEFRA/one', 'bad key')]).rows[0]
-        .sonarProjectKey
-    ).toMatch(/letters, numbers/)
+      validateRepositories(['DEFRA/one', 'defra/Mapped'], ['DEFRA/mapped'])
+    ).toStrictEqual({ list: 'defra/Mapped is already mapped to a project' })
   })
 })
 
@@ -254,8 +308,17 @@ describe('#toProjectRequest', () => {
       slug: 'CRAR',
       type: 'ai-adopted',
       adoptionStartDate: '2025-10-01T00:00:00.000Z',
-      jira: { projectKeys: ['MMOCR', 'FES'] }
+      jira: { projectKeys: ['MMOCR'] }
     })
+  })
+
+  test('Should upper-case the slug and the Jira key', () => {
+    const request = toProjectRequest(
+      details({ slug: 'crar', jiraKey: ' mmocr ' })
+    )
+
+    expect(request.slug).toBe('CRAR')
+    expect(request.jira).toStrictEqual({ projectKeys: ['MMOCR'] })
   })
 
   test('Should leave out an adoption date that was not given', () => {
@@ -263,7 +326,7 @@ describe('#toProjectRequest', () => {
       details({
         type: 'ai-native',
         adoption: EMPTY_DETAILS.adoption,
-        jiraKeys: ''
+        jiraKey: ''
       })
     )
 
@@ -273,19 +336,25 @@ describe('#toProjectRequest', () => {
 })
 
 describe('#toRepositoryMappings', () => {
-  test('Should build a body per named repository and skip blank rows', () => {
+  test('Should build a body with only the project slug per repository', () => {
     expect(
-      toRepositoryMappings('CRAR', [
-        row(' DEFRA/one ', ' DEFRA_one '),
-        row('DEFRA/two'),
-        row()
-      ])
+      toRepositoryMappings('CRAR', ['DEFRA/one', 'DEFRA/two'])
     ).toStrictEqual([
-      {
-        fullName: 'DEFRA/one',
-        body: { projectSlug: 'CRAR', sonarProjectKey: 'DEFRA_one' }
-      },
+      { fullName: 'DEFRA/one', body: { projectSlug: 'CRAR' } },
       { fullName: 'DEFRA/two', body: { projectSlug: 'CRAR' } }
     ])
+  })
+})
+
+describe('#jiraKeyError', () => {
+  test.each([
+    ['', false, null],
+    ['MMOCR', true, null],
+    ['', true, 'Enter a Jira project key'],
+    ['A,B', false, expect.stringContaining('no commas or spaces')],
+    ['A B', true, expect.stringContaining('no commas or spaces')],
+    ['1A', false, expect.stringContaining('must start with a letter')]
+  ])('Should check %j (required: %s)', (key, required, expected) => {
+    expect(jiraKeyError(key, required)).toStrictEqual(expected)
   })
 })

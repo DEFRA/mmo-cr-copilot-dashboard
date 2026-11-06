@@ -145,23 +145,65 @@ describe('#RepositoryMappingPanel', () => {
     expect(lastCall().url).toBe('/api/repositories/DEFRA%2Fnew-repo')
   })
 
-  test('Should offer only unassigned owner/name repositories as suggestions', () => {
+  test('Should add a repository chosen from the suggestions', async () => {
+    renderPanel()
+
+    await userEvent.click(
+      screen.getByRole('combobox', { name: 'Repository name' })
+    )
+    await userEvent.click(screen.getByRole('option', { name: 'DEFRA/loose' }))
+
+    await waitFor(() => expect(onChanged).toHaveBeenCalled())
+    expect(lastCall().url).toBe('/api/repositories/DEFRA%2Floose')
+    expect(lastCall().body).toEqual({ projectSlug: 'alpha' })
+  })
+
+  test('Should add a typed repository with Enter', async () => {
+    renderPanel()
+
+    await userEvent.type(
+      screen.getByRole('combobox', { name: 'Repository name' }),
+      'DEFRA/typed{Enter}'
+    )
+
+    await waitFor(() => expect(onChanged).toHaveBeenCalled())
+    expect(lastCall().url).toBe('/api/repositories/DEFRA%2Ftyped')
+  })
+
+  test('Should refuse typed text that is not owner/name when Enter is pressed', async () => {
+    renderPanel()
+
+    await userEvent.type(
+      screen.getByRole('combobox', { name: 'Repository name' }),
+      'just-a-name{Enter}'
+    )
+
+    expect(await screen.findByRole('alert')).toHaveTextContent(/owner\/name/)
+    expect(fetchMock).not.toHaveBeenCalled()
+  })
+
+  test('Should offer only unassigned owner/name repositories as suggestions', async () => {
     renderPanel({
       unassigned: ['DEFRA/loose', 'not-a-repo', 'DEFRA/another']
     })
 
-    const input = screen.getByLabelText('Repository name')
-    const list = document.getElementById(input.getAttribute('list'))
-    expect([...list.options].map((o) => o.value)).toEqual([
-      'DEFRA/loose',
-      'DEFRA/another'
-    ])
+    await userEvent.click(
+      screen.getByRole('combobox', { name: 'Repository name' })
+    )
+
+    expect(
+      screen.getAllByRole('option').map((option) => option.textContent)
+    ).toEqual(['DEFRA/loose', 'DEFRA/another'])
   })
 
-  test('Should offer no suggestion list when nothing is unassigned', () => {
+  test('Should offer no suggestions when nothing is unassigned', async () => {
     renderPanel({ unassigned: [] })
 
-    expect(screen.getByLabelText('Repository name')).not.toHaveAttribute('list')
+    await userEvent.click(
+      screen.getByRole('combobox', { name: 'Repository name' })
+    )
+
+    expect(screen.queryByRole('listbox')).toBeNull()
   })
 
   test('Should refuse a repository already in this project', async () => {
@@ -262,7 +304,7 @@ describe('#RepositoryMappingPanel', () => {
     expect(init.method).toBe('DELETE')
   })
 
-  test('Should show the backend’s reason when a move is refused', async () => {
+  test('Should say the user lacks permission when a move is refused', async () => {
     fetchMock.mockResponse(
       JSON.stringify({
         message: 'Moving a repository needs a dashboard admin'
@@ -276,7 +318,7 @@ describe('#RepositoryMappingPanel', () => {
     )
 
     expect(await screen.findByRole('alert')).toHaveTextContent(
-      'Moving a repository needs a dashboard admin'
+      'You do not have permission to do this'
     )
     expect(onChanged).not.toHaveBeenCalled()
   })
@@ -334,9 +376,9 @@ describe('#RepositoryMappingPanel', () => {
 
       expect(within(table).getAllByRole('row')).toHaveLength(2)
       expect(table).toHaveTextContent('DEFRA/mine-3')
-      expect(screen.getByRole('status')).toHaveTextContent(
-        'Showing 1 of 6 connected repositories'
-      )
+      expect(
+        screen.getByText('Showing 1 of 6 connected repositories')
+      ).toHaveAttribute('role', 'status')
     })
 
     test('Should match a connected repository by its Sonar key', async () => {
@@ -363,9 +405,9 @@ describe('#RepositoryMappingPanel', () => {
       expect(
         screen.queryByRole('table', { name: 'Connected repositories' })
       ).toBeNull()
-      expect(screen.getByRole('status')).toHaveTextContent(
-        'No connected repositories match “zzz”'
-      )
+      expect(
+        screen.getByText('No connected repositories match “zzz”')
+      ).toHaveAttribute('role', 'status')
       expect(
         screen.getByLabelText('Search connected repositories')
       ).toBeVisible()
@@ -441,6 +483,163 @@ describe('#RepositoryMappingPanel', () => {
       )
 
       expect(await axeViolations(container)).toStrictEqual([])
+    })
+  })
+
+  describe('SonarCloud project key', () => {
+    const NO_KEY = [{ fullName: 'DEFRA/bare', projectSlug: 'alpha' }]
+    const editButton = (name) =>
+      screen.getByRole('button', {
+        name: new RegExp(`^${name}\\s*SonarCloud project key for`)
+      })
+    const keyInput = () =>
+      screen.getByRole('textbox', { name: 'SonarCloud project key' })
+
+    test('Should not offer key editing to a project user', () => {
+      renderPanel({ role: 'project-user' })
+
+      expect(
+        screen.queryByRole('button', { name: /SonarCloud project key/ })
+      ).toBeNull()
+    })
+
+    test('Should save a changed key, trimmed, and return focus', async () => {
+      renderPanel()
+
+      await userEvent.click(editButton('Change'))
+      expect(keyInput()).toHaveFocus()
+      expect(keyInput()).toHaveValue('DEFRA_mine')
+      await userEvent.clear(keyInput())
+      await userEvent.type(keyInput(), '  DEFRA_mine-2  ')
+      await userEvent.click(screen.getByRole('button', { name: 'Save' }))
+
+      const { url, init, body } = lastCall()
+      expect(url).toBe('/api/repositories/DEFRA%2Fmine/sonar-key')
+      expect(init.method).toBe('PUT')
+      expect(body).toEqual({ sonarProjectKey: 'DEFRA_mine-2' })
+      expect(
+        await screen.findByText('SonarCloud project key for DEFRA/mine saved')
+      ).toBeInTheDocument()
+      expect(onChanged).toHaveBeenCalled()
+      await waitFor(() => expect(editButton('Change')).toHaveFocus())
+    })
+
+    test('Should remove a set key', async () => {
+      renderPanel()
+
+      await userEvent.click(editButton('Change'))
+      await userEvent.click(screen.getByRole('button', { name: 'Remove key' }))
+
+      expect(lastCall().body).toEqual({ sonarProjectKey: null })
+      expect(
+        await screen.findByText(
+          'SonarCloud project key removed from DEFRA/mine'
+        )
+      ).toBeInTheDocument()
+    })
+
+    test('Should clear a set key when saved blank', async () => {
+      renderPanel()
+
+      await userEvent.click(editButton('Change'))
+      await userEvent.clear(keyInput())
+      await userEvent.click(screen.getByRole('button', { name: 'Save' }))
+
+      expect(lastCall().body).toEqual({ sonarProjectKey: null })
+    })
+
+    test.each([
+      ['', 'Enter a SonarCloud project key'],
+      [
+        'bad key',
+        'SonarCloud project key must only contain letters, numbers, dots, colons, hyphens and underscores'
+      ],
+      [
+        'k'.repeat(256),
+        'SonarCloud project key must be 255 characters or fewer'
+      ]
+    ])('Should refuse %j without calling the backend', async (key, message) => {
+      renderPanel({ repositories: NO_KEY })
+
+      await userEvent.click(editButton('Add'))
+      if (key) {
+        await userEvent.click(keyInput())
+        await userEvent.paste(key)
+      }
+      await userEvent.click(screen.getByRole('button', { name: 'Save' }))
+
+      expect(fetchMock).not.toHaveBeenCalled()
+      expect(screen.getByRole('alert')).toHaveTextContent(message)
+      expect(
+        screen.queryByRole('button', { name: 'Remove key' })
+      ).not.toBeInTheDocument()
+    })
+
+    test.each([
+      [403, 'You do not have permission to do this'],
+      [404, 'DEFRA/mine is no longer connected to a project'],
+      [500, 'The SonarCloud project key could not be saved. Try again later.']
+    ])('Should explain a %i refusal', async (status, message) => {
+      fetchMock.mockResponse('{}', { status })
+      renderPanel()
+
+      await userEvent.click(editButton('Change'))
+      await userEvent.click(screen.getByRole('button', { name: 'Save' }))
+
+      expect(await screen.findByRole('alert')).toHaveTextContent(message)
+      expect(keyInput()).toBeInTheDocument()
+    })
+
+    test('Should show a duplicate key inline on the key input', async () => {
+      fetchMock.mockResponse(
+        JSON.stringify({
+          statusCode: 409,
+          error: 'Conflict',
+          message: 'That SonarCloud project key is already in use'
+        }),
+        { status: 409 }
+      )
+      const { container } = renderPanel()
+
+      await userEvent.click(editButton('Change'))
+      await userEvent.click(screen.getByRole('button', { name: 'Save' }))
+
+      const message = 'That SonarCloud project key is already in use.'
+      const summary = await screen.findByRole('alert')
+      expect(summary).toHaveTextContent(message)
+      expect(summary).not.toHaveTextContent(/repositor/i)
+      expect(
+        within(summary).getByRole('link', { name: message })
+      ).toHaveAttribute('href', `#${keyInput().id}`)
+      expect(keyInput()).toHaveAccessibleDescription(
+        expect.stringContaining(message)
+      )
+      expect(await axeViolations(container)).toStrictEqual([])
+    })
+
+    test('Should explain a network failure', async () => {
+      fetchMock.mockReject(new Error('offline'))
+      renderPanel()
+
+      await userEvent.click(editButton('Change'))
+      await userEvent.click(screen.getByRole('button', { name: 'Save' }))
+
+      expect(await screen.findByRole('alert')).toHaveTextContent(
+        'The SonarCloud project key could not be saved. Try again later.'
+      )
+    })
+
+    test('Should cancel an edit and return focus', async () => {
+      renderPanel()
+
+      await userEvent.click(editButton('Change'))
+      await userEvent.click(screen.getByRole('button', { name: 'Cancel' }))
+
+      expect(
+        screen.queryByRole('textbox', { name: 'SonarCloud project key' })
+      ).toBeNull()
+      expect(fetchMock).not.toHaveBeenCalled()
+      await waitFor(() => expect(editButton('Change')).toHaveFocus())
     })
   })
 

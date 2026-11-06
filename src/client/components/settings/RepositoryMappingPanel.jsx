@@ -1,8 +1,9 @@
-import { useId, useState } from 'react'
+import { useEffect, useId, useRef, useState } from 'react'
 
 import { Panel, PanelState } from '../dashboard'
 import {
   Button,
+  Combobox,
   ErrorSummary,
   NotificationBanner,
   Table,
@@ -10,15 +11,29 @@ import {
 } from '../govuk'
 import { cx } from '../govuk/utils.js'
 import { jsonWrite } from '../../lib/api'
+import { ensureOk, readApiError, toApiError } from '../../lib/api-errors'
 import { isRepositoryName } from '../../lib/onboarding'
-import { ROLES } from '../../lib/roles'
+import { ROLES, canAdministerProject } from '../../lib/roles'
 
 // A list longer than this gets a search box, unless it always has one.
 const SEARCH_THRESHOLD = 5
 
-async function failure(res, fallback) {
-  const body = await res.json().catch(() => null)
-  return new Error(body?.message || fallback)
+// Mirrors the backend's SonarCloud project key rule.
+const SONAR_KEY_PATTERN = /^[\w.:-]+$/
+const SONAR_KEY_MAX = 255
+const SONAR_KEY_FALLBACK =
+  'The SonarCloud project key could not be saved. Try again later.'
+
+/** Why a trimmed SonarCloud key cannot be saved, or null. Blank clears a set key. */
+function sonarKeyError(key, hadKey) {
+  if (!key) return hadKey ? null : 'Enter a SonarCloud project key'
+  if (key.length > SONAR_KEY_MAX) {
+    return 'SonarCloud project key must be 255 characters or fewer'
+  }
+  if (!SONAR_KEY_PATTERN.test(key)) {
+    return 'SonarCloud project key must only contain letters, numbers, dots, colons, hyphens and underscores'
+  }
+  return null
 }
 
 /** A repository table in a scrolling container, with a search box once it is long. */
@@ -111,33 +126,124 @@ export function RepositoryMappingPanel({
   const [notice, setNotice] = useState(null)
   const [pending, setPending] = useState(null)
   const [confirming, setConfirming] = useState(null)
+  const [keyEdit, setKeyEdit] = useState(null)
+  const [keySaving, setKeySaving] = useState(false)
+  const keyInFlight = useRef(false)
+  const keyInputRef = useRef(null)
+  const returnFocusTo = useRef(null)
+  const keyInputId = `${inputId}-sonar`
 
   const isDashboardAdmin = role === ROLES.dashboardAdmin
+  const canEditKeys = canAdministerProject(role)
   const mine = repositories.filter((r) => r.projectSlug === project.slug)
   const elsewhere = repositories.filter((r) => r.projectSlug !== project.slug)
   const suggestions = unassigned.filter(isRepositoryName)
+  const editingName = keyEdit?.fullName
+
+  useEffect(() => {
+    if (editingName) keyInputRef.current?.focus()
+  }, [editingName])
 
   const fail = (message) => {
     setAttempt((n) => n + 1)
     setError(message)
   }
 
+  const startKeyEdit = (r) => {
+    setError(null)
+    setNotice(null)
+    setKeyEdit({
+      fullName: r.fullName,
+      hadKey: Boolean(r.sonarProjectKey),
+      value: r.sonarProjectKey ?? '',
+      error: null
+    })
+  }
+
+  const closeKeyEdit = () => {
+    returnFocusTo.current = editingName
+    setKeyEdit(null)
+  }
+
+  const keyFailed = (message) => {
+    setAttempt((n) => n + 1)
+    setKeyEdit((edit) => edit && { ...edit, error: message })
+  }
+
+  // The Change/Add button regains focus when it remounts after an edit closes.
+  const keyButtonRef = (fullName) => (element) => {
+    if (element && returnFocusTo.current === fullName) {
+      returnFocusTo.current = null
+      element.focus()
+    }
+  }
+
+  const saveKey = async (fullName, key) => {
+    if (keyInFlight.current) return
+    keyInFlight.current = true
+    setKeySaving(true)
+    setNotice(null)
+    try {
+      const res = await jsonWrite(
+        `/api/repositories/${encodeURIComponent(fullName)}/sonar-key`,
+        'PUT',
+        { sonarProjectKey: key }
+      )
+      if (!res.ok) {
+        const { message } = await readApiError(res, {
+          context: 'sonarKey',
+          fallback: SONAR_KEY_FALLBACK,
+          notFound: `${fullName} is no longer connected to a project`
+        })
+        keyFailed(message)
+        return
+      }
+      returnFocusTo.current = fullName
+      setKeyEdit(null)
+      setNotice({
+        id: Date.now(),
+        focus: false,
+        text: key
+          ? `SonarCloud project key for ${fullName} saved`
+          : `SonarCloud project key removed from ${fullName}`
+      })
+      onChanged()
+    } catch {
+      keyFailed(SONAR_KEY_FALLBACK)
+    } finally {
+      keyInFlight.current = false
+      setKeySaving(false)
+    }
+  }
+
+  const submitKey = (event) => {
+    event.preventDefault()
+    const key = keyEdit.value.trim()
+    const problem = sonarKeyError(key, keyEdit.hadKey)
+    if (problem) {
+      keyFailed(problem)
+      return
+    }
+    saveKey(keyEdit.fullName, key || null)
+  }
+
   const map = async (fullName, verb) => {
     setError(null)
     setNotice(null)
     setPending(fullName)
+    const fallback = `${fullName} could not be ${verb}`
     try {
       const res = await jsonWrite(
         `/api/repositories/${encodeURIComponent(fullName)}`,
         'PUT',
         { projectSlug: project.slug }
       )
-      if (!res.ok) throw await failure(res, `${fullName} could not be ${verb}`)
+      await ensureOk(res, { fallback })
       setNotice({ id: Date.now(), text: `${fullName} ${verb}` })
       setRepository('')
       onChanged()
     } catch (err) {
-      fail(err.message)
+      fail(toApiError(err, fallback).message)
     } finally {
       setPending(null)
     }
@@ -147,12 +253,16 @@ export function RepositoryMappingPanel({
     setError(null)
     setNotice(null)
     setPending(fullName)
+    const fallback = `${fullName} could not be removed`
     try {
       const res = await jsonWrite(
         `/api/repositories/${encodeURIComponent(fullName)}`,
         'DELETE'
       )
-      if (!res.ok) throw await failure(res, `${fullName} could not be removed`)
+      await ensureOk(res, {
+        fallback,
+        notFound: `${fullName} is no longer connected to a project`
+      })
       setConfirming(null)
       setNotice({
         id: Date.now(),
@@ -161,15 +271,14 @@ export function RepositoryMappingPanel({
       onChanged()
     } catch (err) {
       setConfirming(null)
-      fail(err.message)
+      fail(toApiError(err, fallback).message)
     } finally {
       setPending(null)
     }
   }
 
-  const submit = (event) => {
-    event.preventDefault()
-    const name = repository.trim()
+  const add = (text) => {
+    const name = text.trim()
     if (!isRepositoryName(name)) {
       fail('Enter the repository as owner/name, like DEFRA/mmo-cr-pdf')
       return
@@ -188,6 +297,11 @@ export function RepositoryMappingPanel({
       return
     }
     map(name, 'added to the project')
+  }
+
+  const submit = (event) => {
+    event.preventDefault()
+    add(repository)
   }
 
   const state = () => {
@@ -211,19 +325,93 @@ export function RepositoryMappingPanel({
 
   const sectionGap = 'govuk-!-margin-bottom-6'
 
+  let problem = null
+  if (keyEdit?.error) problem = { href: `#${keyInputId}`, text: keyEdit.error }
+  else if (error) problem = { href: `#${inputId}`, text: error }
+
+  const sonarKeyCell = (r) => {
+    if (editingName === r.fullName) {
+      return (
+        <form key="edit" onSubmit={submitKey} noValidate>
+          <TextInput
+            id={keyInputId}
+            ref={keyInputRef}
+            label="SonarCloud project key"
+            labelSize="s"
+            hint="The key shown in SonarCloud, for example DEFRA_my-repo. Each key can belong to one repository only."
+            errorMessage={keyEdit.error ?? undefined}
+            spellCheck={false}
+            autoComplete="off"
+            value={keyEdit.value}
+            onChange={(event) =>
+              setKeyEdit({ ...keyEdit, value: event.target.value })
+            }
+          />
+          <div className="govuk-button-group govuk-!-margin-bottom-0">
+            <Button type="submit" disabled={keySaving}>
+              Save
+            </Button>
+            {keyEdit.hadKey && (
+              <Button
+                variant="warning"
+                disabled={keySaving}
+                onClick={() => saveKey(r.fullName, null)}
+              >
+                Remove key
+              </Button>
+            )}
+            <button
+              type="button"
+              className="app-link-button"
+              disabled={keySaving}
+              onClick={closeKeyEdit}
+            >
+              Cancel
+            </button>
+          </div>
+        </form>
+      )
+    }
+    return (
+      <span key="key">
+        {r.sonarProjectKey ? (
+          <code className="app-code">{r.sonarProjectKey}</code>
+        ) : (
+          '—'
+        )}
+        {canEditKeys && (
+          <>
+            {' '}
+            <button
+              ref={keyButtonRef(r.fullName)}
+              type="button"
+              className="app-link-button govuk-!-margin-left-2"
+              onClick={() => startKeyEdit(r)}
+            >
+              {r.sonarProjectKey ? 'Change' : 'Add'}
+              <span className="govuk-visually-hidden">
+                {' '}
+                SonarCloud project key for {r.fullName}
+              </span>
+            </button>
+          </>
+        )}
+      </span>
+    )
+  }
+
   return (
     <>
       {notice && (
-        <NotificationBanner key={notice.id} type="success" autoFocus>
+        <NotificationBanner
+          key={notice.id}
+          type="success"
+          autoFocus={notice.focus !== false}
+        >
           {notice.text}
         </NotificationBanner>
       )}
-      {error && (
-        <ErrorSummary
-          key={attempt}
-          errors={[{ href: `#${inputId}`, text: error }]}
-        />
-      )}
+      {problem && <ErrorSummary key={attempt} errors={[problem]} />}
 
       <Panel
         title="Connected Repositories"
@@ -250,7 +438,7 @@ export function RepositoryMappingPanel({
             caption="Connected repositories"
             head={[
               { id: 'repo', label: 'Repository' },
-              { id: 'sonar', label: 'Sonar project key' },
+              { id: 'sonar', label: 'SonarCloud project key' },
               ACTIONS_HEAD
             ]}
             searchText={(r) => `${r.fullName} ${r.sonarProjectKey ?? ''}`}
@@ -258,13 +446,7 @@ export function RepositoryMappingPanel({
               id: r.fullName,
               cells: [
                 r.fullName,
-                r.sonarProjectKey ? (
-                  <code key="k" className="app-code">
-                    {r.sonarProjectKey}
-                  </code>
-                ) : (
-                  '—'
-                ),
+                sonarKeyCell(r),
                 confirming === r.fullName ? (
                   <span key="confirm">
                     <Button
@@ -301,26 +483,20 @@ export function RepositoryMappingPanel({
         className={sectionGap}
       >
         <form onSubmit={submit} noValidate>
-          <TextInput
+          <Combobox
             id={inputId}
             label="Repository name"
             labelSize="s"
             hint="As owner/name, like DEFRA/mmo-cr-pdf. Pick a discovered repository or type a new one. Map it before adding the analytics workflow, or its data is held back."
             errorMessage={error ?? undefined}
-            width="30"
-            spellCheck={false}
-            autoComplete="off"
             value={repository}
-            onChange={(e) => setRepository(e.target.value)}
-            list={suggestions.length > 0 ? `${inputId}-list` : undefined}
+            onChange={setRepository}
+            options={suggestions}
+            onSelect={add}
+            allowCustom
+            itemName="repository"
+            itemNamePlural="repositories"
           />
-          {suggestions.length > 0 && (
-            <datalist id={`${inputId}-list`}>
-              {suggestions.map((name) => (
-                <option key={name} value={name} />
-              ))}
-            </datalist>
-          )}
           <Button type="submit" disabled={pending !== null}>
             Add repository
           </Button>

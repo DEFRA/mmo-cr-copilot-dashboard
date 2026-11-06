@@ -26,7 +26,12 @@ import {
   selectAiCodeChurnRate,
   selectCopilotUsage,
   selectCopilotInsights,
-  foldModels
+  foldModels,
+  OTHER_MODELS_ID,
+  selectModelRequestShares,
+  selectDoneTickets,
+  selectTicketFunnel,
+  selectTicketRows
 } from './selectors.js'
 
 function commit(overrides = {}) {
@@ -1445,5 +1450,231 @@ describe('foldModels', () => {
 
     expect(models).toEqual(copy)
     expect(foldModels(undefined, 3, 'requests')).toEqual([])
+  })
+})
+
+describe('selectModelRequestShares', () => {
+  test('Should give each model its share of requests, largest first', () => {
+    const shares = selectModelRequestShares([
+      { model: 'a', requests: 1 },
+      { model: 'b', requests: 3 }
+    ])
+
+    expect(shares).toEqual([
+      { id: 'model:b', model: 'b', requests: 3, share: 75 },
+      { id: 'model:a', model: 'a', requests: 1, share: 25 }
+    ])
+  })
+
+  test('Should fold the tail into Other models past the limit', () => {
+    const shares = selectModelRequestShares(
+      [
+        { model: 'a', requests: 4 },
+        { model: 'b', requests: 3 },
+        { model: 'c', requests: 2 },
+        { model: 'd', requests: 1 }
+      ],
+      2
+    )
+
+    expect(shares.map((s) => s.model)).toEqual(['a', 'b', 'Other models'])
+    expect(shares[2]).toEqual({
+      id: OTHER_MODELS_ID,
+      model: 'Other models',
+      requests: 3,
+      share: 30
+    })
+  })
+
+  test('Should keep a model called Other models apart from the folded tail', () => {
+    const shares = selectModelRequestShares(
+      [
+        { model: 'Other models', requests: 4 },
+        { model: 'b', requests: 3 },
+        { model: 'c', requests: 2 }
+      ],
+      1
+    )
+
+    expect(shares.map((s) => s.id)).toEqual([
+      'model:Other models',
+      OTHER_MODELS_ID
+    ])
+  })
+
+  test('Should leave out models without requests', () => {
+    const shares = selectModelRequestShares([
+      { model: 'a', requests: 0 },
+      { model: 'b', requests: 2 },
+      { model: 'c', requests: null }
+    ])
+
+    expect(shares).toEqual([
+      { id: 'model:b', model: 'b', requests: 2, share: 100 }
+    ])
+  })
+
+  test('Should treat a string count as no requests rather than produce NaN', () => {
+    const shares = selectModelRequestShares([
+      { model: 'a', requests: '5' },
+      { model: 'b', requests: 2 },
+      { model: 'c', requests: 'many' }
+    ])
+
+    expect(shares).toEqual([
+      { id: 'model:b', model: 'b', requests: 2, share: 100 }
+    ])
+  })
+
+  test('Should return nothing when there are no requests', () => {
+    expect(selectModelRequestShares([])).toEqual([])
+    expect(selectModelRequestShares(undefined)).toEqual([])
+  })
+})
+
+describe('#selectTicketRows workflow flow', () => {
+  const at = (day) => `2026-01-${String(day).padStart(2, '0')}T00:00:00.000Z`
+  const flowed = (
+    key,
+    flow,
+    status = { name: 'Closed', categoryKey: 'new' }
+  ) => ({
+    key,
+    status,
+    created: at(1),
+    started: at(2),
+    resolved: at(3),
+    reopenCount: 9,
+    flow
+  })
+
+  test('Should use the backend flow over the Jira fields', () => {
+    const [row] = selectTicketRows(
+      [
+        flowed('A-1', {
+          stageKind: 'done',
+          startedAt: at(4),
+          doneAt: at(10),
+          firstDoneAt: at(8),
+          cycleDays: 6,
+          leadDays: 9,
+          flowEfficiency: 75,
+          reopenCount: 1
+        })
+      ],
+      []
+    )
+
+    expect(row).toMatchObject({
+      category: 'done',
+      stageKind: 'done',
+      started: Date.parse(at(4)),
+      resolved: Date.parse(at(10)),
+      firstDone: Date.parse(at(8)),
+      cycleDays: 6,
+      leadDays: 9,
+      flowEfficiency: 75,
+      reopenCount: 1
+    })
+  })
+
+  test.each([
+    ['todo', 'new'],
+    ['active', 'indeterminate'],
+    ['waiting', 'indeterminate'],
+    ['done', 'done']
+  ])('Should place a %s stage in the %s category', (stageKind, category) => {
+    const [row] = selectTicketRows([flowed('A-1', { stageKind })], [])
+    expect(row.category).toBe(category)
+  })
+
+  test('Should keep the Jira category for unmapped or excluded statuses', () => {
+    const rows = selectTicketRows(
+      [
+        flowed('A-1', { stageKind: 'unmapped' }),
+        flowed('A-2', { stageKind: 'excluded' }, { name: 'Odd' })
+      ],
+      []
+    )
+    expect(rows.map((r) => r.category)).toEqual(['new', ''])
+  })
+
+  test('Should read missing or malformed flow values as null', () => {
+    const [row] = selectTicketRows(
+      [
+        flowed('A-1', {
+          stageKind: 42,
+          startedAt: 'not a date',
+          cycleDays: '6',
+          leadDays: NaN
+        })
+      ],
+      []
+    )
+    expect(row).toMatchObject({
+      stageKind: null,
+      started: null,
+      resolved: null,
+      firstDone: null,
+      cycleDays: null,
+      leadDays: null,
+      flowEfficiency: null,
+      reopenCount: 0
+    })
+  })
+
+  test('Should count Done and the funnel from the workflow stages', () => {
+    const rows = selectTicketRows(
+      [
+        flowed('A-1', { stageKind: 'done', doneAt: at(10) }),
+        flowed('A-2', { stageKind: 'active' }, { categoryKey: 'done' }),
+        flowed('A-3', { stageKind: 'todo' })
+      ],
+      []
+    )
+    expect(selectDoneTickets(rows, at(1), at(20)).map((r) => r.key)).toEqual([
+      'A-1'
+    ])
+    expect(selectTicketFunnel(rows)).toEqual([1, 1, 0, 1])
+  })
+
+  test('Should fall back to Jira started and resolved without a flow', () => {
+    const [row] = selectTicketRows(
+      [
+        {
+          key: 'A-1',
+          status: { categoryKey: 'done' },
+          created: at(1),
+          started: at(2),
+          resolved: at(5),
+          firstDoneAt: at(4),
+          reopenCount: 2
+        }
+      ],
+      []
+    )
+    expect(row).toMatchObject({
+      category: 'done',
+      stageKind: null,
+      started: Date.parse(at(2)),
+      resolved: Date.parse(at(5)),
+      firstDone: Date.parse(at(4)),
+      cycleDays: 3,
+      leadDays: 4,
+      flowEfficiency: null,
+      reopenCount: 2
+    })
+  })
+
+  test('Should treat an unresolved ticket without a flow as not done', () => {
+    const [row] = selectTicketRows([{ key: 'A-1', created: at(1) }], [])
+    expect(row).toMatchObject({
+      category: '',
+      started: Date.parse(at(1)),
+      resolved: null,
+      firstDone: null,
+      cycleDays: null,
+      leadDays: null
+    })
   })
 })

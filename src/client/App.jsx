@@ -35,10 +35,12 @@ import {
   isPlottablePayload,
   selectContributorSummaries
 } from './lib/selectors'
+import { hasJira } from './lib/jira'
 import { buildContributorPersonaMap } from './lib/personas'
 import { canAdministerProject } from './lib/roles'
 import { fromHash, isGlobalLevel, toHash } from './lib/routes'
 import { currentSprint, recentSprints } from './lib/sprints'
+import { confirmDiscard } from './lib/unsaved'
 
 const OverviewView = lazy(() =>
   import('./components/views/OverviewView').then((m) => ({
@@ -277,6 +279,11 @@ function ViewSkeleton() {
 export default function App() {
   const [nav, setNav] = useState(() => fromHash(window.location.hash))
   const pendingScroll = useRef(null)
+  const shownHash = useRef(window.location.hash)
+  const unsaved = useRef(false)
+  const setUnsaved = useCallback((dirty) => {
+    unsaved.current = dirty
+  }, [])
   const {
     projects,
     activeProject,
@@ -360,7 +367,7 @@ export default function App() {
     [payloads, activeWindow]
   )
 
-  const jiraConnected = (activeProject?.jira?.projectKeys?.length ?? 0) > 0
+  const jiraConnected = hasJira(activeProject)
   const isNative = activeProject?.type === 'ai-native'
   const nativeOverview = isNative && nav.level === 'overview'
   const delivery = useDeliveryMetrics(
@@ -411,7 +418,8 @@ export default function App() {
   )
 
   const navigate = useCallback(
-    (target) => {
+    (target, { confirmed = false } = {}) => {
+      if (!confirmed && !confirmDiscard(unsaved.current)) return
       const next = withProject(target, activeSlug)
       window.history.replaceState(
         { ...window.history.state, scrollY: window.scrollY },
@@ -425,6 +433,7 @@ export default function App() {
           hash
         )
       }
+      shownHash.current = window.location.hash
       pendingScroll.current = next.section
         ? { section: next.section }
         : { y: 0 }
@@ -437,8 +446,19 @@ export default function App() {
     if ('scrollRestoration' in window.history) {
       window.history.scrollRestoration = 'manual'
     }
+    // A hash link or Back fires popstate and hashchange; the second sees the hash already shown.
     const onLocationChange = () => {
-      setNav(fromHash(window.location.hash))
+      const hash = window.location.hash
+      if (hash !== shownHash.current && !confirmDiscard(unsaved.current)) {
+        window.history.replaceState(
+          window.history.state,
+          '',
+          shownHash.current || window.location.pathname + window.location.search
+        )
+        return
+      }
+      shownHash.current = hash
+      setNav(fromHash(hash))
       pendingScroll.current = { y: window.history.state?.scrollY ?? 0 }
     }
     window.addEventListener('popstate', onLocationChange)
@@ -454,6 +474,7 @@ export default function App() {
     if (isGlobalLevel(nav.level) || nav.project || !activeSlug) return
     const canonical = { ...nav, project: activeSlug }
     window.history.replaceState(window.history.state, '', toHash(canonical))
+    shownHash.current = window.location.hash
     setNav(canonical)
   }, [nav, activeSlug])
 
@@ -536,14 +557,16 @@ export default function App() {
 
   const navItems = useMemo(
     () =>
-      [...NAV_LABELS, ...(isAdmin ? [ONBOARDING_LABEL] : []), HELP_LABEL].map(
-        ([id, label]) => ({
-          id,
-          label,
-          href: toHash(withProject(TOP_LEVEL[id], activeSlug))
-        })
-      ),
-    [activeSlug, isAdmin]
+      [
+        ...NAV_LABELS.filter(([id]) => id !== 'delivery' || jiraConnected),
+        ...(isAdmin ? [ONBOARDING_LABEL] : []),
+        HELP_LABEL
+      ].map(([id, label]) => ({
+        id,
+        label,
+        href: toHash(withProject(TOP_LEVEL[id], activeSlug))
+      })),
+    [activeSlug, isAdmin, jiraConnected]
   )
 
   const insightsHref = useMemo(
@@ -572,6 +595,7 @@ export default function App() {
         <AdminProjectsView
           onNavigateHome={goHome}
           onOnboardProject={openOnboarding}
+          onProjectsChanged={refreshProjects}
         />
       )
     }
@@ -653,7 +677,10 @@ export default function App() {
           onRemove={handleRemoveMapping}
           contributors={contributorHandles}
           tab={nav.tab}
-          onTabChange={(tab) => navigate({ level: 'settings', tab })}
+          onTabChange={(tab) =>
+            navigate({ level: 'settings', tab }, { confirmed: true })
+          }
+          onUnsavedChange={setUnsaved}
         />
       )
     }
@@ -680,6 +707,7 @@ export default function App() {
           payloads={visiblePayloads}
           window={activeWindow}
           jiraConnected={jiraConnected}
+          canAdminister={canAdminister || isAdmin}
           onOpenTicket={openTicket}
           onOpenPR={openPR}
         />
@@ -732,6 +760,7 @@ export default function App() {
             allPayloads={allPayloads}
             repository={nav.repository}
             projectSlug={activeSlug}
+            jiraConnected={jiraConnected}
             window={activeWindow}
             onOpenLeverage={openLeverage}
             onOpenPR={openPR}
@@ -757,6 +786,7 @@ export default function App() {
             onChangeClassification={changeCommitClassification}
             canReclassify={canAdminister}
             projectSlug={activeSlug}
+            jiraConnected={jiraConnected}
           />
         )
       case 'contributor':
@@ -791,6 +821,7 @@ export default function App() {
               leverage={nativeLeverage}
               churn={nativeChurn}
               jiraConnected={jiraConnected}
+              canAdminister={canAdminister || isAdmin}
               onOpenRepo={openRepo}
               onOpenTicket={openTicket}
               onOpenPR={openPR}
@@ -815,7 +846,9 @@ export default function App() {
             leverageData={leverage.data}
             sonarAsOf={sonarAsOf}
             sprintWindows={trendSprints}
-            jiraDelivery={jiraConnected ? delivery : undefined}
+            jiraConnected={jiraConnected}
+            canAdminister={canAdminister || isAdmin}
+            jiraDelivery={delivery}
             deliveryWindow={activeWindow}
             deliveryHref={toHash(
               withProject({ level: 'delivery' }, activeSlug)
@@ -871,6 +904,7 @@ export default function App() {
     goHome,
     openOnboarding,
     refreshProjects,
+    setUnsaved,
     userStatus,
     projectUnavailable,
     projects

@@ -117,11 +117,64 @@ describe('#ticket selectors', () => {
 })
 
 describe('#DeliveryView', () => {
-  test('Should say Jira is not connected', () => {
+  describe('unmapped statuses notice', () => {
+    const withUnmapped = (unmappedStatuses) => ({
+      ...success,
+      metrics: {
+        ...metrics,
+        workflow: { source: 'project', version: 2, unmappedStatuses }
+      }
+    })
+    const unmapped = [
+      { name: 'Funnel', issues: 3 },
+      { name: 'Parked', issues: 1 }
+    ]
+
+    test('Should name the unmapped statuses to a project admin', () => {
+      renderDelivery({
+        delivery: withUnmapped(unmapped),
+        canAdminister: true
+      })
+
+      expect(
+        screen.getByText(/2 Jira statuses not in any workflow stage/)
+      ).toHaveTextContent('Funnel, Parked')
+      expect(
+        screen.getByRole('link', { name: /map them in settings/i })
+      ).toHaveAttribute('href', '#/settings/jira-workflow')
+    })
+
+    test('Should use the singular for one status', () => {
+      renderDelivery({
+        delivery: withUnmapped([{ name: 'Funnel', issues: 3 }]),
+        canAdminister: true
+      })
+
+      expect(
+        screen.getByText(/1 Jira status not in any workflow stage/)
+      ).toBeInTheDocument()
+    })
+
+    test.each([
+      ['a project user', withUnmapped(unmapped), false],
+      ['an admin when every status is mapped', withUnmapped([]), true],
+      ['an admin without a workflow summary', success, true]
+    ])('Should not show the notice to %s', (_, delivery, canAdminister) => {
+      renderDelivery({ delivery, canAdminister })
+
+      expect(
+        screen.queryByText(/not in any workflow stage/)
+      ).not.toBeInTheDocument()
+    })
+  })
+
+  test('Should explain that Jira metrics need a Jira project key', () => {
     renderDelivery({ jiraConnected: false })
 
     expect(
-      screen.getByText('Jira is not connected for this project.')
+      screen.getByText(
+        'Jira delivery metrics are not available because this project has no Jira project key.'
+      )
     ).toBeInTheDocument()
     expect(screen.queryByRole('table')).not.toBeInTheDocument()
   })

@@ -1,3 +1,5 @@
+import { STATUS_CODES } from 'node:http'
+
 import Boom from '@hapi/boom'
 import Joi from 'joi'
 
@@ -46,6 +48,8 @@ export function assertAdmin(request) {
   }
 }
 
+const BACKEND_FAILURE = 'The analytics backend could not complete the request'
+
 async function forward(request, h, { path, query, method = 'GET', body }) {
   const send = (token) =>
     backendRequest({
@@ -75,6 +79,20 @@ async function forward(request, h, { path, query, method = 'GET', body }) {
       throw Boom.unauthorized('Session expired')
     }
   }
+  // A 4xx body is the user-facing Boom message; a 5xx body may hold internals.
+  if (res.statusCode >= 500) {
+    request.logger?.warn(
+      { http: { response: { status_code: res.statusCode } } },
+      `Backend request failed: ${method} ${path}`
+    )
+    return h
+      .response({
+        statusCode: res.statusCode,
+        error: STATUS_CODES[res.statusCode] ?? 'Server Error',
+        message: BACKEND_FAILURE
+      })
+      .code(res.statusCode)
+  }
   return h.response(res.payload).code(res.statusCode)
 }
 
@@ -86,13 +104,27 @@ const windowQuery = (request) => ({
   to: request.query.to?.toISOString()
 })
 
+// A '.' or '..' segment would be resolved by the backend as a relative path.
+const DOT_SEGMENT = /(^|\/)\.{1,2}(\/|$)/
+
+const repositoryParam = Joi.string()
+  .min(1)
+  .max(512)
+  .custom((value, helpers) =>
+    DOT_SEGMENT.test(value)
+      ? helpers.message('{{#label}} must not contain a . or .. segment')
+      : value
+  )
+
 const repositoryQuery = Joi.object({
   repository: Joi.string().min(1).max(512).required(),
   asOf: Joi.date().iso().optional()
 })
 
 const githubHandleParams = Joi.object({
-  githubHandle: Joi.string().min(1).max(39).required()
+  githubHandle: Joi.string()
+    .pattern(/^[a-z\d](?:[a-z\d-]{0,37}[a-z\d])?$/i)
+    .required()
 })
 
 const personaMappingPayload = Joi.object({
@@ -100,7 +132,7 @@ const personaMappingPayload = Joi.object({
 })
 
 const commitClassificationParams = Joi.object({
-  repository: Joi.string().min(1).max(512).required(),
+  repository: repositoryParam.required(),
   prNumber: Joi.number().integer().min(1).required(),
   commit: Joi.string()
     .pattern(/^[\da-f]{7,64}$/i)
@@ -131,7 +163,7 @@ const projectSlugParams = Joi.object({
 })
 
 const prLinkParams = projectSlugParams.keys({
-  repository: Joi.string().min(1).max(512).required(),
+  repository: repositoryParam.required(),
   prNumber: Joi.number().integer().min(1).required()
 })
 
@@ -178,30 +210,59 @@ const projectChurnQuery = Joi.object({
 }).unknown()
 
 const repositoryFullNameParams = Joi.object({
-  fullName: Joi.string().min(1).max(512).required()
+  fullName: repositoryParam.pattern(/^[\w.-]+\/[\w.-]+$/).required()
 })
 
+// The SonarCloud key is set only through the sonar-key route.
 const repositoryMapPayload = Joi.object({
-  projectSlug: projectSlug.required(),
-  sonarProjectKey: Joi.string().allow('', null).optional()
-})
+  projectSlug: projectSlug.required()
+}).options({ stripUnknown: true })
+
+const repositorySonarKeyPayload = Joi.object({
+  sonarProjectKey: Joi.string()
+    .trim()
+    .pattern(/^[\w.:-]+$/)
+    .max(255)
+    .allow('', null)
+    .required()
+}).options({ stripUnknown: true })
+
+const jiraProjectKeys = Joi.array()
+  .items(
+    Joi.string()
+      .trim()
+      .pattern(/^[A-Z][A-Z0-9_]+$/)
+  )
+  .max(1)
+
+// Mirrors the backend's project schemas: only these keys are forwarded.
+const projectJiraPayload = Joi.object({
+  projectKeys: jiraProjectKeys,
+  storyPointsField: Joi.string(),
+  boardId: Joi.number().integer().positive()
+}).options({ stripUnknown: true })
+
+const sprintCalendarPayload = Joi.object({
+  cadenceDays: Joi.number().integer().min(1).max(30),
+  anchorDate: Joi.date().iso()
+}).options({ stripUnknown: true })
 
 const projectCreatePayload = Joi.object({
   slug: projectSlug.required(),
   name: Joi.string().min(1).max(200).required(),
   type: Joi.string().valid('ai-adopted', 'ai-native').required(),
   adoptionStartDate: Joi.date().iso().optional(),
-  sprintCalendar: Joi.object().optional(),
-  jira: Joi.object().optional()
-}).unknown()
+  sprintCalendar: sprintCalendarPayload.optional(),
+  jira: projectJiraPayload.optional()
+}).options({ stripUnknown: true })
 
 const projectUpdatePayload = Joi.object({
   name: Joi.string().min(1).max(200).optional(),
   type: Joi.string().valid('ai-adopted', 'ai-native').optional(),
   adoptionStartDate: Joi.date().iso().allow(null).optional(),
-  sprintCalendar: Joi.object().optional(),
-  jira: Joi.object().optional()
-}).unknown()
+  sprintCalendar: sprintCalendarPayload.optional(),
+  jira: projectJiraPayload.optional()
+}).options({ stripUnknown: true })
 
 const ROLE_MAPPING_ROLES = ['Dashboard.Admin', 'project-admin', 'project-user']
 
@@ -238,6 +299,46 @@ const roleMappingUpdatePayload = Joi.object({
 
 const roleMappingWrite = { maxBytes: 4096, allow: 'application/json' }
 
+const WORKFLOW_STAGE_IDS = [
+  'todo',
+  'in-progress',
+  'ready-for-review',
+  'in-review',
+  'ready-for-test',
+  'in-test',
+  'ready-for-release',
+  'blocked',
+  'done',
+  'cancelled'
+]
+
+const workflowStatus = Joi.string()
+  .trim()
+  .min(1)
+  .max(60)
+  // eslint-disable-next-line no-control-regex -- control characters are exactly what is rejected
+  .pattern(/^[^\u0000-\u001f\u007f]+$/)
+
+// Shape only: the backend owns the cross-stage rules (required stages, duplicates, totals).
+const jiraWorkflowPayload = Joi.object({
+  version: Joi.number().integer().min(0).required(),
+  stages: Joi.array()
+    .items(
+      Joi.object({
+        id: Joi.string()
+          .valid(...WORKFLOW_STAGE_IDS)
+          .required(),
+        statuses: Joi.array().items(workflowStatus).max(40).required()
+      }).options({ stripUnknown: true })
+    )
+    .min(2)
+    .max(WORKFLOW_STAGE_IDS.length)
+    .unique('id')
+    .required()
+}).options({ stripUnknown: true })
+
+const jiraWorkflowWrite = { maxBytes: 32768, allow: 'application/json' }
+
 export const apiProxyRoutes = [
   {
     method: 'GET',
@@ -245,7 +346,7 @@ export const apiProxyRoutes = [
     options: {
       validate: {
         params: Joi.object({
-          repository: Joi.string().min(1).max(512).required(),
+          repository: repositoryParam.required(),
           prNumber: Joi.number().integer().min(1).required()
         })
       }
@@ -606,7 +707,27 @@ export const apiProxyRoutes = [
       return forward(request, h, {
         path: `/api/repositories/${encodeURIComponent(fullName)}`,
         method: 'PUT',
-        body: request.payload
+        body: { projectSlug: request.payload.projectSlug }
+      })
+    }
+  },
+  {
+    method: 'PUT',
+    path: '/api/repositories/{fullName}/sonar-key',
+    options: {
+      validate: {
+        params: repositoryFullNameParams,
+        payload: repositorySonarKeyPayload
+      }
+    },
+    handler: (request, h) => {
+      verifyCsrf(request)
+      const { fullName } = request.params
+
+      return forward(request, h, {
+        path: `/api/repositories/${encodeURIComponent(fullName)}/sonar-key`,
+        method: 'PUT',
+        body: { sonarProjectKey: request.payload.sonarProjectKey }
       })
     }
   },
@@ -688,6 +809,36 @@ export const apiProxyRoutes = [
         method: 'DELETE'
       })
     }
+  },
+  {
+    method: 'GET',
+    path: '/api/projects/{slug}/jira/workflow',
+    options: { validate: { params: projectSlugParams } },
+    handler: (request, h) =>
+      forward(request, h, { path: `${projectPath(request)}/jira/workflow` })
+  },
+  {
+    method: 'PUT',
+    path: '/api/projects/{slug}/jira/workflow',
+    options: {
+      payload: jiraWorkflowWrite,
+      validate: { params: projectSlugParams, payload: jiraWorkflowPayload }
+    },
+    handler: (request, h) => {
+      verifyCsrf(request)
+      return forward(request, h, {
+        path: `${projectPath(request)}/jira/workflow`,
+        method: 'PUT',
+        body: request.payload
+      })
+    }
+  },
+  {
+    method: 'GET',
+    path: '/api/projects/{slug}/jira/statuses',
+    options: { validate: { params: projectSlugParams } },
+    handler: (request, h) =>
+      forward(request, h, { path: `${projectPath(request)}/jira/statuses` })
   },
   {
     method: 'GET',

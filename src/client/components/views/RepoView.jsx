@@ -74,6 +74,7 @@ export function RepoView({
   allPayloads,
   repository,
   projectSlug,
+  jiraConnected = false,
   window,
   onOpenPR,
   onOpenContributor,
@@ -653,7 +654,9 @@ export function RepoView({
               { id: 'status', label: 'Status' },
               { id: 'assist', label: 'Commit assist rate' },
               { id: 'cycle', label: 'PR coding cycle time', numeric: true },
-              { id: 'jira', label: 'Jira', sortable: false }
+              ...(jiraConnected
+                ? [{ id: 'jira', label: 'Jira', sortable: false }]
+                : [])
             ]}
             rows={prs.map((r) => ({
               id: r.prNumber,
@@ -684,7 +687,9 @@ export function RepoView({
                   content: formatDuration(r.cycleHours),
                   sortValue: r.cycleHours
                 },
-                <JiraKeys key="jira" keys={r.jiraKeys} />
+                ...(jiraConnected
+                  ? [<JiraKeys key="jira" keys={r.jiraKeys} />]
+                  : [])
               ]
             }))}
           />

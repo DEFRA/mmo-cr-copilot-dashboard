@@ -579,6 +579,138 @@ describe('#App navigation', () => {
   })
 })
 
+describe('#App unsaved Jira workflow changes', () => {
+  const LAZY_VIEW = { timeout: 10000 }
+  const JIRA_PROJECT = { ...PROJECT, jira: { projectKeys: ['MMOCR'] } }
+  const OTHER_PROJECT = { slug: 'other', name: 'Other', type: 'ai-adopted' }
+
+  const stage = (id, label, kind, statuses) => ({
+    id,
+    label,
+    kind,
+    required: id === 'todo' || id === 'done',
+    statuses
+  })
+
+  const serve = () =>
+    fetchMock.mockResponse(async (request) => {
+      const path = new URL(request.url, 'http://localhost').pathname
+      if (path === '/api/me') {
+        return JSON.stringify({
+          name: 'Ada Lovelace',
+          roles: ['Dashboard.Admin']
+        })
+      }
+      if (path === '/api/projects') {
+        return JSON.stringify({ projects: [JIRA_PROJECT, OTHER_PROJECT] })
+      }
+      if (path.endsWith('/jira/workflow')) {
+        return JSON.stringify({
+          source: 'project',
+          version: 1,
+          stages: [
+            stage('todo', 'To Do', 'todo', ['Backlog']),
+            stage('done', 'Done', 'done', ['Done'])
+          ],
+          suggestions: {}
+        })
+      }
+      if (path.endsWith('/jira/statuses')) {
+        return JSON.stringify({ jiraAvailable: true, statuses: [] })
+      }
+      if (path.startsWith('/api/sonar')) {
+        return JSON.stringify({ configured: false })
+      }
+      return JSON.stringify({ payloads: [], entries: [] })
+    })
+
+  const openDirtyWorkflow = async () => {
+    serve()
+    window.history.replaceState(null, '', '/#/settings/jira-workflow')
+    render(<App />)
+    await screen.findByRole('group', { name: 'To Do' }, LAZY_VIEW)
+    await userEvent.type(
+      screen.getByRole('combobox', { name: 'Add a status to To Do' }),
+      'Triage{Enter}'
+    )
+  }
+
+  const settingsHeading = () =>
+    screen.queryByRole('heading', { level: 1, name: 'Settings' })
+
+  test('Should stay on the page when the user cancels leaving through the navigation', async () => {
+    vi.spyOn(window, 'confirm').mockReturnValue(false)
+    await openDirtyWorkflow()
+
+    await userEvent.click(screen.getByRole('link', { name: 'Overview' }))
+
+    expect(window.confirm).toHaveBeenCalledOnce()
+    expect(settingsHeading()).toBeInTheDocument()
+    expect(window.location.hash).toContain('settings/jira-workflow')
+  })
+
+  test('Should leave the page when the user accepts losing the changes', async () => {
+    vi.spyOn(window, 'confirm').mockReturnValue(true)
+    await openDirtyWorkflow()
+
+    await userEvent.click(screen.getByRole('link', { name: 'Overview' }))
+
+    expect(
+      await screen.findByRole(
+        'heading',
+        { level: 1, name: 'Project Overview' },
+        LAZY_VIEW
+      )
+    ).toBeInTheDocument()
+  })
+
+  test('Should stay on the page when the user cancels switching project', async () => {
+    vi.spyOn(window, 'confirm').mockReturnValue(false)
+    await openDirtyWorkflow()
+
+    await userEvent.click(screen.getByRole('button', { name: /Project:/ }))
+    await userEvent.click(screen.getByRole('option', { name: /Other/ }))
+
+    expect(window.confirm).toHaveBeenCalledOnce()
+    expect(settingsHeading()).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /Project:/ })).toHaveTextContent(
+      'MMO Catch Recording'
+    )
+  })
+
+  test('Should stay on the page when the user cancels a hash change such as Back', async () => {
+    vi.spyOn(window, 'confirm').mockReturnValue(false)
+    await openDirtyWorkflow()
+    const shown = window.location.hash
+
+    window.history.pushState(null, '', '/#/overview')
+    window.dispatchEvent(new PopStateEvent('popstate'))
+
+    await waitFor(() => expect(window.confirm).toHaveBeenCalled())
+    expect(settingsHeading()).toBeInTheDocument()
+    expect(window.location.hash).toBe(shown)
+  })
+
+  test('Should not ask when there are no unsaved changes', async () => {
+    vi.spyOn(window, 'confirm').mockReturnValue(false)
+    serve()
+    window.history.replaceState(null, '', '/#/settings/jira-workflow')
+    render(<App />)
+    await screen.findByRole('group', { name: 'To Do' }, LAZY_VIEW)
+
+    await userEvent.click(screen.getByRole('link', { name: 'Overview' }))
+
+    expect(window.confirm).not.toHaveBeenCalled()
+    expect(
+      await screen.findByRole(
+        'heading',
+        { level: 1, name: 'Project Overview' },
+        LAZY_VIEW
+      )
+    ).toBeInTheDocument()
+  })
+})
+
 describe('#App access by role', () => {
   const LAZY_VIEW = { timeout: 10000 }
 
@@ -988,7 +1120,8 @@ describe('#App onboarding and help', () => {
     )
     await userEvent.type(screen.getByLabelText('Project name'), 'New Service')
     await userEvent.type(screen.getByLabelText(/^Project slug/), 'NSVC')
-    await userEvent.click(screen.getByLabelText('AI-native'))
+    await userEvent.click(screen.getByLabelText('AI-Native'))
+    await userEvent.type(screen.getByLabelText('Jira project key'), 'NSVC')
     await userEvent.click(
       screen.getByRole('button', { name: 'Save and continue' })
     )
@@ -997,7 +1130,10 @@ describe('#App onboarding and help', () => {
       await screen.findByRole('link', { name: 'Connect Repositories' })
     )
     await userEvent.click(
-      await screen.findByRole('checkbox', { name: 'DEFRA/new-a' })
+      await screen.findByRole('combobox', { name: 'Add a repository' })
+    )
+    await userEvent.click(
+      await screen.findByRole('option', { name: 'DEFRA/new-a' })
     )
     await userEvent.click(
       screen.getByRole('button', { name: 'Save and continue' })

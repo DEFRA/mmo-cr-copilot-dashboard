@@ -67,7 +67,7 @@ exists, because the dashboard consumes its output.
 - Whether commits made outside VS Code (terminal, other IDEs) must be covered.
 - Packaging, signing and publisher.
 
-Resolved by backend ADR 0005 §4 (D16): AI line share is collected for AI-native projects but
+Resolved by backend ADR 0005 §4 (D16): AI line share is collected for AI-Native projects but
 feeds only AI code durability, never an adoption metric.
 
 ## References

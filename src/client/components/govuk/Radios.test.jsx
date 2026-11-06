@@ -5,8 +5,8 @@ import { axeViolations } from '#/test-helpers/axe.js'
 import { Radios } from './Radios.jsx'
 
 const ITEMS = [
-  { value: 'adopted', text: 'AI-adopted', hint: 'Copilot added later' },
-  { value: 'native', text: 'AI-native' },
+  { value: 'adopted', text: 'AI-Adopted', hint: 'Copilot added later' },
+  { value: 'native', text: 'AI-Native' },
   { value: 'none', text: 'Not set', disabled: true }
 ]
 
@@ -20,7 +20,7 @@ describe('#Radios', () => {
     expect(screen.getAllByRole('radio')).toHaveLength(3)
     expect(screen.getByRole('radio', { name: 'Not set' })).toBeDisabled()
     expect(
-      screen.getByRole('radio', { name: 'AI-adopted' })
+      screen.getByRole('radio', { name: 'AI-Adopted' })
     ).toHaveAccessibleDescription('Copilot added later')
   })
 
@@ -35,24 +35,24 @@ describe('#Radios', () => {
       />
     )
 
-    expect(screen.getByRole('radio', { name: 'AI-native' })).toBeChecked()
+    expect(screen.getByRole('radio', { name: 'AI-Native' })).toBeChecked()
 
-    await userEvent.click(screen.getByRole('radio', { name: 'AI-adopted' }))
+    await userEvent.click(screen.getByRole('radio', { name: 'AI-Adopted' }))
 
     expect(onChange).toHaveBeenCalledWith('adopted')
-    expect(screen.getByRole('radio', { name: 'AI-adopted' })).toBeChecked()
+    expect(screen.getByRole('radio', { name: 'AI-Adopted' })).toBeChecked()
   })
 
   test('Should follow a controlled value', () => {
     const { rerender } = render(
       <Radios legend="Type" items={ITEMS} value="adopted" onChange={vi.fn()} />
     )
-    expect(screen.getByRole('radio', { name: 'AI-adopted' })).toBeChecked()
+    expect(screen.getByRole('radio', { name: 'AI-Adopted' })).toBeChecked()
 
     rerender(
       <Radios legend="Type" items={ITEMS} value="native" onChange={vi.fn()} />
     )
-    expect(screen.getByRole('radio', { name: 'AI-native' })).toBeChecked()
+    expect(screen.getByRole('radio', { name: 'AI-Native' })).toBeChecked()
   })
 
   test('Should describe the group with its hint and error', () => {
@@ -76,16 +76,16 @@ describe('#Radios', () => {
     expect(group.closest('.govuk-form-group')).toHaveClass(
       'govuk-form-group--error'
     )
-    expect(screen.getByRole('radio', { name: 'AI-adopted' })).toHaveAttribute(
+    expect(screen.getByRole('radio', { name: 'AI-Adopted' })).toHaveAttribute(
       'id',
       'type'
     )
-    expect(screen.getByRole('radio', { name: 'AI-native' })).toHaveAttribute(
+    expect(screen.getByRole('radio', { name: 'AI-Native' })).toHaveAttribute(
       'id',
       'type-2'
     )
     expect(
-      screen.getByRole('radio', { name: 'AI-native' }).closest('.govuk-radios')
+      screen.getByRole('radio', { name: 'AI-Native' }).closest('.govuk-radios')
     ).toHaveClass('govuk-radios--inline', 'govuk-radios--small')
   })
 

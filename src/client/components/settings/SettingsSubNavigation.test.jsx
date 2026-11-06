@@ -16,6 +16,18 @@ describe('#settingsTabsFor', () => {
     [
       { canAdminister: true, isDashboardAdmin: true },
       ['personas', 'repositories', 'roles', 'audit-log']
+    ],
+    [
+      { canAdminister: true, isDashboardAdmin: false, jiraConnected: true },
+      ['personas', 'repositories', 'jira-workflow', 'audit-log']
+    ],
+    [
+      { canAdminister: true, isDashboardAdmin: true, jiraConnected: true },
+      ['personas', 'repositories', 'jira-workflow', 'roles', 'audit-log']
+    ],
+    [
+      { canAdminister: false, isDashboardAdmin: false, jiraConnected: true },
+      ['audit-log']
     ]
   ])('Should offer the right tabs for %o', (permissions, expected) => {
     expect(ids(permissions)).toStrictEqual(expected)
@@ -23,12 +35,15 @@ describe('#settingsTabsFor', () => {
 
   test('Should label every tab in Title Case', () => {
     expect(
-      settingsTabsFor({ canAdminister: true, isDashboardAdmin: true }).map(
-        (t) => t.label
-      )
+      settingsTabsFor({
+        canAdminister: true,
+        isDashboardAdmin: true,
+        jiraConnected: true
+      }).map((t) => t.label)
     ).toStrictEqual([
       'Persona Mappings',
       'Repositories',
+      'Jira Workflow',
       'Role Mappings',
       'Audit Log'
     ])
@@ -68,6 +83,24 @@ describe('#SettingsSubNavigation', () => {
 
     expect(screen.getAllByRole('link')).toHaveLength(1)
     expect(screen.queryByRole('link', { name: 'Role Mappings' })).toBeNull()
+  })
+
+  test('Should link the Jira workflow only when the project uses Jira', () => {
+    const { rerender } = renderNav()
+    expect(screen.queryByRole('link', { name: 'Jira Workflow' })).toBeNull()
+
+    rerender(
+      <SettingsSubNavigation
+        canAdminister
+        isDashboardAdmin={false}
+        jiraConnected
+        activeTab="jira-workflow"
+      />
+    )
+
+    const link = screen.getByRole('link', { name: 'Jira Workflow' })
+    expect(link).toHaveAttribute('href', '#/settings/jira-workflow')
+    expect(link).toHaveAttribute('aria-current', 'page')
   })
 
   test('Should hand a plain click to onNavigate instead of following the link', async () => {

@@ -1,5 +1,8 @@
+import { useEffect, useState } from 'react'
+
 import { InsetText } from '../govuk'
 import { AuditLogPanel } from '../AuditLogPanel'
+import { JiraWorkflowPanel } from '../settings/JiraWorkflowPanel'
 import { PersonaMappingsSection } from '../settings/PersonaMappingsSection'
 import { RepositoryMappingPanel } from '../settings/RepositoryMappingPanel'
 import { RoleMappingsPanel } from '../settings/RoleMappingsPanel'
@@ -9,11 +12,13 @@ import {
   settingsTabsFor
 } from '../settings/SettingsSubNavigation'
 import { useRepositories } from '../../hooks/useRepositories'
+import { hasJira } from '../../lib/jira'
 import {
   ROLE_LABEL,
   canAdministerProject,
   effectiveRole
 } from '../../lib/roles'
+import { confirmDiscard } from '../../lib/unsaved'
 
 /**
  * Settings for the active project, one section at a time. Project admins
@@ -32,14 +37,32 @@ export function SettingsView({
   isDashboardAdmin = false,
   contributors = [],
   tab,
-  onTabChange
+  onTabChange,
+  onUnsavedChange
 }) {
+  const [workflowDirty, setWorkflowDirty] = useState(false)
   const resolvedRole = effectiveRole(role, isDashboardAdmin)
   const canAdminister = canAdministerProject(resolvedRole)
   const repos = useRepositories(canAdminister)
   const handleRepositoriesChanged = repos.refresh
-  const tabs = settingsTabsFor({ canAdminister, isDashboardAdmin })
+  const jiraConnected = hasJira(project)
+  const tabs = settingsTabsFor({
+    canAdminister,
+    isDashboardAdmin,
+    jiraConnected
+  })
   const activeTab = tabs.some((t) => t.id === tab) ? tab : tabs[0].id
+
+  useEffect(() => {
+    onUnsavedChange?.(workflowDirty)
+  }, [workflowDirty, onUnsavedChange])
+
+  useEffect(() => () => onUnsavedChange?.(false), [onUnsavedChange])
+
+  const handleTabChange = (next) => {
+    if (next !== activeTab && !confirmDiscard(workflowDirty)) return
+    onTabChange?.(next)
+  }
 
   return (
     <>
@@ -52,8 +75,9 @@ export function SettingsView({
       <SettingsSubNavigation
         canAdminister={canAdminister}
         isDashboardAdmin={isDashboardAdmin}
+        jiraConnected={jiraConnected}
         activeTab={activeTab}
-        onNavigate={onTabChange}
+        onNavigate={handleTabChange}
       />
 
       {!canAdminister && (
@@ -80,6 +104,13 @@ export function SettingsView({
           unassigned={repos.unassigned}
           status={repos.status}
           onChanged={handleRepositoriesChanged}
+        />
+      )}
+      {activeTab === 'jira-workflow' && (
+        <JiraWorkflowPanel
+          key={project?.slug}
+          project={project}
+          onDirtyChange={setWorkflowDirty}
         />
       )}
       {activeTab === 'roles' && <RoleMappingsPanel projects={projects} />}

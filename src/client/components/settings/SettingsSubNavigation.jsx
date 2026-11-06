@@ -4,19 +4,25 @@ import { SETTINGS_TABS, toHash } from '../../lib/routes'
 const TAB_LABEL = {
   personas: 'Persona Mappings',
   repositories: 'Repositories',
+  'jira-workflow': 'Jira Workflow',
   roles: 'Role Mappings',
   'audit-log': 'Audit Log'
 }
 
 /**
- * The settings sections a caller may open: admins manage personas and
- * repositories, only dashboard admins manage roles, and everyone reads the
- * audit log.
+ * The settings sections a caller may open: admins manage personas,
+ * repositories and (with a Jira key) the Jira workflow, only dashboard admins
+ * manage roles, and everyone reads the audit log.
  */
-export function settingsTabsFor({ canAdminister, isDashboardAdmin }) {
+export function settingsTabsFor({
+  canAdminister,
+  isDashboardAdmin,
+  jiraConnected = false
+}) {
   const allowed = {
     personas: canAdminister,
     repositories: canAdminister,
+    'jira-workflow': canAdminister && jiraConnected,
     roles: isDashboardAdmin,
     'audit-log': true
   }
@@ -30,10 +36,15 @@ export function settingsTabsFor({ canAdminister, isDashboardAdmin }) {
 export function SettingsSubNavigation({
   canAdminister,
   isDashboardAdmin,
+  jiraConnected = false,
   activeTab,
   onNavigate
 }) {
-  const tabs = settingsTabsFor({ canAdminister, isDashboardAdmin })
+  const tabs = settingsTabsFor({
+    canAdminister,
+    isDashboardAdmin,
+    jiraConnected
+  })
 
   return (
     <nav className="moj-sub-navigation" aria-label="Settings sections">

@@ -96,3 +96,27 @@ describe('#design tokens', () => {
     ).toBeGreaterThanOrEqual(3)
   })
 })
+
+describe('#text control max width', () => {
+  const COMPONENTS = readFileSync('src/client/styles/_components.scss', 'utf8')
+
+  test('Should define the cap at 36rem', () => {
+    expect(SOURCE).toContain('--app-input-max-width: 36rem;')
+  })
+
+  test('Should cap inputs, textareas and selects with the token', () => {
+    expect(COMPONENTS).toMatch(
+      /\.govuk-input,\s*\.govuk-textarea\s*{\s*width: min\(100%, var\(--app-input-max-width\)\);/
+    )
+    expect(COMPONENTS).toMatch(
+      /\.govuk-select\s*{\s*max-width: min\(100%, var\(--app-input-max-width\)\);/
+    )
+  })
+
+  test('Should centre the onboarding column using a width token', () => {
+    expect(SOURCE).toContain('--app-onboarding-max-width: 40rem;')
+    expect(COMPONENTS).toMatch(
+      /\.app-onboarding\s*{\s*max-width: var\(--app-onboarding-max-width\);\s*margin-inline: auto;/
+    )
+  })
+})

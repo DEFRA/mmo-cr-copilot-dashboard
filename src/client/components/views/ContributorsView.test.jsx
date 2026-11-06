@@ -22,7 +22,7 @@ const names = () =>
     .map((b) => b.textContent)
 
 describe('#ContributorsView', () => {
-  test('Should frame AI-native contributors for diagnosis, sorted by name', () => {
+  test('Should frame AI-Native contributors for diagnosis, sorted by name', () => {
     render(
       <ContributorsView
         payloads={payloads}
@@ -38,7 +38,7 @@ describe('#ContributorsView', () => {
     ).not.toBeInTheDocument()
   })
 
-  test('Should keep the assist rate for AI-adopted projects', () => {
+  test('Should keep the assist rate for AI-Adopted projects', () => {
     render(<ContributorsView payloads={payloads} onOpenContributor={vi.fn()} />)
 
     expect(
