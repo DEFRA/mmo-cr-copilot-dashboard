@@ -2,6 +2,7 @@ import { render, screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 
 import { buildPayloadV2 } from '#/test-helpers/payload-fixture.js'
+import { axeViolations } from '#/test-helpers/axe.js'
 import { chartOptions } from '#/test-helpers/charts.js'
 import {
   selectDoneTickets,
@@ -142,6 +143,11 @@ describe('#DeliveryView', () => {
       expect(
         screen.getByRole('link', { name: /map them in settings/i })
       ).toHaveAttribute('href', '#/settings/jira-workflow')
+      expect(
+        screen.getByRole('link', {
+          name: 'Map them in Settings, under Jira Workflow and Definition of Done'
+        })
+      ).toBeVisible()
     })
 
     test('Should use the singular for one status', () => {
@@ -165,6 +171,249 @@ describe('#DeliveryView', () => {
       expect(
         screen.queryByText(/not in any workflow stage/)
       ).not.toBeInTheDocument()
+    })
+  })
+
+  describe('Jira notices', () => {
+    const withJira = (jira, extra = {}) => ({
+      ...success,
+      metrics: { ...metrics, jira, ...extra }
+    })
+    const region = (name) => screen.queryByRole('region', { name })
+
+    test('Should show no notice when the backend sends none', () => {
+      renderDelivery()
+
+      expect(region('Jira Not Reached')).toBeNull()
+      expect(region('Refreshing Jira Data')).toBeNull()
+      expect(screen.queryByText(/quality gates are not yet/)).toBeNull()
+    })
+
+    test('Should say Jira is being refreshed without hiding the metrics', () => {
+      renderDelivery({ delivery: withJira({ pending: true }) })
+
+      expect(region('Refreshing Jira Data')).toHaveTextContent(
+        'Jira data is being refreshed. This page updates when it is ready.'
+      )
+      expect(screen.getByText(/ticket reopen rate/i)).toBeInTheDocument()
+    })
+
+    test.each([
+      ['stale', { stale: true }],
+      ['unavailable', { error: 'unavailable' }]
+    ])('Should say Jira could not be reached when %s', (_, jira) => {
+      renderDelivery({ delivery: withJira(jira) })
+
+      expect(region('Jira Not Reached')).toHaveTextContent(
+        'Jira could not be reached; showing the last data stored.'
+      )
+    })
+
+    test('Should give the time the data was last refreshed', () => {
+      renderDelivery({
+        delivery: withJira({
+          stale: true,
+          refreshedAt: '2026-01-14T12:00:00.000Z'
+        })
+      })
+
+      expect(region('Jira Not Reached')).toHaveTextContent(
+        'showing the last data stored, from 14 Jan, 12:00 UTC.'
+      )
+    })
+
+    test('Should ignore a malformed refresh time and flag', () => {
+      renderDelivery({
+        delivery: withJira({ stale: 'true', pending: 'yes', refreshedAt: 'x' })
+      })
+
+      expect(region('Jira Not Reached')).toBeNull()
+      expect(region('Refreshing Jira Data')).toBeNull()
+    })
+
+    test('Should tell a project admin the Jira credentials were rejected', () => {
+      renderDelivery({
+        delivery: withJira({ error: 'credentials' }),
+        canAdminister: true
+      })
+
+      expect(region('Jira Credentials Rejected')).toBeVisible()
+      expect(region('Jira Not Reached')).toBeNull()
+    })
+
+    test('Should tell a project admin the Jira project is not visible', () => {
+      renderDelivery({
+        delivery: withJira({ error: 'not-visible' }),
+        canAdminister: true
+      })
+
+      expect(region('Jira Project Not Visible')).toBeVisible()
+    })
+
+    test.each(['credentials', 'not-visible'])(
+      'Should give other users the plain unreachable notice for %s',
+      (error) => {
+        renderDelivery({ delivery: withJira({ error }) })
+
+        expect(region('Jira Not Reached')).toBeVisible()
+        expect(region('Jira Credentials Rejected')).toBeNull()
+        expect(region('Jira Project Not Visible')).toBeNull()
+      }
+    )
+
+    test('Should hint when some quality gates are not yet available', () => {
+      renderDelivery({
+        delivery: withJira(undefined, { sonar: { stale: true } })
+      })
+
+      expect(
+        screen.getByText('Some quality gates are not yet available.')
+      ).toBeVisible()
+    })
+
+    test('Should have no detectable accessibility violations', async () => {
+      render(
+        <DeliveryView
+          delivery={withJira({ pending: true, stale: true })}
+          payloads={payloads}
+          window={WINDOW}
+          jiraConnected
+          onOpenTicket={vi.fn()}
+          onOpenPR={vi.fn()}
+        />
+      )
+
+      expect(await axeViolations(document.body)).toEqual([])
+    })
+  })
+
+  describe('Story throughput', () => {
+    test('Should show stories, story points, bugs and other items separately', () => {
+      renderDelivery({
+        delivery: {
+          ...success,
+          metrics: {
+            ...metrics,
+            storiesDelivered: 4,
+            storyPointsDelivered: 13,
+            bugsDelivered: 2,
+            otherItemsDelivered: 1
+          }
+        }
+      })
+
+      for (const [name, value] of [
+        [/stories delivered/i, '4'],
+        [/story points delivered/i, '13'],
+        [/bugs delivered/i, '2'],
+        [/other items delivered/i, '1']
+      ]) {
+        expect(screen.getByRole('article', { name })).toHaveTextContent(value)
+      }
+    })
+
+    test('Should drill throughput into delivered stories only', async () => {
+      renderDelivery({
+        delivery: {
+          ...success,
+          issues: [
+            ...issues,
+            {
+              key: 'MMO-127',
+              summary: 'Sub work',
+              issueType: 'Sub-task',
+              status: { name: 'Done', categoryKey: 'done' },
+              created: '2026-01-09T00:00:00.000Z',
+              started: '2026-01-10T00:00:00.000Z',
+              resolved: '2026-01-12T00:00:00.000Z'
+            }
+          ]
+        }
+      })
+
+      await userEvent.click(
+        screen.getByRole('button', { name: /stories delivered/i })
+      )
+
+      const drill = document.getElementById('delivery-drill-flow')
+      expect(
+        within(drill).getByRole('button', { name: /MMO-123/ })
+      ).toBeVisible()
+      expect(
+        within(drill).queryByRole('button', { name: /MMO-127/ })
+      ).toBeNull()
+      expect(
+        screen.getByText(/Distinct stories reaching Done/)
+      ).toBeInTheDocument()
+    })
+
+    test('Should drill other items into those that are neither stories nor bugs', async () => {
+      renderDelivery({
+        delivery: {
+          ...success,
+          issues: [
+            ...issues,
+            {
+              key: 'MMO-128',
+              summary: 'Parentless task',
+              issueType: 'Task',
+              status: { name: 'Done', categoryKey: 'done' },
+              created: '2026-01-09T00:00:00.000Z',
+              started: '2026-01-10T00:00:00.000Z',
+              resolved: '2026-01-12T00:00:00.000Z'
+            }
+          ]
+        }
+      })
+
+      await userEvent.click(
+        screen.getByRole('button', { name: /other items delivered/i })
+      )
+
+      const drill = document.getElementById('delivery-drill-flow')
+      expect(
+        within(drill).getByRole('button', { name: /MMO-128/ })
+      ).toBeVisible()
+      expect(
+        within(drill).queryByRole('button', { name: /MMO-123/ })
+      ).toBeNull()
+    })
+
+    test('Should list the points of each delivered story', async () => {
+      renderDelivery()
+
+      await userEvent.click(
+        screen.getByRole('button', { name: /story points delivered/i })
+      )
+
+      const drill = document.getElementById('delivery-drill-flow')
+      expect(within(drill).getByText('3 points')).toBeVisible()
+    })
+
+    test('Should chart stories delivered per sprint', () => {
+      renderDelivery({
+        trend: {
+          status: 'success',
+          points: [
+            {
+              label: 'S6',
+              delivered: 4,
+              predictability: 75,
+              changeFailRate: 0
+            },
+            {
+              label: 'S7',
+              delivered: 5,
+              predictability: 80,
+              changeFailRate: 40
+            }
+          ]
+        }
+      })
+
+      expect(
+        screen.getByRole('heading', { name: /Stories Delivered per Sprint/ })
+      ).toBeVisible()
     })
   })
 
@@ -201,11 +450,13 @@ describe('#DeliveryView', () => {
     ).toBeInTheDocument()
   })
 
-  test('Should show an empty ticket table when nothing is synced', () => {
+  test('Should explain that no tickets are linked yet', () => {
     renderDelivery({ delivery: { ...success, issues: [] } })
 
     expect(
-      screen.getByText('No Jira tickets have been synced for this project yet.')
+      screen.getByText(
+        "No Jira tickets are linked to this project's pull requests yet. A ticket appears here once a pull request names it in its branch, title or commit messages."
+      )
     ).toBeInTheDocument()
   })
 
@@ -339,7 +590,7 @@ describe('#TicketView', () => {
     expect(onOpenTicket).toHaveBeenCalledWith('MMO-124')
   })
 
-  test('Should say when the ticket has not been synced', () => {
+  test('Should say when the ticket has not been fetched', () => {
     render(
       <TicketView
         ticketKey="MMO-999"
@@ -351,7 +602,29 @@ describe('#TicketView', () => {
     )
 
     expect(
-      screen.getByText('Ticket MMO-999 has not been synced from Jira.')
+      screen.getByText(
+        "We have no details for ticket MMO-999. Only tickets linked to this project's pull requests, and their parent stories, are fetched from Jira."
+      )
     ).toBeInTheDocument()
+  })
+
+  test('Should show the Jira notices and keep the ticket on screen', () => {
+    render(
+      <TicketView
+        ticketKey="MMO-123"
+        delivery={{
+          ...success,
+          metrics: { ...metrics, jira: { stale: true } }
+        }}
+        payloads={payloads}
+        jiraConnected
+        onOpenPR={vi.fn()}
+      />
+    )
+
+    expect(
+      screen.getByRole('region', { name: 'Jira Not Reached' })
+    ).toBeVisible()
+    expect(screen.getByText('Cycle time scatter')).toBeVisible()
   })
 })

@@ -513,6 +513,16 @@ describe('#api proxy routes', () => {
         ...(headers ? { headers } : {})
       })
 
+    test('Should not proxy the retired Jira sync route', async () => {
+      const { statusCode } = await write({
+        method: 'POST',
+        url: `${base}/sync`
+      })
+
+      expect(statusCode).toBe(statusCodes.notFound)
+      expect(fetchMock).not.toHaveBeenCalled()
+    })
+
     test.each(['workflow', 'statuses'])(
       'Should forward the %s read to the project route',
       async (path) => {
@@ -1188,56 +1198,6 @@ describe('#api proxy routes', () => {
       const { statusCode } = await server.inject(
         '/api/projects/INVALID_SLUG!/jira-issues'
       )
-
-      expect(statusCode).toBe(statusCodes.badRequest)
-      expect(fetchMock).not.toHaveBeenCalled()
-    })
-  })
-
-  describe('POST /api/projects/{slug}/jira/sync', () => {
-    test('Should forward with POST to backend jira sync endpoint when admin', async () => {
-      fetchMock.mockResponse(JSON.stringify({ synced: 5 }))
-
-      const { statusCode, result } = await write({
-        method: 'POST',
-        url: '/api/projects/ALPH/jira/sync'
-      })
-
-      expect(statusCode).toBe(statusCodes.ok)
-      expect(result).toEqual({ synced: 5 })
-      expect(upstreamUrl()).toBe(`${BACKEND}/api/projects/ALPH/jira/sync`)
-
-      const [, options] = fetchMock.mock.calls[0]
-      expect(options.method).toBe('POST')
-    })
-
-    test('Should forbid when non-admin', async () => {
-      const { statusCode } = await write({
-        method: 'POST',
-        url: '/api/projects/ALPH/jira/sync',
-        headers: { 'x-dev-user-role': 'user' }
-      })
-
-      expect(statusCode).toBe(statusCodes.forbidden)
-      expect(fetchMock).not.toHaveBeenCalled()
-    })
-
-    test('Should reject mutating requests when session cookie exists without x-requested-with', async () => {
-      const { statusCode } = await server.inject({
-        method: 'POST',
-        url: '/api/projects/ALPH/jira/sync',
-        headers: { cookie: 'session=abc123xyz' }
-      })
-
-      expect(statusCode).toBe(statusCodes.forbidden)
-      expect(fetchMock).not.toHaveBeenCalled()
-    })
-
-    test('Should reject invalid slug parameter', async () => {
-      const { statusCode } = await write({
-        method: 'POST',
-        url: '/api/projects/INVALID_SLUG!/jira/sync'
-      })
 
       expect(statusCode).toBe(statusCodes.badRequest)
       expect(fetchMock).not.toHaveBeenCalled()

@@ -3,6 +3,7 @@ import { useId, useMemo } from 'react'
 import { ChartFigure, JiraStatusTag, Panel, PanelState } from '../dashboard'
 import {
   InsetText,
+  NotificationBanner,
   SortableTable,
   SummaryList,
   Tag,
@@ -43,6 +44,9 @@ const DELIVERY_GROUPS = [
     icon: 'layers',
     kpis: [
       'throughput',
+      'storyPoints',
+      'bugsDelivered',
+      'otherDelivered',
       'cycle',
       'lead',
       'flow',
@@ -120,10 +124,62 @@ export function UnmappedStatusesNotice({ workflow, canAdminister }) {
         className="govuk-link"
         href={toHash({ level: 'settings', tab: 'jira-workflow' })}
       >
-        Map them in Settings, under Jira Workflow
+        Map them in Settings, under Jira Workflow and Definition of Done
       </a>
       .
     </InsetText>
+  )
+}
+
+const ADMIN_ERRORS = new Set(['credentials', 'not-visible'])
+
+/**
+ * What the backend says about the Jira refresh behind the metrics. Additive:
+ * the metrics always render, and an older backend sends no `jira` at all.
+ */
+export function JiraNotices({ metrics, canAdminister = false }) {
+  const jira = metrics?.jira
+  const error = typeof jira?.error === 'string' ? jira.error : null
+  const adminError = canAdminister && ADMIN_ERRORS.has(error)
+  const unreachable =
+    jira?.stale === true ||
+    error === 'unavailable' ||
+    (ADMIN_ERRORS.has(error) && !canAdminister)
+  const at = Date.parse(jira?.refreshedAt)
+
+  return (
+    <>
+      {jira?.pending === true && (
+        <NotificationBanner title="Refreshing Jira Data" headingLevel={3}>
+          Jira data is being refreshed. This page updates when it is ready.
+        </NotificationBanner>
+      )}
+      {error === 'credentials' && adminError && (
+        <NotificationBanner title="Jira Credentials Rejected" headingLevel={3}>
+          Jira rejected the credentials this dashboard uses, so Jira data cannot
+          be refreshed. Check the Jira credentials for this service.
+        </NotificationBanner>
+      )}
+      {error === 'not-visible' && adminError && (
+        <NotificationBanner title="Jira Project Not Visible" headingLevel={3}>
+          The Jira account this dashboard uses cannot see this project&rsquo;s
+          Jira project, so Jira data cannot be refreshed. Give that account
+          access to the project in Jira.
+        </NotificationBanner>
+      )}
+      {unreachable && (
+        <NotificationBanner title="Jira Not Reached" headingLevel={3}>
+          {Number.isFinite(at)
+            ? `Jira could not be reached; showing the last data stored, from ${formatDateTime(at)} UTC.`
+            : 'Jira could not be reached; showing the last data stored.'}
+        </NotificationBanner>
+      )}
+      {metrics?.sonar?.stale === true && (
+        <p className="govuk-body-s app-muted">
+          Some quality gates are not yet available.
+        </p>
+      )}
+    </>
   )
 }
 
@@ -188,6 +244,7 @@ export function DeliveryView({
         meta="Measured to Jira Done"
       />
       <DeliveryState status={status} jiraConnected={jiraConnected}>
+        <JiraNotices metrics={metrics} canAdminister={canAdminister} />
         <UnmappedStatusesNotice
           workflow={metrics?.workflow}
           canAdminister={canAdminister}
@@ -229,8 +286,8 @@ export function DeliveryView({
             <div className="app-grid">
               <ChartFigure
                 number={1}
-                title="Tickets Delivered per Sprint"
-                subtitle="Stories and bugs that reached Done in each sprint."
+                title="Stories Delivered per Sprint"
+                subtitle="Stories that reached Done in each sprint. Tasks and sub-tasks count toward their parent story; bugs are counted separately."
                 family="output"
                 icon="layers"
                 className="app-span-6"
@@ -241,7 +298,7 @@ export function DeliveryView({
                 rows={points.map((p) => [p.label, p.delivered ?? '–'])}
               >
                 <CategoryBar
-                  title="Tickets delivered per sprint"
+                  title="Stories delivered per sprint"
                   categories={points.map((p) => p.label)}
                   values={points.map((p) => p.delivered ?? 0)}
                   seriesName="Delivered"
@@ -323,7 +380,7 @@ export function DeliveryView({
           {rows.length === 0 ? (
             <PanelState
               state="empty"
-              emptyMessage="No Jira tickets have been synced for this project yet."
+              emptyMessage="No Jira tickets are linked to this project's pull requests yet. A ticket appears here once a pull request names it in its branch, title or commit messages."
             />
           ) : (
             <SortableTable
@@ -377,6 +434,7 @@ export function TicketView({
   delivery,
   payloads,
   jiraConnected,
+  canAdminister = false,
   onOpenTicket,
   onOpenPR
 }) {
@@ -396,11 +454,12 @@ export function TicketView({
         title={ticketKey}
       />
       <DeliveryState status={status} jiraConnected={jiraConnected}>
+        <JiraNotices metrics={delivery.metrics} canAdminister={canAdminister} />
         {!row ? (
           <PanelState
             state="empty"
             icon="ticket"
-            emptyMessage={`Ticket ${ticketKey} has not been synced from Jira.`}
+            emptyMessage={`We have no details for ticket ${ticketKey}. Only tickets linked to this project's pull requests, and their parent stories, are fetched from Jira.`}
           />
         ) : (
           <>

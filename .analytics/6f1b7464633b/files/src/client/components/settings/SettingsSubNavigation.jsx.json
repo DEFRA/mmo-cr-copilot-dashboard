@@ -1,0 +1,22 @@
+{
+  "schema": "ai-attribution-file/2",
+  "path": "src/client/components/settings/SettingsSubNavigation.jsx",
+  "added": 3,
+  "counts": {
+    "aiCompletion": 0,
+    "aiChat": 0,
+    "aiAgent": 3,
+    "aiModified": 0,
+    "pasted": 0,
+    "typed": 0,
+    "untracked": 0
+  },
+  "ranges": {
+    "ai-agent": "7,13-14"
+  },
+  "ai": [
+    [7, "a", "a049db6a", 0],
+    [13, "a", "7695bf02", 0],
+    [14, "a", "8dd0cb47", 0]
+  ]
+}

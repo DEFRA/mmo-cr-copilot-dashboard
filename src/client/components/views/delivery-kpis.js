@@ -5,6 +5,7 @@ const value = (n) => (n === null || n === undefined ? '–' : String(n))
 const days = (n) => (n === null || n === undefined ? '–' : `${n} days`)
 const prLabel = (pr) => `${shortRepoName(pr.repository)} #${pr.prNumber}`
 const isBug = (row) => /bug|defect/i.test(row.type)
+const isStory = (row) => /story/i.test(row.type)
 
 /**
  * Delivery KPI cards keyed by id, from the backend delivery metrics and the
@@ -127,13 +128,64 @@ export function buildDeliveryKpis({
     },
     throughput: {
       id: 'throughput',
-      label: 'Throughput',
+      label: 'Stories delivered',
       anchor: 'metric-throughput',
       family: 'output',
       icon: 'ticket',
       value: value(metrics.storiesDelivered),
-      sub: 'Tickets moved to Done',
-      drill: delivered
+      sub: 'Distinct stories reaching Done; bugs are counted separately',
+      drill: {
+        title: 'Stories delivered in the period',
+        hint: ' story',
+        items: tickets(done.filter(isStory), (r) => days(r.cycleDays))
+      }
+    },
+    storyPoints: {
+      id: 'story-points',
+      label: 'Story points delivered',
+      anchor: 'metric-throughput',
+      family: 'output',
+      icon: 'layers',
+      value: value(metrics.storyPointsDelivered),
+      sub: 'Points on the stories reaching Done',
+      drill: {
+        title: 'Story points by delivered story',
+        hint: ' story',
+        items: tickets(done.filter(isStory), (r) =>
+          plural(r.storyPoints ?? 0, 'point')
+        )
+      }
+    },
+    bugsDelivered: {
+      id: 'bugs-delivered',
+      label: 'Bugs delivered',
+      anchor: 'metric-throughput',
+      family: 'quality',
+      icon: 'bug',
+      value: value(metrics.bugsDelivered),
+      sub: 'Bugs reaching Done, not counted as stories',
+      drill: {
+        title: 'Bugs delivered in the period',
+        hint: ' bug',
+        items: tickets(done.filter(isBug), (r) => days(r.cycleDays))
+      }
+    },
+    otherDelivered: {
+      id: 'other-delivered',
+      label: 'Other items delivered',
+      anchor: 'metric-throughput',
+      family: 'output',
+      icon: 'ticket',
+      value: value(metrics.otherItemsDelivered),
+      sub: 'Delivered items that are neither stories nor bugs',
+      drill: {
+        title: 'Other items delivered in the period',
+        hint: ' ticket',
+        items: tickets(
+          done.filter((r) => !isStory(r) && !isBug(r)),
+          (r) => r.type || '–'
+        )
+      }
     },
     flow: {
       id: 'flow',

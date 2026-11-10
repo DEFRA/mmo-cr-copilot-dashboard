@@ -606,25 +606,6 @@ export const apiProxyRoutes = [
       forward(request, h, { path: `${projectPath(request)}/jira-issues` })
   },
   {
-    method: 'POST',
-    path: '/api/projects/{slug}/jira/sync',
-    options: {
-      validate: {
-        params: projectSlugParams
-      }
-    },
-    handler: (request, h) => {
-      verifyCsrf(request)
-      assertAdmin(request)
-      const { slug } = request.params
-
-      return forward(request, h, {
-        path: `/api/projects/${encodeURIComponent(slug)}/jira/sync`,
-        method: 'POST'
-      })
-    }
-  },
-  {
     method: 'GET',
     path: '/api/projects/{slug}/complexity-model',
     options: { validate: { params: projectSlugParams } },

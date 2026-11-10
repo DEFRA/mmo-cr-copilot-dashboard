@@ -490,7 +490,9 @@ describe('#SettingsView', () => {
     describe('Jira workflow tab', () => {
       const JIRA_PROJECT = { ...PROJECT, jira: { projectKeys: ['ALPHA'] } }
       const jiraLink = () =>
-        screen.queryByRole('link', { name: 'Jira Workflow' })
+        screen.queryByRole('link', {
+          name: 'Jira Workflow and Definition of Done'
+        })
 
       test('Should offer a project admin the tab when the project has a Jira key', () => {
         renderSettings({ project: JIRA_PROJECT })

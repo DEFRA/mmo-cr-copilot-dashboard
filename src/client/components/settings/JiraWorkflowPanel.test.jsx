@@ -2,6 +2,7 @@ import { render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 
 import { axeViolations } from '#/test-helpers/axe.js'
+import { STAGE_HINT } from '../../lib/jira-workflow'
 import { JiraWorkflowPanel } from './JiraWorkflowPanel'
 
 const PROJECT = {
@@ -240,7 +241,7 @@ describe('#JiraWorkflowPanel', () => {
 
       expect(
         screen.getByText(
-          'Using the standard statuses. Run a Jira sync or save your own.'
+          'Using the standard statuses. Save your own to change them.'
         )
       ).toBeVisible()
     })
@@ -271,7 +272,9 @@ describe('#JiraWorkflowPanel', () => {
         screen
           .getAllByRole('group')
           .map((g) => g.querySelector('legend').textContent)
-      ).toStrictEqual(STAGES.map((s) => s.label))
+      ).toStrictEqual(
+        STAGES.map((s) => (s.kind === 'done' ? 'Definition of Done' : s.label))
+      )
     })
 
     test('Should explain the To Do and Done stages as required', async () => {
@@ -283,10 +286,8 @@ describe('#JiraWorkflowPanel', () => {
         'Required. A ticket starts when it first moves out of one of these statuses.'
       )
       expect(
-        screen.getByRole('group', { name: 'Done' })
-      ).toHaveAccessibleDescription(
-        'Required. A ticket is delivered when it moves into one of these statuses.'
-      )
+        screen.getByRole('group', { name: 'Definition of Done' })
+      ).toHaveAccessibleDescription(STAGE_HINT.done)
       expect(
         screen.getByRole('group', { name: 'In Progress' })
       ).toHaveAccessibleDescription(
@@ -308,6 +309,27 @@ describe('#JiraWorkflowPanel', () => {
   })
 
   describe('Editing', () => {
+    test('Should show the saved Definition of Done and move focus to its input', async () => {
+      const user = userEvent.setup()
+      await renderPanel()
+
+      expect(screen.getByText('Done', { selector: 'strong' })).toBeVisible()
+
+      await user.click(
+        screen.getByRole('button', { name: 'Change the Definition of Done' })
+      )
+
+      expect(combobox('Definition of Done')).toHaveFocus()
+    })
+
+    test('Should show the saved Definition of Done, not unsaved edits', async () => {
+      const user = userEvent.setup()
+      await renderPanel()
+
+      await user.click(removeButton('Done', 'Definition of Done'))
+
+      expect(screen.getByText('Done', { selector: 'strong' })).toBeVisible()
+    })
     test('Should add a suggested status from the combobox', async () => {
       const user = userEvent.setup()
       await renderPanel()
@@ -384,7 +406,7 @@ describe('#JiraWorkflowPanel', () => {
 
       const input = combobox('To Do')
       expect(input).toHaveAccessibleDescription(
-        'Error: ‘done’ is already in Done. A status can only be in one stage.'
+        'Error: ‘done’ is already in Definition of Done. A status can only be in one stage.'
       )
       expect(input).toBeInvalid()
       expect(
@@ -502,7 +524,7 @@ describe('#JiraWorkflowPanel', () => {
       await renderPanel()
 
       await user.click(removeButton('Backlog', 'To Do'))
-      await user.click(removeButton('Done', 'Done'))
+      await user.click(removeButton('Done', 'Definition of Done'))
       await save(user)
 
       const summary = screen.getByRole('alert')
@@ -514,7 +536,7 @@ describe('#JiraWorkflowPanel', () => {
       ).toHaveAttribute('href', '#stage-todo-input')
       expect(
         within(summary).getByRole('link', {
-          name: 'Add at least one status to Done'
+          name: 'Add at least one status to Definition of Done'
         })
       ).toBeVisible()
       expect(combobox('To Do')).toHaveAccessibleDescription(
@@ -744,6 +766,17 @@ describe('#JiraWorkflowPanel', () => {
       expect(
         await screen.findByText(
           /We could not reach Jira, so this list only shows/
+        )
+      ).toHaveTextContent(/already linked to pull requests/)
+    })
+
+    test('Should say when Jira statuses have not been found yet', async () => {
+      serve({ statuses: json({ jiraAvailable: true, statuses: [] }) })
+      await renderPanel()
+
+      expect(
+        await screen.findByText(
+          'Statuses appear here when Jira can be reached or a pull request links to a Jira ticket.'
         )
       ).toBeVisible()
     })

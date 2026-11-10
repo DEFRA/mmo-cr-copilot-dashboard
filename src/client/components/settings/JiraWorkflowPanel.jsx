@@ -16,10 +16,13 @@ import { useJiraStatuses, useJiraWorkflow } from '../../hooks/useJiraWorkflow'
 import { NO_JIRA_KEY } from '../../lib/api-errors'
 import { hasJira } from '../../lib/jira'
 import {
+  DEFINITION_OF_DONE,
   STAGE_HINT,
   addStatusError,
+  definitionOfDone,
   isWorkflowDirty,
   stageOf,
+  stageTitle,
   statusOptions,
   tidyStatus,
   validateWorkflow,
@@ -64,13 +67,13 @@ function StatusesFound({ found, stages }) {
       busy={found.status === 'loading'}
     >
       <p className="govuk-body">
-        The statuses your Jira project uses and those on tickets already synced,
-        with the stage each one is in.
+        The statuses your Jira project uses and those on tickets linked to pull
+        requests, with the stage each one is in.
       </p>
       {found.status === 'success' && !found.jiraAvailable && (
         <InsetText>
-          We could not reach Jira, so this list only shows statuses from tickets
-          already synced.
+          We could not reach Jira, so this list only shows statuses on tickets
+          already linked to pull requests.
         </InsetText>
       )}
       {found.status === 'error' && found.statuses.length > 0 && (
@@ -83,7 +86,7 @@ function StatusesFound({ found, stages }) {
         title="Jira statuses"
         icon="ticket"
         emptyTag="No statuses found"
-        emptyMessage="Statuses appear here after a Jira sync."
+        emptyMessage="Statuses appear here when Jira can be reached or a pull request links to a Jira ticket."
         errorMessage="We could not load the Jira statuses. Try again later."
       >
         <Table
@@ -103,7 +106,7 @@ function StatusesFound({ found, stages }) {
                 s.name,
                 CATEGORY_LABEL[s.categoryKey] ?? 'Unknown',
                 stage ? (
-                  stage.label
+                  stageTitle(stage)
                 ) : (
                   <Tag key="stage" colour="grey">
                     Not mapped
@@ -152,6 +155,7 @@ export function JiraWorkflowPanel({ project, onDirtyChange }) {
     setEdit((e) => ({ ...e, stages: update(e.stages) }))
   const dirty = Boolean(workflow) && isWorkflowDirty(stages, workflow.stages)
   const detected = found.statuses.map((s) => s.name)
+  const doneStage = stages.find((s) => s.kind === 'done')
 
   useEffect(() => {
     if (!dirty) return undefined
@@ -198,6 +202,8 @@ export function JiraWorkflowPanel({ project, onDirtyChange }) {
       return rest
     })
 
+  const focusDone = () => inputs.current.get(doneStage.id)?.focus()
+
   const add = (stage, text) => {
     const error = addStatusError(stages, stage.id, text)
     if (error) {
@@ -213,7 +219,7 @@ export function JiraWorkflowPanel({ project, onDirtyChange }) {
     setQueries((q) => ({ ...q, [stage.id]: '' }))
     clearError(stage.id)
     setNotice(null)
-    setAnnounce(`${name} added to ${stage.label}`)
+    setAnnounce(`${name} added to ${stageTitle(stage)}`)
   }
 
   const remove = (stage, name) => {
@@ -225,7 +231,7 @@ export function JiraWorkflowPanel({ project, onDirtyChange }) {
       )
     )
     setNotice(null)
-    setAnnounce(`${name} removed from ${stage.label}`)
+    setAnnounce(`${name} removed from ${stageTitle(stage)}`)
     inputs.current.get(stage.id)?.focus()
   }
 
@@ -317,8 +323,26 @@ export function JiraWorkflowPanel({ project, onDirtyChange }) {
           <p className="govuk-body">
             Put each of your Jira statuses into a stage. A ticket starts when it
             first moves out of a To Do status and is delivered when it moves
-            into a Done status. Every delivery metric uses these stages.
+            into a status in your Definition of Done. Every delivery metric uses
+            these stages.
           </p>
+          {doneStage && (
+            <p className="govuk-body">
+              {DEFINITION_OF_DONE} in use:{' '}
+              <strong>
+                {definitionOfDone(workflow.stages).join(', ') ||
+                  'no statuses yet'}
+              </strong>
+              .{' '}
+              <button
+                type="button"
+                className="app-link-button"
+                onClick={focusDone}
+              >
+                Change the {DEFINITION_OF_DONE}
+              </button>
+            </p>
+          )}
           <InsetText className="govuk-!-margin-bottom-0">
             {workflowSourceText(workflow)}
           </InsetText>
@@ -329,7 +353,7 @@ export function JiraWorkflowPanel({ project, onDirtyChange }) {
             {stages.map((stage) => (
               <Panel
                 key={stage.id}
-                title={stage.label}
+                title={stageTitle(stage)}
                 family="speed"
                 icon="flow"
                 className="app-span-6"
@@ -345,7 +369,7 @@ export function JiraWorkflowPanel({ project, onDirtyChange }) {
                   aria-describedby={`stage-${stage.id}-hint`}
                 >
                   <legend className="govuk-visually-hidden">
-                    {stage.label}
+                    {stageTitle(stage)}
                   </legend>
                   <Hint id={`stage-${stage.id}-hint`}>
                     {STAGE_HINT[stage.kind]}
@@ -355,7 +379,7 @@ export function JiraWorkflowPanel({ project, onDirtyChange }) {
                   ) : (
                     <ul
                       className="app-repo-list"
-                      aria-label={`Statuses in ${stage.label}`}
+                      aria-label={`Statuses in ${stageTitle(stage)}`}
                     >
                       {stage.statuses.map((name) => (
                         <li className="app-repo-list__item" key={name}>
@@ -367,7 +391,7 @@ export function JiraWorkflowPanel({ project, onDirtyChange }) {
                           >
                             Remove{' '}
                             <span className="govuk-visually-hidden">
-                              {name} from {stage.label}
+                              {name} from {stageTitle(stage)}
                             </span>
                           </button>
                         </li>
@@ -376,7 +400,7 @@ export function JiraWorkflowPanel({ project, onDirtyChange }) {
                   )}
                   <Combobox
                     id={inputId(stage.id)}
-                    label={`Add a status to ${stage.label}`}
+                    label={`Add a status to ${stageTitle(stage)}`}
                     errorMessage={errors[stage.id]}
                     value={queries[stage.id] ?? ''}
                     onChange={(text) => {

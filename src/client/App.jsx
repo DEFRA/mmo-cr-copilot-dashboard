@@ -723,6 +723,7 @@ export default function App() {
           delivery={delivery}
           payloads={allPayloads}
           jiraConnected={jiraConnected}
+          canAdminister={canAdminister || isAdmin}
           onOpenTicket={openTicket}
           onOpenPR={openPR}
         />

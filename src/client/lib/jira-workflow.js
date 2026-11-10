@@ -26,10 +26,20 @@ export const STAGE_HINT = {
   todo: 'Required. A ticket starts when it first moves out of one of these statuses.',
   active: 'Optional. Time in these statuses counts as active work.',
   waiting: 'Optional. Time in these statuses counts as waiting.',
-  done: 'Required. A ticket is delivered when it moves into one of these statuses.',
+  done: 'Required. This is your Definition of Done: a ticket is delivered when it moves into one of these statuses. Put statuses that close a ticket without delivering it, such as Won’t Do, in Cancelled.',
   excluded:
     'Optional. Tickets that end in these statuses are left out of delivery metrics.'
 }
+
+export const DEFINITION_OF_DONE = 'Definition of Done'
+
+/** The name a stage is shown under; the done stage is the Definition of Done. */
+export const stageTitle = (stage) =>
+  stage?.kind === 'done' ? DEFINITION_OF_DONE : (stage?.label ?? '')
+
+/** Statuses in the done stage, in saved order; empty when there is none. */
+export const definitionOfDone = (stages) =>
+  (stages ?? []).filter((s) => s.kind === 'done').flatMap((s) => s.statuses)
 
 const isStringList = (value) =>
   Array.isArray(value) && value.every((s) => typeof s === 'string')
@@ -90,7 +100,7 @@ export function workflowSourceText(workflow) {
       : ''
     return `Detected from Jira${on}. You can change it and save.`
   }
-  return 'Using the standard statuses. Run a Jira sync or save your own.'
+  return 'Using the standard statuses. Save your own to change them.'
 }
 
 /** The stage holding a status, matched without case or spacing; or null. */
@@ -116,13 +126,13 @@ export function addStatusError(stages, stageId, text) {
   }
   const holder = stageOf(stages, name)
   if (holder && holder.id === stageId) {
-    return `‘${name}’ is already in ${holder.label}`
+    return `‘${name}’ is already in ${stageTitle(holder)}`
   }
   if (holder) {
-    return `‘${name}’ is already in ${holder.label}. A status can only be in one stage.`
+    return `‘${name}’ is already in ${stageTitle(holder)}. A status can only be in one stage.`
   }
   if (stage && stage.statuses.length >= MAX_STATUSES_PER_STAGE) {
-    return `${stage.label} can have up to ${MAX_STATUSES_PER_STAGE} statuses`
+    return `${stageTitle(stage)} can have up to ${MAX_STATUSES_PER_STAGE} statuses`
   }
   const total = stages.reduce((n, s) => n + s.statuses.length, 0)
   if (total >= MAX_STATUSES_TOTAL) {
@@ -136,7 +146,7 @@ export function validateWorkflow(stages) {
   const errors = {}
   for (const stage of stages) {
     if (stage.required && stage.statuses.length === 0) {
-      errors[stage.id] = `Add at least one status to ${stage.label}`
+      errors[stage.id] = `Add at least one status to ${stageTitle(stage)}`
     }
   }
   return errors

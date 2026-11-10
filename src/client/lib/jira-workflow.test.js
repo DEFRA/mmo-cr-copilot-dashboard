@@ -1,11 +1,14 @@
 import {
+  DEFINITION_OF_DONE,
   MAX_STATUSES_PER_STAGE,
   MAX_STATUSES_TOTAL,
   STAGE_HINT,
   addStatusError,
+  definitionOfDone,
   isWorkflowDirty,
   normaliseStatus,
   stageOf,
+  stageTitle,
   statusOptions,
   tidyStatus,
   toWorkflow,
@@ -53,8 +56,26 @@ describe('#STAGE_HINT', () => {
       'A ticket starts when it first moves out of one of these statuses.'
     )
     expect(STAGE_HINT.done).toContain(
-      'A ticket is delivered when it moves into one of these statuses.'
+      'a ticket is delivered when it moves into one of these statuses.'
     )
+    expect(STAGE_HINT.done).toContain('This is your Definition of Done')
+  })
+})
+
+describe('#stageTitle', () => {
+  test('Should show the done stage as the Definition of Done', () => {
+    expect(DEFINITION_OF_DONE).toBe('Definition of Done')
+    expect(stageTitle(STAGES[2])).toBe('Definition of Done')
+    expect(stageTitle(STAGES[0])).toBe('To Do')
+    expect(stageTitle(undefined)).toBe('')
+  })
+})
+
+describe('#definitionOfDone', () => {
+  test('Should list the statuses of the done stage', () => {
+    expect(definitionOfDone(STAGES)).toStrictEqual(['Done'])
+    expect(definitionOfDone([])).toStrictEqual([])
+    expect(definitionOfDone(null)).toStrictEqual([])
   })
 })
 
@@ -138,7 +159,7 @@ describe('#workflowSourceText', () => {
 
   test('Should explain the standard statuses', () => {
     expect(workflowSourceText({ source: 'default' })).toBe(
-      'Using the standard statuses. Run a Jira sync or save your own.'
+      'Using the standard statuses. Save your own to change them.'
     )
   })
 })
@@ -214,7 +235,7 @@ describe('#validateWorkflow', () => {
 
     expect(validateWorkflow(empty)).toEqual({
       todo: 'Add at least one status to To Do',
-      done: 'Add at least one status to Done'
+      done: 'Add at least one status to Definition of Done'
     })
   })
 })
