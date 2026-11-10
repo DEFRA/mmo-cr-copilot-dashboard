@@ -4,12 +4,14 @@ import {
   REPOSITORY_PATTERN,
   SLUG_PATTERN,
   addRepository,
+  adoptionDateError,
   formatDate,
   isRepositoryName,
   jiraKeyError,
   jiraKeyField,
   jiraKeyRequired,
   parseDate,
+  toDateParts,
   toProjectRequest,
   toRepositoryMappings,
   typeLabel,
@@ -106,6 +108,42 @@ describe('#formatDate', () => {
 
   test('Should say when there is no date', () => {
     expect(formatDate(undefined)).toBe('Not set')
+  })
+})
+
+describe('#toDateParts', () => {
+  test('Should split an ISO date into UTC day, month and year', () => {
+    expect(toDateParts('2026-06-01T00:00:00.000Z')).toStrictEqual({
+      day: '1',
+      month: '6',
+      year: '2026'
+    })
+  })
+
+  test('Should give empty parts when there is no date', () => {
+    expect(toDateParts(null)).toStrictEqual({ day: '', month: '', year: '' })
+  })
+})
+
+describe('#adoptionDateError', () => {
+  const EMPTY = { day: '', month: '', year: '' }
+
+  test.each([
+    [EMPTY, true, 'Enter the date the team adopted Copilot'],
+    [EMPTY, false, null],
+    [
+      { day: '31', month: '2', year: '2026' },
+      true,
+      'Adoption start date must be a real date'
+    ],
+    [
+      { day: '16', month: '6', year: '2026' },
+      true,
+      'Adoption start date must be today or in the past'
+    ],
+    [{ day: '1', month: '6', year: '2026' }, true, null]
+  ])('Should answer %o (required %s) with %s', (value, required, expected) => {
+    expect(adoptionDateError(value, required, NOW)).toBe(expected)
   })
 })
 

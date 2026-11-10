@@ -260,6 +260,129 @@ describe('#AdminProjectsView', () => {
   })
 })
 
+describe('#AdminProjectsView adoption start date', () => {
+  const ADOPTION_PROJECTS = [
+    {
+      name: 'Fish Export Service',
+      slug: 'FES',
+      type: 'ai-adopted',
+      adoptionStartDate: '2026-01-01T00:00:00.000Z'
+    },
+    { name: 'Native Project', slug: 'NAT', type: 'ai-native' }
+  ]
+
+  const putOf = () =>
+    fetchMock.mock.calls.find(([, init]) => init?.method === 'PUT')
+
+  const backend = (answer = () => JSON.stringify({})) => {
+    fetchMock.mockResponse((req) =>
+      req.method === 'PUT'
+        ? answer(req)
+        : JSON.stringify({ projects: ADOPTION_PROJECTS })
+    )
+  }
+
+  async function openForm(props = {}) {
+    const user = userEvent.setup()
+    const view = render(
+      <AdminProjectsView onNavigateHome={vi.fn()} {...props} />
+    )
+    const form = screen
+      .getByRole('heading', { name: 'Change Adoption Start Date' })
+      .closest('div')
+    await within(form).findByRole('option', { name: 'Fish Export Service' })
+    await user.selectOptions(
+      within(form).getByLabelText('Project to change'),
+      'FES'
+    )
+    return { user, form, ...view }
+  }
+
+  test('Should offer only AI-Adopted projects', async () => {
+    backend()
+    render(<AdminProjectsView onNavigateHome={vi.fn()} />)
+    const form = screen
+      .getByRole('heading', { name: 'Change Adoption Start Date' })
+      .closest('div')
+
+    await within(form).findByRole('option', { name: 'Fish Export Service' })
+    expect(
+      within(form).queryByRole('option', { name: 'Native Project' })
+    ).toBeNull()
+  })
+
+  test('Should pre-fill the current date and save a new one', async () => {
+    backend()
+    const onProjectsChanged = vi.fn()
+    const { user, form, container } = await openForm({ onProjectsChanged })
+
+    const day = within(form).getByRole('textbox', { name: 'Day' })
+    const month = within(form).getByRole('textbox', { name: 'Month' })
+    expect(day).toHaveValue('1')
+    expect(month).toHaveValue('1')
+    expect(within(form).getByRole('textbox', { name: 'Year' })).toHaveValue(
+      '2026'
+    )
+    expect(await axeViolations(container)).toStrictEqual([])
+
+    await user.clear(month)
+    await user.type(month, '6')
+    await user.click(
+      within(form).getByRole('button', { name: 'Save adoption date' })
+    )
+
+    expect(
+      await screen.findByText(
+        'Adoption start date for Fish Export Service changed to 1 June 2026.'
+      )
+    ).toBeVisible()
+    const [url, init] = putOf()
+    expect(url).toBe('/api/projects/FES')
+    expect(JSON.parse(init.body)).toStrictEqual({
+      adoptionStartDate: '2026-06-01T00:00:00.000Z'
+    })
+    expect(init.headers['x-requested-with']).toBe('XMLHttpRequest')
+    await waitFor(() => expect(onProjectsChanged).toHaveBeenCalledOnce())
+  })
+
+  test('Should refuse a date that is not real without calling the backend', async () => {
+    backend()
+    const { user, form } = await openForm()
+
+    const day = within(form).getByRole('textbox', { name: 'Day' })
+    await user.clear(day)
+    await user.type(day, '31')
+    await user.clear(within(form).getByRole('textbox', { name: 'Month' }))
+    await user.type(within(form).getByRole('textbox', { name: 'Month' }), '2')
+    await user.click(
+      within(form).getByRole('button', { name: 'Save adoption date' })
+    )
+
+    expect(
+      within(form).getAllByText(/Adoption start date must be a real date/)
+    ).toHaveLength(2)
+    expect(putOf()).toBeUndefined()
+  })
+
+  test('Should show a summary error when the backend refuses the change', async () => {
+    backend(() => ({
+      status: 403,
+      body: JSON.stringify({ statusCode: 403, message: 'Forbidden' })
+    }))
+    const onProjectsChanged = vi.fn()
+    const { user, form } = await openForm({ onProjectsChanged })
+
+    await user.click(
+      within(form).getByRole('button', { name: 'Save adoption date' })
+    )
+
+    expect(
+      await within(form).findByText('You do not have permission to do this')
+    ).toBeVisible()
+    expect(onProjectsChanged).not.toHaveBeenCalled()
+  })
+})
+
 describe('#AdminProjectsView Jira project key', () => {
   const KEYED = { projectKeys: ['MMOCR'] }
   const JIRA_PROJECTS = [

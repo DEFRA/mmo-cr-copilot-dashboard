@@ -3,6 +3,7 @@ import { useCallback, useEffect, useId, useState } from 'react'
 import {
   BackLink,
   Button,
+  DateInput,
   ErrorSummary,
   NotificationBanner,
   Select,
@@ -14,7 +15,14 @@ import { cx, isPlainClick } from '../govuk/utils.js'
 import { apiFetch, jsonWrite } from '../../lib/api'
 import { checkedWrite, toApiError } from '../../lib/api-errors'
 import { jiraKeyEdit } from '../../lib/jira'
-import { formatDate, jiraKeyError, typeLabel } from '../../lib/onboarding'
+import {
+  adoptionDateError,
+  formatDate,
+  jiraKeyError,
+  parseDate,
+  toDateParts,
+  typeLabel
+} from '../../lib/onboarding'
 import { toHash } from '../../lib/routes'
 
 export { validateProject } from '../../lib/onboarding'
@@ -367,6 +375,107 @@ function ProjectJiraKey({ projects, onSaved }) {
   )
 }
 
+const ADOPTION_FAILED = 'The adoption start date could not be saved'
+
+// AI-Native projects have no adoption date, so only AI-Adopted ones are offered.
+function AdoptionStartDate({ projects, onSaved }) {
+  const baseId = useId()
+  const projectId = `${baseId}-project`
+  const dateId = `${baseId}-date`
+  const [slug, setSlug] = useState('')
+  const [adoption, setAdoption] = useState(toDateParts())
+  const [error, setError] = useState(null)
+  const [attempt, setAttempt] = useState(0)
+  const [saving, setSaving] = useState(false)
+
+  const adopted = projects.filter((p) => p.type !== 'ai-native')
+  const project = adopted.find((p) => p.slug === slug)
+
+  const handleProject = (event) => {
+    const next = event.target.value
+    setSlug(next)
+    setAdoption(
+      toDateParts(adopted.find((p) => p.slug === next)?.adoptionStartDate)
+    )
+    setError(null)
+  }
+
+  const handleSubmit = async (event) => {
+    event.preventDefault()
+    if (saving) return
+    setAttempt((a) => a + 1)
+    const problem = adoptionDateError(adoption, true)
+    if (problem) {
+      setError({ field: true, text: problem })
+      return
+    }
+    const adoptionStartDate = parseDate(adoption).toISOString()
+    setSaving(true)
+    setError(null)
+    try {
+      await checkedWrite(
+        jsonWrite(`/api/projects/${encodeURIComponent(slug)}`, 'PUT', {
+          adoptionStartDate
+        }),
+        {
+          context: 'project',
+          fallback: ADOPTION_FAILED,
+          notFound: 'That project no longer exists'
+        }
+      )
+      onSaved(
+        `Adoption start date for ${project.name} changed to ${formatDate(adoptionStartDate)}.`
+      )
+    } catch (err) {
+      setError({ field: false, text: toApiError(err, ADOPTION_FAILED).message })
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  return (
+    <form onSubmit={handleSubmit} noValidate>
+      {error && (
+        <ErrorSummary
+          key={attempt}
+          errors={[
+            {
+              href: error.field ? `#${dateId}-day` : undefined,
+              text: error.text
+            }
+          ]}
+        />
+      )}
+      <Select
+        id={projectId}
+        label="Project to change"
+        value={slug}
+        onChange={handleProject}
+        options={[
+          { value: '', text: 'Select a project' },
+          ...adopted.map((p) => ({ value: p.slug, text: p.name }))
+        ]}
+      />
+      {project && (
+        <>
+          <DateInput
+            id={dateId}
+            legend="Adoption start date"
+            legendSize="s"
+            hint="The date the team started using Copilot. For example, 1 6 2026."
+            errorMessage={error?.field ? error.text : undefined}
+            value={adoption}
+            onChange={setAdoption}
+          />
+          <Button type="submit" disabled={saving}>
+            Save adoption date
+          </Button>
+        </>
+      )}
+    </form>
+  )
+}
+
 function RecomputeComplexity({ onDone }) {
   const [error, setError] = useState(null)
   const [busy, setBusy] = useState(false)
@@ -478,6 +587,17 @@ export function AdminProjectsView({
               ]
             }))}
           />
+          <div className="govuk-!-width-two-thirds">
+            <h3 className="govuk-heading-m">Change Adoption Start Date</h3>
+            <AdoptionStartDate
+              projects={projects}
+              onSaved={(message) => {
+                setSuccess(message)
+                loadData()
+                onProjectsChanged?.()
+              }}
+            />
+          </div>
         </section>
 
         <section

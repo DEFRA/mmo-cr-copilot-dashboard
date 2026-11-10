@@ -43,6 +43,29 @@ export function parseDate({ day, month, year }) {
   return real ? date : null
 }
 
+/** Day, month and year strings for a date input, from an ISO date. */
+export function toDateParts(iso) {
+  if (!iso) return { day: '', month: '', year: '' }
+  const date = new Date(iso)
+  return {
+    day: String(date.getUTCDate()),
+    month: String(date.getUTCMonth() + 1),
+    year: String(date.getUTCFullYear())
+  }
+}
+
+/** What is wrong with an adoption date input, or null. */
+export function adoptionDateError(adoption, required, now = new Date()) {
+  const { day, month, year } = adoption
+  if (!day && !month && !year) {
+    return required ? 'Enter the date the team adopted Copilot' : null
+  }
+  const date = parseDate(adoption)
+  if (!date) return 'Adoption start date must be a real date'
+  if (date > now) return 'Adoption start date must be today or in the past'
+  return null
+}
+
 export const isRepositoryName = (value) =>
   typeof value === 'string' && REPOSITORY_PATTERN.test(value)
 
@@ -89,17 +112,12 @@ export function validateProject(form, now = new Date()) {
 
   if (!form.type) errors.type = 'Select the project type'
 
-  const { day, month, year } = form.adoption
-  const anyDate = day || month || year
-  if (form.type === 'ai-adopted' && !anyDate) {
-    errors.adoption = 'Enter the date the team adopted Copilot'
-  } else if (anyDate) {
-    const date = parseDate(form.adoption)
-    if (!date) errors.adoption = 'Adoption start date must be a real date'
-    else if (date > now) {
-      errors.adoption = 'Adoption start date must be today or in the past'
-    }
-  }
+  const adoptionError = adoptionDateError(
+    form.adoption,
+    form.type === 'ai-adopted',
+    now
+  )
+  if (adoptionError) errors.adoption = adoptionError
 
   const jiraError = jiraKeyError(jiraKeyOf(form), jiraKeyRequired(form.type))
   if (jiraError) errors.jiraKey = jiraError
