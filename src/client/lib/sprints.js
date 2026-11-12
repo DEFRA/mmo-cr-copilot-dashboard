@@ -6,6 +6,8 @@
  * Reference sprint: 8 Jul 2026 → 21 Jul 2026 (inclusive), i.e. [8 Jul, 22 Jul).
  */
 
+import { parseDate } from './onboarding.js'
+
 const SPRINT_LENGTH_DAYS = 14
 const DAY_MS = 24 * 60 * 60 * 1000
 const SPRINT_LENGTH_MS = SPRINT_LENGTH_DAYS * DAY_MS
@@ -117,3 +119,32 @@ export function parseDateTime(date, time) {
 }
 
 export { SPRINT_LENGTH_DAYS }
+
+// Matches the backend default for a project that has never set its sprint period.
+export const DEFAULT_SPRINT_CALENDAR = {
+  cadenceDays: 14,
+  anchorDate: '2026-07-08T00:00:00.000Z'
+}
+
+export const MAX_SPRINT_LENGTH_DAYS = 30
+
+/** Field errors for the sprint period form (`length`, `start`); empty when valid. */
+export function sprintPeriodErrors({ length, start }) {
+  const errors = {}
+  const days = String(length ?? '').trim()
+  if (!days) {
+    errors.length = 'Enter the sprint length in days'
+  } else if (
+    !/^\d+$/.test(days) ||
+    Number(days) < 1 ||
+    Number(days) > MAX_SPRINT_LENGTH_DAYS
+  ) {
+    errors.length = `Sprint length must be a whole number of days from 1 to ${MAX_SPRINT_LENGTH_DAYS}`
+  }
+  if (!start.day && !start.month && !start.year) {
+    errors.start = 'Enter the date a sprint started'
+  } else if (!parseDate(start)) {
+    errors.start = 'The sprint start date must be a real date'
+  }
+  return errors
+}

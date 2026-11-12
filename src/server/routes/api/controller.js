@@ -249,6 +249,11 @@ const sprintCalendarPayload = Joi.object({
   anchorDate: Joi.date().iso()
 }).options({ stripUnknown: true })
 
+const sprintCalendarWrite = sprintCalendarPayload.fork(
+  ['cadenceDays', 'anchorDate'],
+  (field) => field.required()
+)
+
 const projectCreatePayload = Joi.object({
   slug: projectSlug.required(),
   name: Joi.string().min(1).max(200).required(),
@@ -827,6 +832,21 @@ export const apiProxyRoutes = [
     options: { validate: { params: projectSlugParams } },
     handler: (request, h) =>
       forward(request, h, { path: `${projectPath(request)}/jira/statuses` })
+  },
+  {
+    method: 'PUT',
+    path: '/api/projects/{slug}/sprint-calendar',
+    options: {
+      validate: { params: projectSlugParams, payload: sprintCalendarWrite }
+    },
+    handler: (request, h) => {
+      verifyCsrf(request)
+      return forward(request, h, {
+        path: `${projectPath(request)}/sprint-calendar`,
+        method: 'PUT',
+        body: request.payload
+      })
+    }
   },
   {
     method: 'GET',

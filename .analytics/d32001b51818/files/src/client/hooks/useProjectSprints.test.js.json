@@ -1,0 +1,29 @@
+{
+  "schema": "ai-attribution-file/2",
+  "path": "src/client/hooks/useProjectSprints.test.js",
+  "added": 10,
+  "counts": {
+    "aiCompletion": 0,
+    "aiChat": 0,
+    "aiAgent": 10,
+    "aiModified": 0,
+    "pasted": 0,
+    "typed": 0,
+    "untracked": 0
+  },
+  "ranges": {
+    "ai-agent": "52-58,60,62-63"
+  },
+  "ai": [
+    [52, "a", "a211a3fe", 0],
+    [53, "a", "6fc98b32", 0],
+    [54, "a", "8673fc78", 0],
+    [55, "a", "775fbba1", 0],
+    [56, "a", "2db92442", 0],
+    [57, "a", "a31996cd", 0],
+    [58, "a", "f257af96", 0],
+    [60, "a", "d381b6d3", 0],
+    [62, "a", "73ea86be", 0],
+    [63, "a", "ee44a98c", 0]
+  ]
+}

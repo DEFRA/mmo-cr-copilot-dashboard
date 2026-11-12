@@ -124,7 +124,7 @@ export function UnmappedStatusesNotice({ workflow, canAdminister }) {
         className="govuk-link"
         href={toHash({ level: 'settings', tab: 'jira-workflow' })}
       >
-        Map them in Settings, under Jira Workflow and Definition of Done
+        Map them in Settings, under JIRA
       </a>
       .
     </InsetText>

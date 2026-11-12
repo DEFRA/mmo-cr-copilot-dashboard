@@ -4,9 +4,7 @@
  * feeds `buildContributorPersonaMap` for persona attribution elsewhere.
  *
  * Returns:
- *   mappings — array of { githubHandle, persona, updatedAt, scope }, where
- *              scope 'default' marks a read-only mapping from before
- *              mappings were scoped to a project
+ *   mappings — array of { githubHandle, persona, updatedAt }
  *   status   — 'idle' | 'loading' | 'success' | 'error'
  *   error    — Error message string, or null
  *   upsert(githubHandle, persona) — creates or replaces a mapping

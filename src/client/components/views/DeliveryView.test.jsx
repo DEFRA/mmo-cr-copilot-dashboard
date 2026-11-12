@@ -145,7 +145,7 @@ describe('#DeliveryView', () => {
       ).toHaveAttribute('href', '#/settings/jira-workflow')
       expect(
         screen.getByRole('link', {
-          name: 'Map them in Settings, under Jira Workflow and Definition of Done'
+          name: 'Map them in Settings, under JIRA'
         })
       ).toBeVisible()
     })

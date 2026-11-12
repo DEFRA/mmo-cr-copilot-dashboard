@@ -43,7 +43,7 @@ describe('#settingsTabsFor', () => {
     ).toStrictEqual([
       'Persona Mappings',
       'Repositories',
-      'Jira Workflow and Definition of Done',
+      'JIRA',
       'Role Mappings',
       'Audit Log'
     ])
@@ -85,13 +85,9 @@ describe('#SettingsSubNavigation', () => {
     expect(screen.queryByRole('link', { name: 'Role Mappings' })).toBeNull()
   })
 
-  test('Should link the Jira workflow only when the project uses Jira', () => {
+  test('Should link the JIRA tab only when the project uses Jira', () => {
     const { rerender } = renderNav()
-    expect(
-      screen.queryByRole('link', {
-        name: 'Jira Workflow and Definition of Done'
-      })
-    ).toBeNull()
+    expect(screen.queryByRole('link', { name: 'JIRA' })).toBeNull()
 
     rerender(
       <SettingsSubNavigation
@@ -102,9 +98,7 @@ describe('#SettingsSubNavigation', () => {
       />
     )
 
-    const link = screen.getByRole('link', {
-      name: 'Jira Workflow and Definition of Done'
-    })
+    const link = screen.getByRole('link', { name: 'JIRA' })
     expect(link).toHaveAttribute('href', '#/settings/jira-workflow')
     expect(link).toHaveAttribute('aria-current', 'page')
   })
