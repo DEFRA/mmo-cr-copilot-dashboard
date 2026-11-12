@@ -1,0 +1,30 @@
+{
+  "schema": "ai-attribution-file/2",
+  "path": "src/client/hooks/useProjects.js",
+  "added": 12,
+  "counts": {
+    "aiCompletion": 0,
+    "aiChat": 0,
+    "aiAgent": 10,
+    "aiModified": 0,
+    "pasted": 0,
+    "typed": 0,
+    "untracked": 2
+  },
+  "ranges": {
+    "ai-agent": "4-6,16-17,31,47-49,51",
+    "untracked": "29-30"
+  },
+  "ai": [
+    [4, "a", "37205cf6", 0],
+    [5, "a", "bda135d0", 0],
+    [6, "a", "4b89896d", 0],
+    [16, "a", "ed9e869c", 0],
+    [17, "a", "d4d996fc", 0],
+    [31, "a", "9845a6a3", 0],
+    [47, "a", "b83ddfda", 0],
+    [48, "a", "679b40a6", 0],
+    [49, "a", "9845a6a3", 0],
+    [51, "a", "8a8db008", 0]
+  ]
+}

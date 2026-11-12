@@ -1,0 +1,26 @@
+{
+  "schema": "ai-attribution-file/2",
+  "path": "src/client/components/charts/BreakdownTreemap.jsx",
+  "added": 8,
+  "counts": {
+    "aiCompletion": 0,
+    "aiChat": 0,
+    "aiAgent": 6,
+    "aiModified": 0,
+    "pasted": 0,
+    "typed": 0,
+    "untracked": 2
+  },
+  "ranges": {
+    "ai-agent": "6-7,20-23",
+    "untracked": "24-25"
+  },
+  "ai": [
+    [6, "a", "0257b2c3", 0],
+    [7, "a", "00f9d4ce", 0],
+    [20, "a", "eef88af8", 0],
+    [21, "a", "94b564e6", 0],
+    [22, "a", "9845a6a3", 0],
+    [23, "a", "0ec98440", 0]
+  ]
+}

@@ -1,0 +1,35 @@
+{
+  "schema": "ai-attribution-file/2",
+  "path": "src/client/components/govuk/TextInput.jsx",
+  "added": 16,
+  "counts": {
+    "aiCompletion": 0,
+    "aiChat": 0,
+    "aiAgent": 16,
+    "aiModified": 0,
+    "pasted": 0,
+    "typed": 0,
+    "untracked": 0
+  },
+  "ranges": {
+    "ai-agent": "3-8,30,33-34,36-42"
+  },
+  "ai": [
+    [3, "a", "8a634d10", 0],
+    [4, "a", "cbf4d678", 0],
+    [5, "a", "fff44d1b", 0],
+    [6, "a", "05411843", 0],
+    [7, "a", "22718ef2", 0],
+    [8, "a", "c8d86e43", 0],
+    [30, "a", "8a7b8387", 0],
+    [33, "a", "a7f9d89e", 0],
+    [34, "a", "3d074c26", 0],
+    [36, "a", "a71fa365", 0],
+    [37, "a", "7d2bd463", 0],
+    [38, "a", "95056599", 0],
+    [39, "a", "9f38174a", 0],
+    [40, "a", "eb129375", 0],
+    [41, "a", "3c04db7a", 0],
+    [42, "a", "5742e2c1", 0]
+  ]
+}

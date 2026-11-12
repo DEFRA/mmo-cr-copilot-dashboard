@@ -28,7 +28,8 @@ function designSystemAssets() {
         const file = match && path.join(MOJ_IMAGES, match[1])
 
         if (!file || !existsSync(file)) {
-          return next()
+          next()
+          return
         }
 
         response.setHeader(
@@ -50,7 +51,9 @@ function designSystemAssets() {
       }
 
       for (const name of names) {
-        if (BRANDING_IMAGES.has(name)) continue
+        if (BRANDING_IMAGES.has(name)) {
+          continue
+        }
 
         const file = path.join(MOJ_IMAGES, name)
         if (!existsSync(file)) {

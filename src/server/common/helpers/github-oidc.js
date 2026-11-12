@@ -2,6 +2,8 @@ import { createRemoteJWKSet, jwtVerify } from 'jose'
 
 import { config } from '#/config/config.js'
 
+const CLOCK_TOLERANCE_SECONDS = 30
+
 export const GITHUB_OIDC_ISSUER = 'https://token.actions.githubusercontent.com'
 
 const jwks = createRemoteJWKSet(
@@ -30,19 +32,8 @@ const allowedEvents = () => splitList(config.get('ingest.oidc.allowedEvents'))
  * workflows and events default to the analytics and backfill workflows; the
  * survival route passes its own.
  */
-export async function verifyGithubToken(token, keySet = jwks, options = {}) {
-  let payload
-  try {
-    ;({ payload } = await jwtVerify(token, keySet, {
-      issuer: GITHUB_OIDC_ISSUER,
-      audience: config.get('ingest.oidc.audience'),
-      algorithms: ['RS256'],
-      clockTolerance: 30
-    }))
-  } catch (err) {
-    throw new IngestTokenError(err.code ?? 'invalid')
-  }
-
+// Organisation, workflow, event and token id checks after the signature is verified.
+function assertClaims(payload, options) {
   const ownerId = config.get('ingest.oidc.ownerId')
   if (!ownerId || String(payload.repository_owner_id) !== ownerId) {
     throw new IngestTokenError('owner')
@@ -61,5 +52,20 @@ export async function verifyGithubToken(token, keySet = jwks, options = {}) {
   if (typeof payload.jti !== 'string' || !payload.jti) {
     throw new IngestTokenError('jti')
   }
+}
+
+export async function verifyGithubToken(token, keySet = jwks, options = {}) {
+  let payload
+  try {
+    ;({ payload } = await jwtVerify(token, keySet, {
+      issuer: GITHUB_OIDC_ISSUER,
+      audience: config.get('ingest.oidc.audience'),
+      algorithms: ['RS256'],
+      clockTolerance: CLOCK_TOLERANCE_SECONDS
+    }))
+  } catch (err) {
+    throw new IngestTokenError(err.code ?? 'invalid')
+  }
+  assertClaims(payload, options)
   return payload
 }

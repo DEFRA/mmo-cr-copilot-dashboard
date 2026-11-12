@@ -11,8 +11,10 @@ import {
 } from '../govuk'
 import { cx } from '../govuk/utils.js'
 import { useRoleMappings } from '../../hooks/useRoleMappings'
+import { HTTP } from '../../lib/http-status.js'
 
 const ADMIN = 'Dashboard.Admin'
+const GROUP_NAME = 'group-name'
 const ROLE_ITEMS = [
   { value: ADMIN, text: 'Dashboard Admin' },
   { value: 'project-admin', text: 'Project Admin' },
@@ -22,15 +24,24 @@ const ROLE_LABEL = Object.fromEntries(ROLE_ITEMS.map((r) => [r.value, r.text]))
 const MAX_GROUP_NAME = 256
 const MAX_DESCRIPTION = 500
 
+function groupNameError(name) {
+  if (!name) {
+    return 'Enter a group name'
+  }
+  return name.length > MAX_GROUP_NAME
+    ? `Group name must be ${MAX_GROUP_NAME} characters or fewer`
+    : null
+}
+
 function validate(form) {
   const errors = {}
-  const name = form.groupName.trim()
-  if (!name) {
-    errors.groupName = 'Enter a group name'
-  } else if (name.length > MAX_GROUP_NAME) {
-    errors.groupName = `Group name must be ${MAX_GROUP_NAME} characters or fewer`
+  const nameError = groupNameError(form.groupName.trim())
+  if (nameError) {
+    errors.groupName = nameError
   }
-  if (!ROLE_LABEL[form.role]) errors.role = 'Select a role'
+  if (!ROLE_LABEL[form.role]) {
+    errors.role = 'Select a role'
+  }
   if (ROLE_LABEL[form.role] && form.role !== ADMIN && !form.projectSlug) {
     errors.projectSlug = 'Select a project'
   }
@@ -38,6 +49,112 @@ function validate(form) {
     errors.description = `Description must be ${MAX_DESCRIPTION} characters or fewer`
   }
   return errors
+}
+
+const mappingPayload = (form) => ({
+  groupName: form.groupName.trim(),
+  role: form.role,
+  ...(form.role !== ADMIN && { projectSlug: form.projectSlug }),
+  ...(form.description.trim() && { description: form.description.trim() })
+})
+
+function mappingsState(status, mappings) {
+  if (status === 'loading' || status === 'idle') {
+    return 'loading'
+  }
+  if (status === 'error') {
+    return 'error'
+  }
+  return mappings.length === 0 ? 'empty' : 'populated'
+}
+
+function FieldError({ id, children }) {
+  if (!children) {
+    return null
+  }
+  return (
+    <p id={id} className="govuk-error-message">
+      <span className="govuk-visually-hidden">Error:</span> {children}
+    </p>
+  )
+}
+
+function GroupNameField({ fieldId, error, value, onChange }) {
+  const id = fieldId(GROUP_NAME)
+  return (
+    <div className={cx('govuk-form-group', error && 'govuk-form-group--error')}>
+      <label className="govuk-label govuk-label--s" htmlFor={id}>
+        Group Name
+      </label>
+      <div id={`${id}-hint`} className="govuk-hint">
+        The group’s display name in Microsoft Entra, matched exactly and
+        case-sensitively. Display names can be changed or reused in Entra, so
+        check the name before you add it and update the mapping if the group is
+        renamed.
+      </div>
+      <FieldError id={`${id}-error`}>{error}</FieldError>
+      <input
+        className={cx(
+          'govuk-input govuk-input--width-30',
+          error && 'govuk-input--error'
+        )}
+        id={id}
+        type="text"
+        spellCheck={false}
+        autoComplete="off"
+        aria-describedby={cx(`${id}-hint`, error && `${id}-error`)}
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+      />
+    </div>
+  )
+}
+
+function DescriptionField({ fieldId, error, value, onChange }) {
+  const id = fieldId('description')
+  return (
+    <div className={cx('govuk-form-group', error && 'govuk-form-group--error')}>
+      <label className="govuk-label" htmlFor={id}>
+        Description (Optional)
+      </label>
+      <FieldError id={`${id}-error`}>{error}</FieldError>
+      <input
+        className={cx('govuk-input', error && 'govuk-input--error')}
+        id={id}
+        type="text"
+        autoComplete="off"
+        aria-describedby={error ? `${id}-error` : undefined}
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+      />
+    </div>
+  )
+}
+
+function RemoveButton({ mapping, lastAdmin, buttonRef, onRemove }) {
+  return (
+    <button
+      ref={buttonRef}
+      type="button"
+      className="app-link-button"
+      aria-disabled={lastAdmin || undefined}
+      title={
+        lastAdmin
+          ? 'The last Dashboard Admin mapping cannot be removed'
+          : undefined
+      }
+      onClick={() => {
+        if (!lastAdmin) {
+          onRemove(mapping)
+        }
+      }}
+    >
+      {'Remove'}
+      <span className="govuk-visually-hidden">
+        {` mapping for ${mapping.groupName}`}
+      </span>
+    </button>
+  )
 }
 
 const EMPTY_FORM = {
@@ -103,9 +220,11 @@ export function RoleMappingsPanel({ projects = [] }) {
   const adminCount = mappings.filter((m) => m.role === ADMIN).length
 
   useEffect(() => {
-    if (lastRemoved.current === null) return
+    if (lastRemoved.current === null) {
+      return
+    }
     lastRemoved.current = null
-    document.getElementById(fieldId('group-name'))?.focus()
+    document.getElementById(fieldId(GROUP_NAME))?.focus()
   })
 
   const set = (name) => (value) => setForm((f) => ({ ...f, [name]: value }))
@@ -120,20 +239,16 @@ export function RoleMappingsPanel({ projects = [] }) {
     event.preventDefault()
     setNotice(null)
     const found = validate(form)
-    if (Object.keys(found).length > 0) return fail(found)
+    if (Object.keys(found).length > 0) {
+      fail(found)
+      return
+    }
 
     setSaving(true)
     setErrors({})
     setServerError(null)
     try {
-      await create({
-        groupName: form.groupName.trim(),
-        role: form.role,
-        ...(form.role !== ADMIN && { projectSlug: form.projectSlug }),
-        ...(form.description.trim() && {
-          description: form.description.trim()
-        })
-      })
+      await create(mappingPayload(form))
       setNotice({
         id: Date.now(),
         text: `Mapping for ${form.groupName.trim()} added`
@@ -142,7 +257,7 @@ export function RoleMappingsPanel({ projects = [] }) {
     } catch (err) {
       fail(
         {},
-        err.status === 409
+        err.status === HTTP.conflict
           ? 'A mapping for that group, role and project already exists'
           : err.message
       )
@@ -178,7 +293,7 @@ export function RoleMappingsPanel({ projects = [] }) {
 
   const summary = [
     ...Object.entries(errors).map(([name, text]) => ({
-      href: `#${fieldId(name === 'groupName' ? 'group-name' : name)}`,
+      href: `#${fieldId(name === 'groupName' ? GROUP_NAME : name)}`,
       text
     })),
     ...(serverError ? [{ text: serverError }] : [])
@@ -189,14 +304,11 @@ export function RoleMappingsPanel({ projects = [] }) {
     ...projects.map((p) => ({ value: p.slug, text: `${p.name} (${p.slug})` }))
   ]
 
-  const state =
-    status === 'loading' || status === 'idle'
-      ? 'loading'
-      : status === 'error'
-        ? 'error'
-        : mappings.length === 0
-          ? 'empty'
-          : 'populated'
+  const state = mappingsState(status, mappings)
+  const startRemove = (mapping) => {
+    setNotice(null)
+    setConfirming(mapping)
+  }
 
   return (
     <Panel
@@ -255,31 +367,15 @@ export function RoleMappingsPanel({ projects = [] }) {
                 m.groupName,
                 ROLE_LABEL[m.role] ?? m.role,
                 m.projectSlug ?? 'All Projects',
-                <button
+                <RemoveButton
                   key="remove"
-                  ref={(el) => {
+                  mapping={m}
+                  lastAdmin={lastAdmin}
+                  buttonRef={(el) => {
                     removeButtons.current[m.id] = el
                   }}
-                  type="button"
-                  className="app-link-button"
-                  aria-disabled={lastAdmin || undefined}
-                  title={
-                    lastAdmin
-                      ? 'The last Dashboard Admin mapping cannot be removed'
-                      : undefined
-                  }
-                  onClick={() => {
-                    if (lastAdmin) return
-                    setNotice(null)
-                    setConfirming(m)
-                  }}
-                >
-                  Remove
-                  <span className="govuk-visually-hidden">
-                    {' '}
-                    mapping for {m.groupName}
-                  </span>
-                </button>
+                  onRemove={startRemove}
+                />
               ]
             }
           })}
@@ -288,47 +384,12 @@ export function RoleMappingsPanel({ projects = [] }) {
 
       <form onSubmit={submit} noValidate>
         <h3 className="govuk-heading-s govuk-!-margin-top-6">Add a Mapping</h3>
-        <div
-          className={cx(
-            'govuk-form-group',
-            errors.groupName && 'govuk-form-group--error'
-          )}
-        >
-          <label
-            className="govuk-label govuk-label--s"
-            htmlFor={fieldId('group-name')}
-          >
-            Group Name
-          </label>
-          <div id={fieldId('group-name-hint')} className="govuk-hint">
-            The group’s display name in Microsoft Entra, matched exactly and
-            case-sensitively. Display names can be changed or reused in Entra,
-            so check the name before you add it and update the mapping if the
-            group is renamed.
-          </div>
-          {errors.groupName && (
-            <p id={fieldId('group-name-error')} className="govuk-error-message">
-              <span className="govuk-visually-hidden">Error:</span>{' '}
-              {errors.groupName}
-            </p>
-          )}
-          <input
-            className={cx(
-              'govuk-input govuk-input--width-30',
-              errors.groupName && 'govuk-input--error'
-            )}
-            id={fieldId('group-name')}
-            type="text"
-            spellCheck={false}
-            autoComplete="off"
-            aria-describedby={cx(
-              fieldId('group-name-hint'),
-              errors.groupName && fieldId('group-name-error')
-            )}
-            value={form.groupName}
-            onChange={(e) => set('groupName')(e.target.value)}
-          />
-        </div>
+        <GroupNameField
+          fieldId={fieldId}
+          error={errors.groupName}
+          value={form.groupName}
+          onChange={set('groupName')}
+        />
 
         <Radios
           idPrefix={fieldId('role')}
@@ -352,39 +413,12 @@ export function RoleMappingsPanel({ projects = [] }) {
           />
         )}
 
-        <div
-          className={cx(
-            'govuk-form-group',
-            errors.description && 'govuk-form-group--error'
-          )}
-        >
-          <label className="govuk-label" htmlFor={fieldId('description')}>
-            Description (Optional)
-          </label>
-          {errors.description && (
-            <p
-              id={fieldId('description-error')}
-              className="govuk-error-message"
-            >
-              <span className="govuk-visually-hidden">Error:</span>{' '}
-              {errors.description}
-            </p>
-          )}
-          <input
-            className={cx(
-              'govuk-input',
-              errors.description && 'govuk-input--error'
-            )}
-            id={fieldId('description')}
-            type="text"
-            autoComplete="off"
-            aria-describedby={
-              errors.description ? fieldId('description-error') : undefined
-            }
-            value={form.description}
-            onChange={(e) => set('description')(e.target.value)}
-          />
-        </div>
+        <DescriptionField
+          fieldId={fieldId}
+          error={errors.description}
+          value={form.description}
+          onChange={set('description')}
+        />
 
         <Button type="submit" disabled={saving}>
           Add Mapping

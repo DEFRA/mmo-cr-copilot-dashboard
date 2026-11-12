@@ -1,0 +1,21 @@
+{
+  "schema": "ai-attribution-file/2",
+  "path": "src/client/components/LinkedJiraTickets.jsx",
+  "added": 10,
+  "counts": {
+    "aiCompletion": 0,
+    "aiChat": 0,
+    "aiAgent": 1,
+    "aiModified": 0,
+    "pasted": 0,
+    "typed": 0,
+    "untracked": 9
+  },
+  "ranges": {
+    "ai-agent": "89",
+    "untracked": "22-24,32-34,67-69"
+  },
+  "ai": [
+    [89, "a", "bf8284af", 0]
+  ]
+}

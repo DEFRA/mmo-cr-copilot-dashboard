@@ -37,7 +37,9 @@ export function DateInput({
 
   const handleChange = (key) => (event) => {
     const next = { ...current, [key]: event.target.value }
-    if (value === undefined) setInternalValue(next)
+    if (value === undefined) {
+      setInternalValue(next)
+    }
     onChange?.(next)
   }
 

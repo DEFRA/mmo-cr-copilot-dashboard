@@ -1,0 +1,22 @@
+{
+  "schema": "ai-attribution-file/2",
+  "path": "vite.config.js",
+  "added": 5,
+  "counts": {
+    "aiCompletion": 0,
+    "aiChat": 0,
+    "aiAgent": 2,
+    "aiModified": 0,
+    "pasted": 0,
+    "typed": 0,
+    "untracked": 3
+  },
+  "ranges": {
+    "ai-agent": "31-32",
+    "untracked": "54-56"
+  },
+  "ai": [
+    [31, "a", "a03a386f", 0],
+    [32, "a", "679b40a6", 0]
+  ]
+}

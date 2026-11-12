@@ -37,7 +37,9 @@ export function useDeliveryTrend(slug, sprints) {
             headers: { Accept: 'application/json' }
           }
         ).then((res) => {
-          if (!res.ok) throw new Error(`Request failed (${res.status})`)
+          if (!res.ok) {
+            throw new Error(`Request failed (${res.status})`)
+          }
           return res.json()
         })
       )
@@ -49,7 +51,9 @@ export function useDeliveryTrend(slug, sprints) {
         })
       )
       .catch((err) => {
-        if (controller.signal.aborted || err.name === 'AbortError') return
+        if (controller.signal.aborted || err.name === 'AbortError') {
+          return
+        }
         setState({ ...IDLE, status: 'error' })
       })
 

@@ -95,7 +95,7 @@ export function AccessibilityStatementView({ onBack }) {
           >
             Equality Advisory and Support Service (EASS)
           </a>
-          .
+          {'.'}
         </p>
 
         <h2 className="govuk-heading-l">

@@ -8,7 +8,6 @@ import {
   useLiveStreamPaused
 } from '../dashboard'
 import { Table } from '../govuk'
-import { cx } from '../govuk/utils.js'
 import { AiCodeChurnPanel } from '../AiCodeChurnPanel'
 import { CopilotUsagePanel } from '../CopilotUsagePanel'
 import { CategoryBar } from '../charts/CategoryBar'
@@ -25,6 +24,7 @@ import {
   selectTicketRows
 } from '../../lib/selectors'
 import { buildDeliveryKpis } from './delivery-kpis.js'
+import { NativeLeverage } from './NativeLeverage.jsx'
 import {
   JiraHiddenNotice,
   KpiDrillGrid,
@@ -43,6 +43,29 @@ const DELIVERY_KPIS = [
   'rework'
 ]
 const FLOW_KPIS = ['predictability', 'flow', 'cycle', 'prCycle']
+const SONAR_TREND_FIGURE = 3
+const CHURN_FIGURE = 4
+const LEVERAGE_PARTS = 4
+
+function headerProps(jiraConnected, repoCount) {
+  const repos = plural(repoCount, 'repository', 'repositories')
+  if (!jiraConnected) {
+    return {
+      level: 'At a glance',
+      icon: 'layers',
+      title: 'Project activity',
+      meta: `${repos} · team view, not individuals`
+    }
+  }
+  return {
+    level: 'Jira · at a glance',
+    icon: 'ticket',
+    title: 'Delivery performance',
+    meta: `${repos} · measured to Jira Done · team view, not individuals`
+  }
+}
+
+const medianCycle = (hours) => (hours === null ? '–' : formatDuration(hours))
 
 function MetricsState({ status, children }) {
   if (status === 'error') {
@@ -54,29 +77,11 @@ function MetricsState({ status, children }) {
       />
     )
   }
-  if (status !== 'success') return <PanelState state="loading" icon="ticket" />
+  if (status !== 'success') {
+    return <PanelState state="loading" icon="ticket" />
+  }
   return children
 }
-
-function LeverageCard({ title, children, footnote }) {
-  return (
-    <Panel title={title} family="leverage" icon="rocket" headingLevel={4}>
-      {children}
-      {footnote && <p className="govuk-body-s app-muted">{footnote}</p>}
-    </Panel>
-  )
-}
-
-function Figure({ label, value }) {
-  return (
-    <p className="govuk-body govuk-!-margin-bottom-2">
-      <span className="app-muted">{label}</span>{' '}
-      <strong className="govuk-!-font-size-24">{value}</strong>
-    </p>
-  )
-}
-
-const pctOrDash = (n) => (n === null || n === undefined ? '–' : `${n}%`)
 
 /**
  * Overview for AI-Native projects (ADR 0005 §4): delivery measured to Jira
@@ -121,8 +126,6 @@ export function AiNativeOverviewView({
         : null,
     [metrics, done, onOpenTicket, onOpenPR]
   )
-  const native = leverage.data
-  const durability = native?.codeDurability
   const usage = useMemo(() => selectCopilotUsage(payloads), [payloads])
   // The ticket funnel is figure 2 and is absent without a Jira key.
   const figureShift = jiraConnected ? 0 : -1
@@ -131,14 +134,7 @@ export function AiNativeOverviewView({
       <section className="app-scope" aria-labelledby={projectId}>
         <ScopeHeader
           id={projectId}
-          level={jiraConnected ? 'Jira · at a glance' : 'At a glance'}
-          icon={jiraConnected ? 'ticket' : 'layers'}
-          title={jiraConnected ? 'Delivery performance' : 'Project activity'}
-          meta={
-            jiraConnected
-              ? `${plural(repos.length, 'repository', 'repositories')} · measured to Jira Done · team view, not individuals`
-              : `${plural(repos.length, 'repository', 'repositories')} · team view, not individuals`
-          }
+          {...headerProps(jiraConnected, repos.length)}
         />
         {jiraConnected ? (
           <MetricsState status={status}>
@@ -245,7 +241,7 @@ export function AiNativeOverviewView({
               <SonarSprintTrend
                 projectSlug={projectSlug}
                 sprints={sprintWindows}
-                number={3 + figureShift}
+                number={SONAR_TREND_FIGURE + figureShift}
               />
             </div>
           )}
@@ -255,123 +251,14 @@ export function AiNativeOverviewView({
           title="AI-Native Delivery Leverage"
           family="leverage"
           icon="rocket"
-          meta={`${jiraConnected ? 4 : 3} components, side by side`}
+          meta={`${jiraConnected ? LEVERAGE_PARTS : LEVERAGE_PARTS - 1} components, side by side`}
         >
-          {leverage.status === 'error' && (
-            <PanelState
-              state="error"
-              icon="rocket"
-              errorMessage="We could not load AI-Native Delivery Leverage. Try again later."
-            />
-          )}
-          {leverage.status !== 'error' && !native && (
-            <PanelState state="loading" icon="rocket" />
-          )}
-          {native && (
-            <div
-              className={cx(
-                'app-kpi-grid',
-                !jiraConnected && 'app-kpi-grid--3'
-              )}
-            >
-              <LeverageCard
-                title="Own-Baseline Trend"
-                footnote={`Baseline: the project's first ${plural(native.ownBaseline.baselineSprintCount, 'sprint')}.`}
-              >
-                {native.ownBaseline.comparable ? (
-                  <>
-                    <Figure
-                      label="PR coding cycle time"
-                      value={`${native.ownBaseline.speedup}× faster`}
-                    />
-                    <p className="govuk-body-s">
-                      Median{' '}
-                      {formatDuration(
-                        native.ownBaseline.currentMedianCycleHours
-                      )}{' '}
-                      now against{' '}
-                      {formatDuration(
-                        native.ownBaseline.baselineMedianCycleHours
-                      )}{' '}
-                      at baseline.
-                    </p>
-                  </>
-                ) : (
-                  <p className="govuk-body-s">
-                    Not enough comparable pull requests (
-                    {native.ownBaseline.baselineCount} baseline,{' '}
-                    {native.ownBaseline.currentCount} now; 5 needed on each
-                    side).
-                  </p>
-                )}
-              </LeverageCard>
-              <LeverageCard
-                title="Complexity-Weighted Throughput"
-                footnote="Sum of complexity scores of merged pull requests."
-              >
-                <Figure
-                  label="Score"
-                  value={native.complexityWeightedThroughput}
-                />
-                <p className="govuk-body-s">
-                  From{' '}
-                  {plural(native.mergedPullRequests, 'merged pull request')}.
-                </p>
-              </LeverageCard>
-              {jiraConnected && (
-                <LeverageCard
-                  title="Delivery Quality"
-                  footnote="Read together, not summed."
-                >
-                  <Figure
-                    label="Change fail rate"
-                    value={pctOrDash(native.deliveryQuality.changeFailRate)}
-                  />
-                  <Figure
-                    label="Delivery rework rate"
-                    value={pctOrDash(native.deliveryQuality.deliveryReworkRate)}
-                  />
-                  <Figure
-                    label="Ticket reopen rate"
-                    value={pctOrDash(native.deliveryQuality.reopenRate)}
-                  />
-                </LeverageCard>
-              )}
-              <LeverageCard
-                title="AI Code Durability"
-                footnote={
-                  durability?.available
-                    ? `Lines still present ${durability.windowDays} days after merge, across ${plural(durability.prCount, 'pull request')}.`
-                    : undefined
-                }
-              >
-                {durability?.available ? (
-                  <>
-                    <Figure
-                      label="AI lines surviving"
-                      value={pctOrDash(durability.aiSurvivalPercent)}
-                    />
-                    <Figure
-                      label="Human lines surviving"
-                      value={pctOrDash(durability.humanSurvivalPercent)}
-                    />
-                  </>
-                ) : (
-                  <PanelState
-                    state="empty"
-                    icon="clock"
-                    emptyTag="Not available yet"
-                    emptyMessage="Appears once merged pull requests are 21 days old and the survival workflow has measured them."
-                  />
-                )}
-              </LeverageCard>
-            </div>
-          )}
+          <NativeLeverage leverage={leverage} jiraConnected={jiraConnected} />
           <div className="govuk-!-margin-top-5">
             <AiCodeChurnPanel
               churn={churn?.data}
               status={churn?.status}
-              number={4 + figureShift}
+              number={CHURN_FIGURE + figureShift}
             />
           </div>
           <div className="govuk-!-margin-top-5">
@@ -427,9 +314,7 @@ export function AiNativeOverviewView({
                   </OpenButton>,
                   r.merged,
                   r.medianComplexity ?? '–',
-                  r.medianCycleHours === null
-                    ? '–'
-                    : formatDuration(r.medianCycleHours)
+                  medianCycle(r.medianCycleHours)
                 ]
               }))}
             />

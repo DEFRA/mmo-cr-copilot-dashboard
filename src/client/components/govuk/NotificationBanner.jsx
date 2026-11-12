@@ -21,7 +21,9 @@ export function NotificationBanner({
   const Heading = `h${headingLevel}`
 
   useEffect(() => {
-    if (shouldFocus) bannerRef.current?.focus()
+    if (shouldFocus) {
+      bannerRef.current?.focus()
+    }
   }, [shouldFocus])
 
   return (

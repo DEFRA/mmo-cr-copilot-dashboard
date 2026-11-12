@@ -33,7 +33,9 @@ export function buildContributorPersonaMap(mappings = []) {
 }
 
 export function personaForContributor(handle, mappingsByHandle = {}) {
-  if (typeof handle !== 'string') return DEFAULT_PERSONA
+  if (typeof handle !== 'string') {
+    return DEFAULT_PERSONA
+  }
   return mappingsByHandle[handle.toLowerCase()] ?? DEFAULT_PERSONA
 }
 

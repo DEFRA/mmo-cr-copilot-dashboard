@@ -1,0 +1,28 @@
+{
+  "schema": "ai-attribution-file/2",
+  "path": "src/client/components/views/AdminProjectsView.jsx",
+  "added": 23,
+  "counts": {
+    "aiCompletion": 0,
+    "aiChat": 0,
+    "aiAgent": 8,
+    "aiModified": 0,
+    "pasted": 0,
+    "typed": 0,
+    "untracked": 15
+  },
+  "ranges": {
+    "ai-agent": "14,27-28,31,91,123,210,241",
+    "untracked": "34-35,37-39,41,67-69,190-192,401-403"
+  },
+  "ai": [
+    [14, "a", "286edaef", 0],
+    [27, "a", "077eb24d", 0],
+    [28, "a", "ab55e150", 0],
+    [31, "a", "b2671c1b", 0],
+    [91, "a", "d985c833", 0],
+    [123, "a", "83f132fc", 0],
+    [210, "a", "d985c833", 0],
+    [241, "a", "3431e38f", 0]
+  ]
+}

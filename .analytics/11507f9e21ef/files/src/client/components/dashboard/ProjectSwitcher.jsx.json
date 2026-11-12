@@ -1,0 +1,27 @@
+{
+  "schema": "ai-attribution-file/2",
+  "path": "src/client/components/dashboard/ProjectSwitcher.jsx",
+  "added": 8,
+  "counts": {
+    "aiCompletion": 0,
+    "aiChat": 0,
+    "aiAgent": 8,
+    "aiModified": 0,
+    "pasted": 0,
+    "typed": 0,
+    "untracked": 0
+  },
+  "ranges": {
+    "ai-agent": "76-79,103-106"
+  },
+  "ai": [
+    [76, "a", "f7de9861", 0],
+    [77, "a", "11a761f0", 0],
+    [78, "a", "2467b368", 0],
+    [79, "a", "23893bde", 0],
+    [103, "a", "0b5a63e1", 0],
+    [104, "a", "5e97d07d", 0],
+    [105, "a", "2467b368", 0],
+    [106, "a", "23893bde", 0]
+  ]
+}

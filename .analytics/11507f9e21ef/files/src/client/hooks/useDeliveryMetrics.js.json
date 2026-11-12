@@ -1,0 +1,17 @@
+{
+  "schema": "ai-attribution-file/2",
+  "path": "src/client/hooks/useDeliveryMetrics.js",
+  "added": 18,
+  "counts": {
+    "aiCompletion": 0,
+    "aiChat": 0,
+    "aiAgent": 0,
+    "aiModified": 0,
+    "pasted": 0,
+    "typed": 0,
+    "untracked": 18
+  },
+  "ranges": {
+    "untracked": "15-17,40-45,50-52,76-81"
+  }
+}

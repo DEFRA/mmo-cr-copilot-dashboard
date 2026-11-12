@@ -1,0 +1,25 @@
+{
+  "schema": "ai-attribution-file/2",
+  "path": "src/client/components/govuk/SortableTable.jsx",
+  "added": 11,
+  "counts": {
+    "aiCompletion": 0,
+    "aiChat": 0,
+    "aiAgent": 5,
+    "aiModified": 0,
+    "pasted": 0,
+    "typed": 0,
+    "untracked": 6
+  },
+  "ranges": {
+    "ai-agent": "11,53,78,108,110",
+    "untracked": "9-10,51-52,76-77"
+  },
+  "ai": [
+    [11, "a", "9845a6a3", 0],
+    [53, "a", "9845a6a3", 0],
+    [78, "a", "9845a6a3", 0],
+    [108, "a", "1b03b611", 0],
+    [110, "a", "3ddc610f", 0]
+  ]
+}

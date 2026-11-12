@@ -7,7 +7,9 @@ const getJson = (path, signal) =>
     signal,
     headers: { Accept: 'application/json' }
   }).then((res) => {
-    if (!res.ok) throw new Error(`Request failed (${res.status})`)
+    if (!res.ok) {
+      throw new Error(`Request failed (${res.status})`)
+    }
     return res.json()
   })
 
@@ -25,7 +27,9 @@ export function useRepositories(enabled = true) {
   const [reloadToken, setReloadToken] = useState(0)
 
   useEffect(() => {
-    if (!enabled) return undefined
+    if (!enabled) {
+      return undefined
+    }
     const controller = new AbortController()
     setState((s) => ({ ...s, status: 'loading' }))
 
@@ -33,13 +37,17 @@ export function useRepositories(enabled = true) {
       getJson('/api/repositories', controller.signal),
       getJson('/api/repositories/unassigned', controller.signal).catch(
         (err) => {
-          if (err.name === 'AbortError') throw err
+          if (err.name === 'AbortError') {
+            throw err
+          }
           return { repositories: [] }
         }
       )
     ])
       .then(([repos, unassigned]) => {
-        if (controller.signal.aborted) return
+        if (controller.signal.aborted) {
+          return
+        }
         setState({
           repositories: Array.isArray(repos?.repositories)
             ? repos.repositories
@@ -51,7 +59,9 @@ export function useRepositories(enabled = true) {
         })
       })
       .catch((err) => {
-        if (controller.signal.aborted || err.name === 'AbortError') return
+        if (controller.signal.aborted || err.name === 'AbortError') {
+          return
+        }
         setState((s) => ({ ...s, status: 'error' }))
       })
 

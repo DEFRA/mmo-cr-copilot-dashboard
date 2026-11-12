@@ -1,0 +1,30 @@
+{
+  "schema": "ai-attribution-file/2",
+  "path": "src/server/common/helpers/backend-client.js",
+  "added": 11,
+  "counts": {
+    "aiCompletion": 0,
+    "aiChat": 0,
+    "aiAgent": 11,
+    "aiModified": 0,
+    "pasted": 0,
+    "typed": 0,
+    "untracked": 0
+  },
+  "ranges": {
+    "ai-agent": "17,23,28-35,38"
+  },
+  "ai": [
+    [17, "a", "d1e9c244", 0],
+    [23, "a", "4b5c5bcb", 0],
+    [28, "a", "5b538f48", 0],
+    [29, "a", "e7a7a2f1", 0],
+    [30, "a", "9e50d005", 0],
+    [31, "a", "19da87e0", 0],
+    [32, "a", "db99c174", 0],
+    [33, "a", "9845a6a3", 0],
+    [34, "a", "9221cd12", 0],
+    [35, "a", "9845a6a3", 0],
+    [38, "a", "a4ba39ca", 0]
+  ]
+}

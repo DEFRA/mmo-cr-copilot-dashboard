@@ -27,7 +27,14 @@ import {
   selectRepoContributors,
   shortRepoName
 } from '../../lib/selectors'
-import { ScopeHeader, lines, plural } from './scope.jsx'
+import {
+  ScopeHeader,
+  authorshipRows,
+  authorshipSlices,
+  lines,
+  plural
+} from './scope.jsx'
+import { COPILOT_ASSISTED, HUMAN_AUTHORED } from '../../lib/classification.js'
 
 const NO_COMMITS = []
 
@@ -49,6 +56,117 @@ const formatWhen = (iso) =>
         minute: '2-digit'
       })
     : '—'
+
+function prKpis(m, counted, cycleHours) {
+  return [
+    {
+      label: 'Commit assist rate',
+      family: 'assist',
+      icon: 'sparkle',
+      value: String(m.copilotAssistedRate),
+      unit: '%',
+      sub: `${m.copilotAssistedCommits} of ${plural(m.totalCommits, 'commit')}`,
+      chart: <ProgressRing value={m.copilotAssistedRate} />
+    },
+    {
+      label: 'Line assist rate',
+      family: 'assist',
+      icon: 'code',
+      value: String(m.copilotAssistedLineRate),
+      unit: '%',
+      sub: `${lines(m.copilotAssistedLines)} of ${lines(m.totalLinesTouched)} lines`,
+      chart: <ProgressRing value={m.copilotAssistedLineRate} />
+    },
+    {
+      label: 'Lines touched',
+      family: 'output',
+      icon: 'plusminus',
+      value: lines(m.totalLinesTouched),
+      sub: `${lines(m.linesAdded)} added · ${lines(m.linesDeleted)} deleted`,
+      chart: <MiniBars data={counted.map((c) => c.touched)} />
+    },
+    {
+      label: 'PR coding cycle time',
+      family: 'speed',
+      icon: 'clock',
+      value: formatDuration(cycleHours),
+      sub: 'First commit to last commit'
+    }
+  ]
+}
+
+const jiraKeysOf = (pr) =>
+  Array.isArray(pr.jiraKeys)
+    ? pr.jiraKeys.filter((k) => typeof k === 'string')
+    : []
+
+/** Describes the commit touching the most lines, when there is one. */
+function largestCommitText(counted) {
+  if (counted.length === 0) {
+    return undefined
+  }
+  const largest = counted.reduce((max, c) =>
+    c.touched > max.touched ? c : max
+  )
+  return `The largest commit, ${largest.commit}, touched ${lines(largest.touched)} lines and was ${largest.category}.`
+}
+
+function BranchPanel({ pr, merged, contributors, excluded }) {
+  const branches = pr.sourceBranch
+    ? `${pr.sourceBranch} → ${pr.targetBranch}`
+    : `→ ${pr.targetBranch}`
+  return (
+    <Panel
+      title="Branch and timeline"
+      family="leverage"
+      icon="branch"
+      aside={<span className="app-mini-tag">{branches}</span>}
+    >
+      <dl className="app-stat-list">
+        <MetaRow label="Status">
+          {merged ? (
+            <Tag colour="green">Merged</Tag>
+          ) : (
+            <Tag colour="blue">Open</Tag>
+          )}
+        </MetaRow>
+        <MetaRow label="Contributors">
+          {contributors.map((c) => c.contributor).join(', ') || '—'}
+        </MetaRow>
+        <MetaRow label="First commit">{formatWhen(pr.firstCommitAt)}</MetaRow>
+        <MetaRow label={merged ? 'Merged' : 'Last commit'}>
+          {formatWhen(merged ? pr.prMergedAt : pr.lastCommitAt)}
+        </MetaRow>
+        <MetaRow label="Build">{pr.buildId ?? '—'}</MetaRow>
+        <MetaRow label="Excluded">
+          {excluded ? plural(excluded, 'rebase or Dependabot commit') : 'None'}
+        </MetaRow>
+      </dl>
+    </Panel>
+  )
+}
+
+function MissingPr({ id, name, prNumber }) {
+  return (
+    <section className="app-scope" aria-labelledby={id}>
+      <ScopeHeader
+        id={id}
+        level="Drill-down"
+        icon="merge"
+        title="Pull request overview"
+        meta={`${name} · #${prNumber}`}
+      />
+      <Panel title="Pull request" family="leverage" icon="merge">
+        <PanelState
+          state="empty"
+          title="Pull request"
+          icon="merge"
+          emptyMessage="This pull request is not in the selected period."
+        />
+      </Panel>
+    </section>
+  )
+}
 
 /**
  * Pull request overview then its commits, the last two levels of the cascade
@@ -85,71 +203,15 @@ export function PRView({
   )
 
   if (!pr || !m) {
-    return (
-      <section className="app-scope" aria-labelledby={prId}>
-        <ScopeHeader
-          id={prId}
-          level="Drill-down"
-          icon="merge"
-          title="Pull request overview"
-          meta={`${name} · #${prNumber}`}
-        />
-        <Panel title="Pull request" family="leverage" icon="merge">
-          <PanelState
-            state="empty"
-            title="Pull request"
-            icon="merge"
-            emptyMessage="This pull request is not in the selected period."
-          />
-        </Panel>
-      </section>
-    )
+    return <MissingPr id={prId} name={name} prNumber={prNumber} />
   }
 
   const merged = isMergedPayload(pr)
   const cycleHours = hoursBetween(pr.firstCommitAt, pr.lastCommitAt)
   const excluded = m.rebaseCommits + m.dependabotCommits
   const label = `pull request ${prNumber}`
-  const largest = counted.reduce(
-    (max, c) => (c.touched > (max?.touched ?? -1) ? c : max),
-    null
-  )
 
-  const kpis = [
-    {
-      label: 'Commit assist rate',
-      family: 'assist',
-      icon: 'sparkle',
-      value: String(m.copilotAssistedRate),
-      unit: '%',
-      sub: `${m.copilotAssistedCommits} of ${plural(m.totalCommits, 'commit')}`,
-      chart: <ProgressRing value={m.copilotAssistedRate} />
-    },
-    {
-      label: 'Line assist rate',
-      family: 'assist',
-      icon: 'code',
-      value: String(m.copilotAssistedLineRate),
-      unit: '%',
-      sub: `${lines(m.copilotAssistedLines)} of ${lines(m.totalLinesTouched)} lines`,
-      chart: <ProgressRing value={m.copilotAssistedLineRate} />
-    },
-    {
-      label: 'Lines touched',
-      family: 'output',
-      icon: 'plusminus',
-      value: lines(m.totalLinesTouched),
-      sub: `${lines(m.linesAdded)} added · ${lines(m.linesDeleted)} deleted`,
-      chart: <MiniBars data={counted.map((c) => c.touched)} />
-    },
-    {
-      label: 'PR coding cycle time',
-      family: 'speed',
-      icon: 'clock',
-      value: formatDuration(cycleHours),
-      sub: 'First commit to last commit'
-    }
-  ]
+  const kpis = prKpis(m, counted, cycleHours)
 
   return (
     <>
@@ -170,53 +232,18 @@ export function PRView({
 
         <div className="app-grid govuk-!-margin-top-5">
           <div className="app-span-6">
-            <Panel
-              title="Branch and timeline"
-              family="leverage"
-              icon="branch"
-              aside={
-                <span className="app-mini-tag">
-                  {pr.sourceBranch
-                    ? `${pr.sourceBranch} → ${pr.targetBranch}`
-                    : `→ ${pr.targetBranch}`}
-                </span>
-              }
-            >
-              <dl className="app-stat-list">
-                <MetaRow label="Status">
-                  {merged ? (
-                    <Tag colour="green">Merged</Tag>
-                  ) : (
-                    <Tag colour="blue">Open</Tag>
-                  )}
-                </MetaRow>
-                <MetaRow label="Contributors">
-                  {contributors.map((c) => c.contributor).join(', ') || '—'}
-                </MetaRow>
-                <MetaRow label="First commit">
-                  {formatWhen(pr.firstCommitAt)}
-                </MetaRow>
-                <MetaRow label={merged ? 'Merged' : 'Last commit'}>
-                  {formatWhen(merged ? pr.prMergedAt : pr.lastCommitAt)}
-                </MetaRow>
-                <MetaRow label="Build">{pr.buildId ?? '—'}</MetaRow>
-                <MetaRow label="Excluded">
-                  {excluded
-                    ? plural(excluded, 'rebase or Dependabot commit')
-                    : 'None'}
-                </MetaRow>
-              </dl>
-            </Panel>
+            <BranchPanel
+              pr={pr}
+              merged={merged}
+              contributors={contributors}
+              excluded={excluded}
+            />
             {projectSlug && jiraConnected && (
               <LinkedJiraTickets
                 projectSlug={projectSlug}
                 repository={repository}
                 prNumber={prNumber}
-                payloadKeys={
-                  Array.isArray(pr.jiraKeys)
-                    ? pr.jiraKeys.filter((k) => typeof k === 'string')
-                    : []
-                }
+                payloadKeys={jiraKeysOf(pr)}
                 canEdit={canReclassify}
               />
             )}
@@ -249,11 +276,7 @@ export function PRView({
             number={1}
             title="Lines touched per commit"
             subtitle={`Lines touched per counted commit by classification, oldest to newest, ${label}. Rebase and Dependabot commits are excluded.`}
-            description={
-              largest
-                ? `The largest commit, ${largest.commit}, touched ${lines(largest.touched)} lines and was ${largest.category}.`
-                : undefined
-            }
+            description={largestCommitText(counted)}
             family="leverage"
             icon="bars"
             chip="Oldest to newest"
@@ -271,12 +294,12 @@ export function PRView({
               categories={counted.map((c) => c.commit)}
               series={[
                 {
-                  name: 'Copilot-assisted',
+                  name: COPILOT_ASSISTED,
                   colorToken: 'copilot',
                   data: counted.map((c) => c.copilot)
                 },
                 {
-                  name: 'Human-authored',
+                  name: HUMAN_AUTHORED,
                   colorToken: 'manual',
                   data: counted.map((c) => c.human)
                 }
@@ -371,19 +394,19 @@ export function PRView({
             ]}
             rows={
               m.totalCommits
-                ? [
-                    ['Copilot-assisted', m.copilotAssistedCommits],
-                    ['Human-authored', m.humanAuthoredCommits]
-                  ]
+                ? authorshipRows(
+                    m.copilotAssistedCommits,
+                    m.humanAuthoredCommits
+                  )
                 : []
             }
           >
             <DistributionDonut
               title="Commit composition"
-              data={[
-                { name: 'Copilot-assisted', value: m.copilotAssistedCommits },
-                { name: 'Human-authored', value: m.humanAuthoredCommits }
-              ]}
+              data={authorshipSlices(
+                m.copilotAssistedCommits,
+                m.humanAuthoredCommits
+              )}
             />
           </ChartFigure>
           <ChartFigure
@@ -400,19 +423,16 @@ export function PRView({
             ]}
             rows={
               m.totalLinesTouched
-                ? [
-                    ['Copilot-assisted', m.copilotAssistedLines],
-                    ['Human-authored', m.humanAuthoredLines]
-                  ]
+                ? authorshipRows(m.copilotAssistedLines, m.humanAuthoredLines)
                 : []
             }
           >
             <DistributionDonut
               title="Line composition"
-              data={[
-                { name: 'Copilot-assisted', value: m.copilotAssistedLines },
-                { name: 'Human-authored', value: m.humanAuthoredLines }
-              ]}
+              data={authorshipSlices(
+                m.copilotAssistedLines,
+                m.humanAuthoredLines
+              )}
             />
           </ChartFigure>
         </div>

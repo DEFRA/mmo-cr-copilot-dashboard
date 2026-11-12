@@ -13,6 +13,21 @@ import {
   valueAxis
 } from '../../lib/chart-style'
 
+const GOOD_VALUE = 75
+const FAIR_VALUE = 50
+const SHORT_UNIT = 2
+const HORIZONTAL_LABEL_ROOM = 56
+
+function bandColor(p, v, colorByValue) {
+  if (!colorByValue) {
+    return p.categorical[0]
+  }
+  if (v >= GOOD_VALUE) {
+    return p.family.adoption.band
+  }
+  return v >= FAIR_VALUE ? p.warning : p.error
+}
+
 /**
  * Bar chart comparing a single value across categories. Bars carry value labels
  * while they fit; a long axis scrolls through a slider window from `zoomAnchor`.
@@ -35,14 +50,8 @@ export function CategoryBar({
 }) {
   const option = useMemo(() => {
     const p = getAppPalette()
-    const bandColor = (v) => {
-      if (!colorByValue) return p.categorical[0]
-      if (v >= 75) return p.family.adoption.band
-      if (v >= 50) return p.warning
-      return p.error
-    }
     // A word unit (" lines") is already on the value axis; repeating it widens every label.
-    const labelUnit = unit.trim().length > 2 ? '' : unit
+    const labelUnit = unit.trim().length > SHORT_UNIT ? '' : unit
     const zoom = categoryZoom(p, categories.length, {
       axis: horizontal ? 'y' : 'x',
       anchor: zoomAnchor
@@ -63,7 +72,7 @@ export function CategoryBar({
     return {
       grid: {
         left: 8,
-        right: (horizontal ? 56 : 16) + (horizontal ? zoom.gap : 0),
+        right: horizontal ? HORIZONTAL_LABEL_ROOM + zoom.gap : 16,
         top: 32,
         bottom: 8 + (horizontal ? 0 : zoom.gap),
         containLabel: true
@@ -84,7 +93,9 @@ export function CategoryBar({
           name: seriesName,
           type: 'bar',
           barMaxWidth: 42,
-          itemStyle: { color: (params) => bandColor(params.value) },
+          itemStyle: {
+            color: (params) => bandColor(p, params.value, colorByValue)
+          },
           ...barLabels(p, categories.length, {
             position: horizontal ? 'right' : 'top',
             formatter: `{c}${labelUnit}`

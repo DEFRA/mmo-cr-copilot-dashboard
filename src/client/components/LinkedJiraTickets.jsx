@@ -19,7 +19,9 @@ const parseKeys = (value) => [
 ]
 
 function keyError(keys) {
-  if (keys.length > MAX_KEYS) return `Enter ${MAX_KEYS} Jira tickets or fewer`
+  if (keys.length > MAX_KEYS) {
+    return `Enter ${MAX_KEYS} Jira tickets or fewer`
+  }
   const bad = keys.find((k) => !ISSUE_KEY.test(k))
   return bad
     ? `${bad} is not a Jira ticket key. Use the form MMO-123, separated by commas`
@@ -27,7 +29,9 @@ function keyError(keys) {
 }
 
 function KeyList({ keys }) {
-  if (keys.length === 0) return <span className="app-muted">None</span>
+  if (keys.length === 0) {
+    return <span className="app-muted">None</span>
+  }
   return (
     <ul className="app-quick" aria-label="Jira tickets">
       {keys.map((key) => (
@@ -60,7 +64,9 @@ export function LinkedJiraTickets({
   const path = `/api/projects/${encodeURIComponent(projectSlug)}/pr-links/${encodeURIComponent(repository)}/${prNumber}`
 
   useEffect(() => {
-    if (!projectSlug) return undefined
+    if (!projectSlug) {
+      return undefined
+    }
     const controller = new AbortController()
     apiFetch(path, {
       signal: controller.signal,
@@ -80,7 +86,7 @@ export function LinkedJiraTickets({
       ...payloadKeys,
       ...links.filter((l) => l.source !== 'manual').map((l) => l.jiraKey)
     ])
-  ].sort()
+  ].sort((a, b) => a.localeCompare(b))
 
   const startEdit = useCallback(() => {
     setDraft(manual.join(', '))

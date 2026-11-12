@@ -25,18 +25,132 @@ const PERSONA_ITEMS = PERSONAS.map((p) => ({ value: p.id, text: p.label }))
 const isValidMapping = (m) =>
   typeof m?.githubHandle === 'string' && PERSONA_IDS.has(m.persona)
 
+function handleError(handle) {
+  if (!handle) {
+    return 'Enter a GitHub handle'
+  }
+  if (handle.length > HANDLE_MAX_LENGTH) {
+    return `GitHub handle must be ${HANDLE_MAX_LENGTH} characters or fewer`
+  }
+  return HANDLE_PATTERN.test(handle)
+    ? null
+    : String.raw`GitHub handle must not include / or \, and must not be . or ..`
+}
+
 function validate(handle, persona) {
   const errors = {}
-  if (!handle) {
-    errors.handle = 'Enter a GitHub handle'
-  } else if (handle.length > HANDLE_MAX_LENGTH) {
-    errors.handle = `GitHub handle must be ${HANDLE_MAX_LENGTH} characters or fewer`
-  } else if (!HANDLE_PATTERN.test(handle)) {
-    errors.handle =
-      'GitHub handle must not include / or \\, and must not be . or ..'
+  const problem = handleError(handle)
+  if (problem) {
+    errors.handle = problem
   }
-  if (!PERSONA_IDS.has(persona)) errors.persona = 'Select a persona'
+  if (!PERSONA_IDS.has(persona)) {
+    errors.persona = 'Select a persona'
+  }
   return errors
+}
+
+const errorLinks = (errors) =>
+  [
+    errors.handle && { href: `#${HANDLE_ID}`, text: errors.handle },
+    errors.persona && { href: `#${PERSONA_ID}`, text: errors.persona },
+    errors.remove && { text: errors.remove }
+  ].filter(Boolean)
+
+function listState(rows, status) {
+  if (rows.length > 0) {
+    return 'populated'
+  }
+  if (status === 'error') {
+    return 'error'
+  }
+  return status === 'loading' || status === 'idle' ? 'loading' : 'empty'
+}
+
+function MappingActions({ mapping, onChange, onDelete }) {
+  const handle = mapping.githubHandle
+  return (
+    <span>
+      <button
+        type="button"
+        className="app-link-button"
+        onClick={() => onChange(mapping)}
+      >
+        {'Change'}
+        <span className="govuk-visually-hidden">{` persona for ${handle}`}</span>
+      </button>
+      <button
+        type="button"
+        className="app-link-button govuk-!-margin-left-3"
+        onClick={() => onDelete(handle)}
+      >
+        {'Delete'}
+        <span className="govuk-visually-hidden">
+          {` persona mapping for ${handle}`}
+        </span>
+      </button>
+    </span>
+  )
+}
+
+function MappingForm({
+  editing,
+  handle,
+  persona,
+  errors,
+  pending,
+  suggestions,
+  handleRef,
+  onHandle,
+  onPersona,
+  onSubmit,
+  onCancel
+}) {
+  return (
+    <Panel
+      title={editing ? 'Change a persona mapping' : 'Add a persona mapping'}
+      family="adoption"
+      icon="person"
+      headingLevel={2}
+    >
+      <form onSubmit={onSubmit} noValidate>
+        <Combobox
+          id={HANDLE_ID}
+          label="GitHub handle"
+          hint="Choose a contributor from this project or type the name they commit with, as set in their git config. Names without a mapping count as Developers."
+          errorMessage={errors.handle}
+          className="govuk-input--width-20"
+          inputRef={handleRef}
+          value={handle}
+          onChange={onHandle}
+          onSelect={onHandle}
+          options={suggestions}
+          itemName="contributor"
+          itemNamePlural="contributors"
+        />
+        <Radios
+          idPrefix={PERSONA_ID}
+          name="persona"
+          legend="Persona"
+          legendSize="s"
+          hint="The delivery role this person's pull requests count towards."
+          errorMessage={errors.persona}
+          items={PERSONA_ITEMS}
+          value={persona ?? null}
+          onChange={onPersona}
+        />
+        <div className="govuk-button-group">
+          <Button type="submit" disabled={pending}>
+            {pending ? 'Saving…' : 'Save mapping'}
+          </Button>
+          {editing && (
+            <Button variant="secondary" onClick={onCancel}>
+              Cancel
+            </Button>
+          )}
+        </div>
+      </form>
+    </Panel>
+  )
 }
 
 function DeleteConfirmation({ handle, pending, onConfirm, onCancel }) {
@@ -91,11 +205,8 @@ export function PersonaMappingsSection({
   const suggestions = contributors.filter(
     (name) => !mapped.has(name.toLowerCase())
   )
-  const errorList = [
-    errors.handle && { href: `#${HANDLE_ID}`, text: errors.handle },
-    errors.persona && { href: `#${PERSONA_ID}`, text: errors.persona },
-    errors.remove && { text: errors.remove }
-  ].filter(Boolean)
+  const errorList = errorLinks(errors)
+  const state = listState(rows, status)
 
   const resetForm = () => {
     setHandle('')
@@ -111,7 +222,9 @@ export function PersonaMappingsSection({
     setNotice(null)
     setAttempt((n) => n + 1)
     setErrors(found)
-    if (Object.keys(found).length > 0) return
+    if (Object.keys(found).length > 0) {
+      return
+    }
 
     setPending(true)
     try {
@@ -160,11 +273,9 @@ export function PersonaMappingsSection({
     }
   }
 
-  const mappingsState = () => {
-    if (rows.length > 0) return 'populated'
-    if (status === 'error') return 'error'
-    if (status === 'loading' || status === 'idle') return 'loading'
-    return 'empty'
+  const startDelete = (target) => {
+    setNotice(null)
+    setConfirming(target)
   }
 
   return (
@@ -180,52 +291,19 @@ export function PersonaMappingsSection({
 
       <div className="app-grid">
         <div className="app-span-6">
-          <Panel
-            title={
-              editing ? 'Change a persona mapping' : 'Add a persona mapping'
-            }
-            family="adoption"
-            icon="person"
-            headingLevel={2}
-          >
-            <form onSubmit={submit} noValidate>
-              <Combobox
-                id={HANDLE_ID}
-                label="GitHub handle"
-                hint="Choose a contributor from this project or type the name they commit with, as set in their git config. Names without a mapping count as Developers."
-                errorMessage={errors.handle}
-                className="govuk-input--width-20"
-                inputRef={handleRef}
-                value={handle}
-                onChange={setHandle}
-                onSelect={setHandle}
-                options={suggestions}
-                itemName="contributor"
-                itemNamePlural="contributors"
-              />
-              <Radios
-                idPrefix={PERSONA_ID}
-                name="persona"
-                legend="Persona"
-                legendSize="s"
-                hint="The delivery role this person's pull requests count towards."
-                errorMessage={errors.persona}
-                items={PERSONA_ITEMS}
-                value={persona ?? null}
-                onChange={setPersona}
-              />
-              <div className="govuk-button-group">
-                <Button type="submit" disabled={pending}>
-                  {pending ? 'Saving…' : 'Save mapping'}
-                </Button>
-                {editing && (
-                  <Button variant="secondary" onClick={resetForm}>
-                    Cancel
-                  </Button>
-                )}
-              </div>
-            </form>
-          </Panel>
+          <MappingForm
+            editing={editing}
+            handle={handle}
+            persona={persona}
+            errors={errors}
+            pending={pending}
+            suggestions={suggestions}
+            handleRef={handleRef}
+            onHandle={setHandle}
+            onPersona={setPersona}
+            onSubmit={submit}
+            onCancel={resetForm}
+          />
         </div>
 
         <div className="app-span-6">
@@ -234,7 +312,7 @@ export function PersonaMappingsSection({
             family="adoption"
             icon="users"
             headingLevel={2}
-            busy={mappingsState() === 'loading'}
+            busy={state === 'loading'}
           >
             {status === 'error' && rows.length > 0 && (
               <NotificationBanner headingLevel={3}>
@@ -251,7 +329,7 @@ export function PersonaMappingsSection({
               />
             )}
             <PanelState
-              state={mappingsState()}
+              state={state}
               title="Persona mappings"
               icon="users"
               emptyTag="No mappings yet"
@@ -279,33 +357,12 @@ export function PersonaMappingsSection({
                     <Tag key="persona" colour={PERSONA_TAG[m.persona]}>
                       {personaMeta(m.persona).label}
                     </Tag>,
-                    <span key="actions">
-                      <button
-                        type="button"
-                        className="app-link-button"
-                        onClick={() => startChange(m)}
-                      >
-                        Change
-                        <span className="govuk-visually-hidden">
-                          {' '}
-                          persona for {m.githubHandle}
-                        </span>
-                      </button>
-                      <button
-                        type="button"
-                        className="app-link-button govuk-!-margin-left-3"
-                        onClick={() => {
-                          setNotice(null)
-                          setConfirming(m.githubHandle)
-                        }}
-                      >
-                        Delete
-                        <span className="govuk-visually-hidden">
-                          {' '}
-                          persona mapping for {m.githubHandle}
-                        </span>
-                      </button>
-                    </span>
+                    <MappingActions
+                      key="actions"
+                      mapping={m}
+                      onChange={startChange}
+                      onDelete={startDelete}
+                    />
                   ]
                 }))}
               />

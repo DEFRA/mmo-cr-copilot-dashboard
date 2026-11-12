@@ -22,11 +22,11 @@ export function ClassificationBadge({ classification, long = false }) {
   )
 }
 
-const SIZES = ['XS', 'S', 'M', 'L', 'XL']
+const SIZES = new Set(['XS', 'S', 'M', 'L', 'XL'])
 
 /** Complexity band XS–XL with an optional score, for example "M · 52". */
 export function ComplexityChip({ band, score }) {
-  const size = SIZES.includes(band) ? band : 'M'
+  const size = SIZES.has(band) ? band : 'M'
 
   return (
     <span className={`app-size app-size--${size.toLowerCase()}`}>
@@ -37,11 +37,11 @@ export function ComplexityChip({ band, score }) {
   )
 }
 
-const RATINGS = ['A', 'B', 'C', 'D', 'E']
+const RATINGS = new Set(['A', 'B', 'C', 'D', 'E'])
 
 /** SonarCloud A–E rating square with its text label beneath. */
 export function SonarRating({ rating, label }) {
-  const known = RATINGS.includes(rating)
+  const known = RATINGS.has(rating)
 
   return (
     <span className="app-ratings__item">
@@ -63,7 +63,7 @@ export function SonarRating({ rating, label }) {
 
 const JIRA_COLOURS = {
   done: 'green',
-  'in review': undefined,
+  'in review': null,
   'in progress': 'purple',
   'to do': 'grey'
 }

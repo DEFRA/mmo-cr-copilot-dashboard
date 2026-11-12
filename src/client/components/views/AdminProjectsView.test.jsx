@@ -67,7 +67,9 @@ describe('#validateComplexityModel', () => {
 describe('#AdminProjectsView', () => {
   beforeEach(() => {
     fetchMock.mockResponse((req) => {
-      if (req.method !== 'GET') return JSON.stringify({})
+      if (req.method !== 'GET') {
+        return JSON.stringify({})
+      }
       if (req.url.includes('/api/repositories/unassigned')) {
         return JSON.stringify({ repositories: ['DEFRA/unassigned-repo'] })
       }
@@ -136,7 +138,9 @@ describe('#AdminProjectsView', () => {
 
   test('Should recompute complexity and report the count', async () => {
     fetchMock.mockResponse((req) => {
-      if (req.method === 'POST') return JSON.stringify({ updated: 12 })
+      if (req.method === 'POST') {
+        return JSON.stringify({ updated: 12 })
+      }
       if (req.url.includes('/api/repositories')) {
         return JSON.stringify({ repositories: [] })
       }

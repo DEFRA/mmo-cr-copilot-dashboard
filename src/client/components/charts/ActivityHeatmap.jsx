@@ -14,6 +14,9 @@ const CONTRIBUTOR_LABEL_WIDTH = 48
 // Each contributor row fits its chip-styled name and a 14px cell label.
 const ROW_HEIGHT = 36
 const CHROME_HEIGHT = 80
+const MIN_HEIGHT = 240
+
+const cellText = (v) => (v === '-' ? 'No activity' : `${v}%`)
 
 /**
  * Heatmap of a value across two categorical axes (contributor × repository
@@ -30,7 +33,7 @@ export function ActivityHeatmap({
   onSelectCell
 }) {
   const chartHeight =
-    height ?? Math.max(240, CHROME_HEIGHT + yLabels.length * ROW_HEIGHT)
+    height ?? Math.max(MIN_HEIGHT, CHROME_HEIGHT + yLabels.length * ROW_HEIGHT)
   // data: [xIndex, yIndex, value|null]
   const option = useMemo(() => {
     const p = getAppPalette()
@@ -45,7 +48,7 @@ export function ActivityHeatmap({
         position: 'top',
         formatter: (params) => {
           const [x, y, v] = params.data.value
-          return `${escapeHtml(yLabels[y])} · ${escapeHtml(xLabels[x])}<br/><b>${v === '-' ? 'No activity' : `${v}%`}</b>`
+          return `${escapeHtml(yLabels[y])} · ${escapeHtml(xLabels[x])}<br/><b>${cellText(v)}</b>`
         }
       }),
       xAxis: categoryAxis(p, xLabels, {
@@ -117,9 +120,14 @@ export function ActivityHeatmap({
       click: (params) => {
         if (params.componentType === 'yAxis') {
           onSelectContributor?.(params.value)
-        } else if (params.componentType === 'series') {
-          const [x, y, v] = params.data.value
-          if (v !== '-') onSelectCell?.(xLabels[x], yLabels[y])
+          return
+        }
+        if (params.componentType !== 'series') {
+          return
+        }
+        const [x, y, v] = params.data.value
+        if (v !== '-') {
+          onSelectCell?.(xLabels[x], yLabels[y])
         }
       }
     }),

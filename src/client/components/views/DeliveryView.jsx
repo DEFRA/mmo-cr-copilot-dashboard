@@ -3,7 +3,6 @@ import { useId, useMemo } from 'react'
 import { ChartFigure, JiraStatusTag, Panel, PanelState } from '../dashboard'
 import {
   InsetText,
-  NotificationBanner,
   SortableTable,
   SummaryList,
   Tag,
@@ -27,6 +26,12 @@ import {
   plural
 } from './scope.jsx'
 import { buildDeliveryKpis } from './delivery-kpis.js'
+import { JiraNotices, formatDateTime } from './JiraNotices.jsx'
+
+export { JiraNotices }
+
+// The trend charts are figures 1 and 2 when there is more than one sprint.
+const TREND_FIGURES = 2
 
 const DELIVERY_GROUPS = [
   {
@@ -80,15 +85,7 @@ const DATE = new Intl.DateTimeFormat('en-GB', {
   year: 'numeric',
   timeZone: 'UTC'
 })
-const DATE_TIME = new Intl.DateTimeFormat('en-GB', {
-  day: 'numeric',
-  month: 'short',
-  hour: '2-digit',
-  minute: '2-digit',
-  timeZone: 'UTC'
-})
 const formatDate = (ms) => (ms === null ? '–' : DATE.format(ms))
-const formatDateTime = (ms) => DATE_TIME.format(ms)
 
 function DeliveryState({ status, jiraConnected, children }) {
   if (!jiraConnected) {
@@ -105,7 +102,9 @@ function DeliveryState({ status, jiraConnected, children }) {
       />
     )
   }
-  if (status !== 'success') return <PanelState state="loading" icon="ticket" />
+  if (status !== 'success') {
+    return <PanelState state="loading" icon="ticket" />
+  }
   return children
 }
 
@@ -114,7 +113,9 @@ export function UnmappedStatusesNotice({ workflow, canAdminister }) {
   const unmapped = (workflow?.unmappedStatuses ?? []).filter(
     (s) => typeof s?.name === 'string'
   )
-  if (!canAdminister || unmapped.length === 0) return null
+  if (!canAdminister || unmapped.length === 0) {
+    return null
+  }
   return (
     <InsetText>
       {plural(unmapped.length, 'Jira status', 'Jira statuses')} not in any
@@ -126,60 +127,8 @@ export function UnmappedStatusesNotice({ workflow, canAdminister }) {
       >
         Map them in Settings, under JIRA
       </a>
-      .
+      {'.'}
     </InsetText>
-  )
-}
-
-const ADMIN_ERRORS = new Set(['credentials', 'not-visible'])
-
-/**
- * What the backend says about the Jira refresh behind the metrics. Additive:
- * the metrics always render, and an older backend sends no `jira` at all.
- */
-export function JiraNotices({ metrics, canAdminister = false }) {
-  const jira = metrics?.jira
-  const error = typeof jira?.error === 'string' ? jira.error : null
-  const adminError = canAdminister && ADMIN_ERRORS.has(error)
-  const unreachable =
-    jira?.stale === true ||
-    error === 'unavailable' ||
-    (ADMIN_ERRORS.has(error) && !canAdminister)
-  const at = Date.parse(jira?.refreshedAt)
-
-  return (
-    <>
-      {jira?.pending === true && (
-        <NotificationBanner title="Refreshing Jira Data" headingLevel={3}>
-          Jira data is being refreshed. This page updates when it is ready.
-        </NotificationBanner>
-      )}
-      {error === 'credentials' && adminError && (
-        <NotificationBanner title="Jira Credentials Rejected" headingLevel={3}>
-          Jira rejected the credentials this dashboard uses, so Jira data cannot
-          be refreshed. Check the Jira credentials for this service.
-        </NotificationBanner>
-      )}
-      {error === 'not-visible' && adminError && (
-        <NotificationBanner title="Jira Project Not Visible" headingLevel={3}>
-          The Jira account this dashboard uses cannot see this project&rsquo;s
-          Jira project, so Jira data cannot be refreshed. Give that account
-          access to the project in Jira.
-        </NotificationBanner>
-      )}
-      {unreachable && (
-        <NotificationBanner title="Jira Not Reached" headingLevel={3}>
-          {Number.isFinite(at)
-            ? `Jira could not be reached; showing the last data stored, from ${formatDateTime(at)} UTC.`
-            : 'Jira could not be reached; showing the last data stored.'}
-        </NotificationBanner>
-      )}
-      {metrics?.sonar?.stale === true && (
-        <p className="govuk-body-s app-muted">
-          Some quality gates are not yet available.
-        </p>
-      )}
-    </>
   )
 }
 
@@ -218,7 +167,9 @@ export function DeliveryView({
   )
 
   const groups = useMemo(() => {
-    if (!metrics) return []
+    if (!metrics) {
+      return []
+    }
     const all = buildDeliveryKpis({
       metrics,
       done,
@@ -348,7 +299,7 @@ export function DeliveryView({
 
         <div className="app-grid">
           <ChartFigure
-            number={points.length > 1 ? 3 : 1}
+            number={points.length > 1 ? TREND_FIGURES + 1 : 1}
             title="Where tickets are"
             subtitle="Number of the project's Jira tickets at each stage. A ticket whose linked pull requests have all merged counts as PR merged until it reaches Done."
             family="leverage"

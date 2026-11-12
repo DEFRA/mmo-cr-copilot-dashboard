@@ -11,9 +11,12 @@ const TONES = {
   bad: 'worsened',
   flat: 'no meaningful change'
 }
-const NUMBER = /^([+−-]?)([\d,]*\.?\d+)$/
+// Sign, then digits with optional thousands commas and decimals; written to avoid backtracking.
+const NUMBER = /^([+−-]?)(\d[\d,]*(?:\.\d+)?|\.\d+)$/
 const COUNT_MS = 900
 const STAGGER_MS = 80
+// Cubic ease-out for the count-up.
+const EASE_POWER = 3
 
 /** Direction and tone are independent: a falling cycle time is good. */
 export function Delta({ direction = 'flat', tone = 'flat', children }) {
@@ -34,7 +37,9 @@ function useCountUp(text, enabled, delay) {
 
   useEffect(() => {
     const parts = NUMBER.exec(String(text))
-    if (done.current || !parts) return undefined
+    if (done.current || !parts) {
+      return undefined
+    }
 
     const target = Number.parseFloat(parts[2].replaceAll(',', ''))
     const decimals = (parts[2].split('.')[1] ?? '').length
@@ -52,7 +57,7 @@ function useCountUp(text, enabled, delay) {
       start ??= time + delay
       const progress = Math.min(1, Math.max(0, (time - start) / COUNT_MS))
       if (progress < 1) {
-        setFrame(format(target * (1 - (1 - progress) ** 3)))
+        setFrame(format(target * (1 - (1 - progress) ** EASE_POWER)))
         id = requestAnimationFrame(step)
       } else {
         done.current = true
@@ -96,6 +101,76 @@ export const titleCase = (text) =>
 export const headingCase = (node) =>
   typeof node === 'string' ? titleCase(node) : node
 
+/** The card's label: a button or link when the card has an action, else plain text. */
+function KpiAction({ label, onClick, href, expanded, controls, actionText }) {
+  const text = titleCase(label)
+  const hidden = actionText && (
+    <span className="govuk-visually-hidden">, {actionText}</span>
+  )
+  if (onClick) {
+    return (
+      <button
+        type="button"
+        className="app-kpi__action"
+        aria-expanded={expanded}
+        aria-controls={controls}
+        onClick={onClick}
+      >
+        {text}
+        {hidden}
+      </button>
+    )
+  }
+  if (href) {
+    return (
+      <a className="app-kpi__action" href={href}>
+        {text}
+        {hidden}
+      </a>
+    )
+  }
+  return text
+}
+
+function KpiFoot({ delta, badge }) {
+  if (!delta && !badge) {
+    return null
+  }
+  return (
+    <div className="app-kpi__foot">
+      {delta && (
+        <Delta direction={delta.direction} tone={delta.tone}>
+          {delta.text}
+        </Delta>
+      )}
+      {badge && <span className="app-mini-tag">{badge}</span>}
+    </div>
+  )
+}
+
+function KpiBody({ shown, value, unit, chart, compact }) {
+  return (
+    <div className="app-kpi__body">
+      <p className={cx('app-kpi__value', compact && 'app-kpi__value--m')}>
+        <span aria-hidden="true">{shown}</span>
+        <span className="govuk-visually-hidden">{value}</span>
+        {unit && <span className="app-kpi__unit">{unit}</span>}
+      </p>
+      {chart && <span className="app-kpi__viz">{chart}</span>}
+    </div>
+  )
+}
+
+const cardClass = ({ family, clickable, expanded, dimmed, reduced }) =>
+  cx(
+    'app-kpi',
+    familyClass(family),
+    clickable && 'app-kpi--action',
+    expanded && 'app-kpi--open',
+    dimmed && 'app-kpi--dimmed',
+    !reduced && 'app-anim-rise'
+  )
+
 /**
  * KPI card: 8px family band, icon tile, value, unit, delta and a decorative
  * mini chart. With `onClick` or `href` the label becomes the card's one action.
@@ -128,43 +203,11 @@ export function KpiCard({
   const shown = useCountUp(value, !reduced, delay)
   const Heading = `h${headingLevel}`
   const clickable = Boolean(onClick || href)
-  const hidden = actionText && (
-    <span className="govuk-visually-hidden">, {actionText}</span>
-  )
-
-  let action = titleCase(label)
-  if (onClick) {
-    action = (
-      <button
-        type="button"
-        className="app-kpi__action"
-        aria-expanded={expanded}
-        aria-controls={controls}
-        onClick={onClick}
-      >
-        {titleCase(label)}
-        {hidden}
-      </button>
-    )
-  } else if (href) {
-    action = (
-      <a className="app-kpi__action" href={href}>
-        {titleCase(label)}
-        {hidden}
-      </a>
-    )
-  }
+  const familyText = showFamily ? (familyLabel ?? FAMILY_LABELS[family]) : null
 
   return (
     <article
-      className={cx(
-        'app-kpi',
-        familyClass(family),
-        clickable && 'app-kpi--action',
-        expanded && 'app-kpi--open',
-        dimmed && 'app-kpi--dimmed',
-        !reduced && 'app-anim-rise'
-      )}
+      className={cardClass({ family, clickable, expanded, dimmed, reduced })}
       style={{ '--d': `${delay}ms` }}
       aria-labelledby={labelId}
     >
@@ -175,38 +218,31 @@ export function KpiCard({
           </span>
         )}
         <Heading className="app-kpi__label" id={labelId}>
-          {action}
+          <KpiAction
+            label={label}
+            onClick={onClick}
+            href={href}
+            expanded={expanded}
+            controls={controls}
+            actionText={actionText}
+          />
         </Heading>
-        {showFamily && (
-          <span className="app-kpi__family">
-            {familyLabel ?? FAMILY_LABELS[family]}
-          </span>
-        )}
+        {familyText && <span className="app-kpi__family">{familyText}</span>}
         {clickable && (
           <span className="app-kpi__chevron" aria-hidden="true">
             ›
           </span>
         )}
       </div>
-      <div className="app-kpi__body">
-        <p className={cx('app-kpi__value', compact && 'app-kpi__value--m')}>
-          <span aria-hidden="true">{shown}</span>
-          <span className="govuk-visually-hidden">{value}</span>
-          {unit && <span className="app-kpi__unit">{unit}</span>}
-        </p>
-        {chart && <span className="app-kpi__viz">{chart}</span>}
-      </div>
+      <KpiBody
+        shown={shown}
+        value={value}
+        unit={unit}
+        chart={chart}
+        compact={compact}
+      />
       {sub && <p className="app-kpi__sub">{sub}</p>}
-      {(delta || badge) && (
-        <div className="app-kpi__foot">
-          {delta && (
-            <Delta direction={delta.direction} tone={delta.tone}>
-              {delta.text}
-            </Delta>
-          )}
-          {badge && <span className="app-mini-tag">{badge}</span>}
-        </div>
-      )}
+      <KpiFoot delta={delta} badge={badge} />
     </article>
   )
 }

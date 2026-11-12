@@ -19,10 +19,16 @@ export function useProjectMetric(slug, endpoint, window, params = {}) {
     }
     const controller = new AbortController()
     const query = new URLSearchParams()
-    if (from) query.set('from', from)
-    if (to) query.set('to', to)
+    if (from) {
+      query.set('from', from)
+    }
+    if (to) {
+      query.set('to', to)
+    }
     for (const [key, val] of Object.entries(params)) {
-      if (val !== null && val !== undefined) query.set(key, val)
+      if (val !== null && val !== undefined) {
+        query.set(key, val)
+      }
     }
     setState((s) => ({ ...s, status: 'loading', error: null }))
 
@@ -31,12 +37,16 @@ export function useProjectMetric(slug, endpoint, window, params = {}) {
       { signal: controller.signal, headers: { Accept: 'application/json' } }
     )
       .then(async (res) => {
-        if (!res.ok) throw new Error(`Request failed (${res.status})`)
+        if (!res.ok) {
+          throw new Error(`Request failed (${res.status})`)
+        }
         return res.json()
       })
       .then((data) => setState({ data, status: 'success', error: null }))
       .catch((err) => {
-        if (controller.signal.aborted || err.name === 'AbortError') return
+        if (controller.signal.aborted || err.name === 'AbortError') {
+          return
+        }
         setState({ ...IDLE, status: 'error', error: err.message })
       })
 

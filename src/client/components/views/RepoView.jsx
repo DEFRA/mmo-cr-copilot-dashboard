@@ -1,13 +1,6 @@
 import { useId, useMemo } from 'react'
 
-import {
-  ChartFigure,
-  MiniBars,
-  Panel,
-  PanelState,
-  ProgressRing
-} from '../dashboard'
-import { SortableTable, Tag } from '../govuk'
+import { ChartFigure, Panel, PanelState } from '../dashboard'
 import { useLeverageV2 } from '../../hooks/useProjectMetric'
 import { CategoryBar } from '../charts/CategoryBar'
 import { DeliveryTimeBar } from '../charts/DeliveryTimeBar'
@@ -30,38 +23,31 @@ import {
 } from '../../lib/selectors'
 import {
   KpiDrillGrid,
-  Meter,
-  OpenButton,
   PERIOD_CHIP,
+  PR_COLUMN,
   ScopeHeader,
   Subsection,
+  authorshipRows,
+  authorshipSlices,
   lines,
-  plural
+  plural,
+  pullRequests
 } from './scope.jsx'
+import { repoCards } from './repo-cards.jsx'
+import { RepoPrTable, prName } from './RepoPrTable.jsx'
+import { COPILOT_ASSISTED, HUMAN_AUTHORED } from '../../lib/classification.js'
 
 const DRILL_ID = 'repo-drill'
 const SCOPE = 'show breakdown by pull request'
 
-const prName = (row) =>
-  row.title ? `#${row.prNumber} ${row.title}` : `#${row.prNumber}`
-
-function PrStatusTag({ merged }) {
-  return merged ? (
-    <Tag colour="green">Merged</Tag>
-  ) : (
-    <Tag colour="blue">Open</Tag>
-  )
-}
-
-function JiraKeys({ keys }) {
-  if (keys.length === 0) {
-    return <span className="app-badge app-badge--excluded">No Jira key</span>
+function slowestPrText(timeline, avgCycleHours) {
+  if (timeline.length === 0) {
+    return undefined
   }
-  return keys.map((key) => (
-    <span key={key} className="app-badge app-badge--ticket">
-      {key}
-    </span>
-  ))
+  const slowest = timeline.reduce((max, m) =>
+    m.cycleHours > max.cycleHours ? m : max
+  )
+  return `Pull request #${slowest.prNumber} took longest at ${formatDuration(slowest.cycleHours)}. The average is ${formatDuration(avgCycleHours)}.`
 }
 
 /**
@@ -154,174 +140,18 @@ export function RepoView({
       ...toItem(r)
     }))
 
-  const kpis = [
-    {
-      id: 'adoption',
-      label: 'Copilot adoption',
-      anchor: 'metric-copilot-adoption',
-      family: 'adoption',
-      icon: 'users',
-      value: String(delivery.adoptionPct),
-      unit: '%',
-      sub: `${delivery.adopters} of ${delivery.contributorTotal} contributors`,
-      chart: <ProgressRing value={delivery.adoptionPct} />,
-      drill: {
-        title: 'Copilot adoption by pull request',
-        items: byPr((r) => ({
-          value: `${r.adopters} of ${plural(r.contributors.length, 'contributor')}`,
-          sub: r.contributors.join(', ')
-        }))
-      }
-    },
-    {
-      id: 'assist',
-      label: 'Commit assist rate',
-      anchor: 'metric-copilot-assist-rate',
-      family: 'assist',
-      icon: 'sparkle',
-      value: String(summary.copilotAssistedRate),
-      unit: '%',
-      sub: `${summary.copilotAssistedCommits} of ${summary.totalCommits} commits · Copilot used in ${averages.copilotPrCount} of ${plural(summary.prCount, 'pull request')} · average ${averages.avgAssistRate}% per pull request`,
-      chart: <ProgressRing value={summary.copilotAssistedRate} />,
-      drill: {
-        title: 'Commit assist rate by pull request',
-        items: byPr((r) => ({
-          value: `${r.copilotAssistedRate}%`,
-          sub: `${r.copilotAssistedCommits} of ${plural(r.totalCommits, 'commit')}`,
-          pct: r.copilotAssistedRate
-        }))
-      }
-    },
-    {
-      id: 'linerate',
-      label: 'Line assist rate',
-      anchor: 'metric-copilot-line-rate',
-      family: 'assist',
-      icon: 'code',
-      value: String(summary.copilotAssistedLineRate),
-      unit: '%',
-      sub: `${lines(summary.copilotAssistedLines)} of ${lines(summary.totalLinesTouched)} lines`,
-      chart: <ProgressRing value={summary.copilotAssistedLineRate} />,
-      drill: {
-        title: 'Line assist rate by pull request',
-        items: byPr((r) => ({
-          value: `${r.copilotAssistedLineRate}%`,
-          sub: `${lines(r.copilotAssistedLines)} Copilot and ${lines(r.humanAuthoredLines)} human-authored of ${lines(r.totalLinesTouched)} lines`,
-          pct: r.copilotAssistedLineRate
-        }))
-      }
-    },
-    {
-      id: 'leverage',
-      label: 'Copilot Leverage',
-      anchor: 'metric-copilot-leverage',
-      family: 'leverage',
-      icon: 'rocket',
-      ...(v2
-        ? {
-            value: v2.enoughData ? String(v2.overallLeverageScore) : '–',
-            unit: v2.enoughData ? '×' : undefined,
-            sub: v2.enoughData
-              ? `${v2.comparableBands} comparable ${v2.comparableBands === 1 ? 'band' : 'bands'} · ${v2.sampleSize.adopted} adopted PRs`
-              : 'Not enough comparable pull requests yet'
-          }
-        : {
-            value: String(leverage.leveragePct),
-            unit: '%',
-            sub: leverage.flowAvailable
-              ? `Coverage ${leverage.coverage}% · adoption ${leverage.adoption}% · ${leverage.flowRatio}× faster than baseline`
-              : `Coverage ${leverage.coverage}% · adoption ${leverage.adoption}% · no speed baseline yet`
-          }),
-      chart: v2 ? undefined : <ProgressRing value={leverage.leveragePct} />,
-      drill: {
-        title: 'Copilot Leverage inputs by pull request',
-        ...(onOpenLeverage && {
-          more: { text: 'How this is calculated', onOpen: onOpenLeverage }
-        }),
-        intro: `Copilot Leverage is scored per repository. Each pull request is Copilot-led at a commit assist rate of 50% or more. Read with PR rework ratio: ${delivery.reworkRatio}.`,
-        items: byPr((r) => ({
-          value: r.copilotLed ? 'Copilot-led' : 'Human-led',
-          sub: `Line assist ${r.copilotAssistedLineRate}% · PR coding cycle time ${formatDuration(r.cycleHours)}`
-        }))
-      }
-    },
-    {
-      id: 'cycletime',
-      label: 'PR coding cycle time',
-      anchor: 'metric-pr-coding-cycle-time',
-      family: 'speed',
-      icon: 'clock',
-      value: formatDuration(delivery.avgCycleHours),
-      sub: `Average · median ${formatDuration(delivery.medianCycleHours)} · fastest ${formatDuration(delivery.fastestCycleHours)}`,
-      chart: <MiniBars data={prs.map((r) => r.cycleHours)} />,
-      drill: {
-        title: 'PR coding cycle time by pull request',
-        items: byPr((r) => ({
-          value: formatDuration(r.cycleHours),
-          sub: r.merged ? 'Merged' : 'Open'
-        }))
-      }
-    },
-    {
-      id: 'rework',
-      label: 'PR rework ratio',
-      anchor: 'metric-pr-rework-ratio',
-      family: 'risk',
-      icon: 'rework',
-      value: String(delivery.reworkRatio),
-      sub: `${lines(delivery.linesDeleted)} deleted per ${lines(delivery.linesAdded)} added`,
-      chart: <MiniBars data={prs.map((r) => r.reworkRatio)} />,
-      drill: {
-        title: 'PR rework ratio by pull request',
-        items: byPr((r) => ({
-          value: String(r.reworkRatio),
-          sub: `${lines(r.linesDeleted)} deleted per ${lines(r.linesAdded)} added`
-        }))
-      }
-    },
-    {
-      id: 'batch',
-      label: 'Average batch size',
-      anchor: 'metric-avg-batch-size',
-      family: 'speed',
-      icon: 'box',
-      value: String(delivery.avgCommitSize),
-      unit: 'lines',
-      sub: 'Lines touched per commit',
-      chart: <MiniBars data={prs.map((r) => r.avgCommitSize)} />,
-      drill: {
-        title: 'Average batch size by pull request',
-        items: byPr((r) => ({
-          value: `${r.avgCommitSize} lines`,
-          sub: `${lines(r.totalLinesTouched)} lines over ${plural(r.totalCommits, 'commit')}`
-        }))
-      }
-    },
-    {
-      id: 'netlines',
-      label: 'Net lines delivered',
-      anchor: 'metric-net-lines-delivered',
-      family: 'output',
-      icon: 'plusminus',
-      value: lines(delivery.netLines),
-      compact: true,
-      sub: `${lines(delivery.linesAdded)} added minus ${lines(delivery.linesDeleted)} deleted`,
-      chart: <MiniBars data={prs.map((r) => r.netLines)} />,
-      drill: {
-        title: 'Net lines delivered by pull request',
-        items: byPr((r) => ({
-          value: lines(r.netLines),
-          sub: `${lines(r.linesAdded)} added minus ${lines(r.linesDeleted)} deleted`
-        }))
-      }
-    }
-  ]
+  const kpis = repoCards({
+    summary,
+    delivery,
+    averages,
+    prs,
+    v2,
+    leverage,
+    onOpenLeverage,
+    byPr
+  })
 
   const prCategories = prs.map((r) => `#${r.prNumber}`)
-  const slowest = timeline.reduce(
-    (max, m) => (m.cycleHours > (max?.cycleHours ?? -1) ? m : max),
-    null
-  )
 
   return (
     <>
@@ -331,7 +161,7 @@ export function RepoView({
           level="Drill-down"
           icon="repo"
           title="Repository overview"
-          meta={`${name} · ${plural(summary.contributorCount, 'contributor')} · ${plural(summary.prCount, 'pull request')}`}
+          meta={`${name} · ${plural(summary.contributorCount, 'contributor')} · ${pullRequests(summary.prCount)}`}
         />
 
         <KpiDrillGrid kpis={kpis} drillId={DRILL_ID} actionText={SCOPE} />
@@ -342,18 +172,14 @@ export function RepoView({
               number={1}
               title="Coding Cycle Time by PR"
               subtitle={`PR coding cycle time per pull request, hours, ${name}, selected period. Merged and open pull requests are shown separately.`}
-              description={
-                slowest
-                  ? `Pull request #${slowest.prNumber} took longest at ${formatDuration(slowest.cycleHours)}. The average is ${formatDuration(delivery.avgCycleHours)}.`
-                  : undefined
-              }
+              description={slowestPrText(timeline, delivery.avgCycleHours)}
               family="speed"
               icon="clock"
               chip={PERIOD_CHIP}
               headingLevel={4}
               className="app-span-6"
               columns={[
-                { id: 'pr', label: 'Pull request' },
+                PR_COLUMN,
                 {
                   id: 'cycle',
                   label: 'PR coding cycle time (hours)',
@@ -377,7 +203,7 @@ export function RepoView({
               number={2}
               title="Lines Added and Deleted per Commit"
               subtitle={`Lines added against lines deleted per counted commit, sized by lines touched, ${name}, selected period. Rebase and merge commits are excluded.`}
-              description={`${plural(commitPoints.length, 'counted commit')} in ${plural(summary.prCount, 'pull request')}. Commits far from the origin are the largest changes.`}
+              description={`${plural(commitPoints.length, 'counted commit')} in ${pullRequests(summary.prCount)}. Commits far from the origin are the largest changes.`}
               family="risk"
               icon="scatter"
               chip={PERIOD_CHIP}
@@ -416,7 +242,7 @@ export function RepoView({
               headingLevel={4}
               className="app-span-12"
               columns={[
-                { id: 'pr', label: 'Pull request' },
+                PR_COLUMN,
                 {
                   id: 'size',
                   label: 'Average batch size (lines)',
@@ -456,25 +282,19 @@ export function RepoView({
               ]}
               rows={
                 summary.totalCommits
-                  ? [
-                      ['Copilot-assisted', summary.copilotAssistedCommits],
-                      ['Human-authored', summary.humanAuthoredCommits]
-                    ]
+                  ? authorshipRows(
+                      summary.copilotAssistedCommits,
+                      summary.humanAuthoredCommits
+                    )
                   : []
               }
             >
               <DistributionDonut
                 title="Commit composition"
-                data={[
-                  {
-                    name: 'Copilot-assisted',
-                    value: summary.copilotAssistedCommits
-                  },
-                  {
-                    name: 'Human-authored',
-                    value: summary.humanAuthoredCommits
-                  }
-                ]}
+                data={authorshipSlices(
+                  summary.copilotAssistedCommits,
+                  summary.humanAuthoredCommits
+                )}
               />
             </ChartFigure>
             <ChartFigure
@@ -493,36 +313,33 @@ export function RepoView({
               ]}
               rows={
                 summary.totalLinesTouched
-                  ? [
-                      ['Copilot-assisted', summary.copilotAssistedLines],
-                      ['Human-authored', summary.humanAuthoredLines]
-                    ]
+                  ? authorshipRows(
+                      summary.copilotAssistedLines,
+                      summary.humanAuthoredLines
+                    )
                   : []
               }
             >
               <DistributionDonut
                 title="Line composition"
-                data={[
-                  {
-                    name: 'Copilot-assisted',
-                    value: summary.copilotAssistedLines
-                  },
-                  { name: 'Human-authored', value: summary.humanAuthoredLines }
-                ]}
+                data={authorshipSlices(
+                  summary.copilotAssistedLines,
+                  summary.humanAuthoredLines
+                )}
               />
             </ChartFigure>
             <ChartFigure
               number={6}
               title="Commit assist rate by pull request"
               subtitle={`Commit assist rate per pull request, percentage, ${name}, selected period`}
-              description={`The average commit assist rate per pull request is ${averages.avgAssistRate}%. ${averages.copilotPrCount} of ${plural(prs.length, 'pull request')} used Copilot.`}
+              description={`The average commit assist rate per pull request is ${averages.avgAssistRate}%. ${averages.copilotPrCount} of ${pullRequests(prs.length)} used Copilot.`}
               family="assist"
               icon="bars"
               chip={PERIOD_CHIP}
               headingLevel={4}
               className="app-span-6"
               columns={[
-                { id: 'pr', label: 'Pull request' },
+                PR_COLUMN,
                 { id: 'rate', label: 'Commit assist rate (%)', numeric: true }
               ]}
               rows={prs.map((r) => [`#${r.prNumber}`, r.copilotAssistedRate])}
@@ -541,14 +358,14 @@ export function RepoView({
               number={7}
               title="Commits per PR by Classification"
               subtitle={`Copilot-assisted and human-authored commits per pull request, ${name}, selected period`}
-              description={`${summary.copilotAssistedCommits} Copilot-assisted and ${summary.humanAuthoredCommits} human-authored commits across ${plural(prs.length, 'pull request')}.`}
+              description={`${summary.copilotAssistedCommits} Copilot-assisted and ${summary.humanAuthoredCommits} human-authored commits across ${pullRequests(prs.length)}.`}
               family="assist"
               icon="bars"
               chip={PERIOD_CHIP}
               headingLevel={4}
               className="app-span-6"
               columns={[
-                { id: 'pr', label: 'Pull request' },
+                PR_COLUMN,
                 {
                   id: 'copilot',
                   label: 'Copilot-assisted commits',
@@ -568,12 +385,12 @@ export function RepoView({
                 onSelect={(i) => onOpenPR(repository, prs[i].prNumber)}
                 series={[
                   {
-                    name: 'Copilot-assisted',
+                    name: COPILOT_ASSISTED,
                     colorToken: 'copilot',
                     data: prs.map((r) => r.copilotAssistedCommits)
                   },
                   {
-                    name: 'Human-authored',
+                    name: HUMAN_AUTHORED,
                     colorToken: 'manual',
                     data: prs.map((r) => r.humanAuthoredCommits)
                   }
@@ -645,54 +462,11 @@ export function RepoView({
           aside={<span className="app-mini-tag">Newest first</span>}
           className="app-compare"
         >
-          <SortableTable
-            className="govuk-!-margin-bottom-0"
-            caption={`Pull requests in ${name} for the selected period, newest first`}
-            captionHidden
-            head={[
-              { id: 'pr', label: 'Pull request' },
-              { id: 'who', label: 'Contributors' },
-              { id: 'status', label: 'Status' },
-              { id: 'assist', label: 'Commit assist rate' },
-              { id: 'cycle', label: 'PR coding cycle time', numeric: true },
-              ...(jiraConnected
-                ? [{ id: 'jira', label: 'Jira', sortable: false }]
-                : [])
-            ]}
-            rows={prs.map((r) => ({
-              id: r.prNumber,
-              cells: [
-                {
-                  content: (
-                    <OpenButton onClick={openPr(r.prNumber)}>
-                      {prName(r)}
-                    </OpenButton>
-                  ),
-                  sortValue: r.prNumber
-                },
-                r.contributors.join(', '),
-                {
-                  content: <PrStatusTag merged={r.merged} />,
-                  sortValue: r.merged ? 'Merged' : 'Open'
-                },
-                {
-                  content: (
-                    <span className="app-family--assist">
-                      <Meter value={r.copilotAssistedRate} />
-                      {r.copilotAssistedRate}%
-                    </span>
-                  ),
-                  sortValue: r.copilotAssistedRate
-                },
-                {
-                  content: formatDuration(r.cycleHours),
-                  sortValue: r.cycleHours
-                },
-                ...(jiraConnected
-                  ? [<JiraKeys key="jira" keys={r.jiraKeys} />]
-                  : [])
-              ]
-            }))}
+          <RepoPrTable
+            prs={prs}
+            name={name}
+            jiraConnected={jiraConnected}
+            onOpen={openPr}
           />
         </Panel>
       </section>

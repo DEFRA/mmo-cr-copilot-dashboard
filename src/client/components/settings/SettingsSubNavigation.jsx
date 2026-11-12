@@ -55,7 +55,9 @@ export function SettingsSubNavigation({
               href={toHash({ level: 'settings', tab: tab.id })}
               aria-current={tab.id === activeTab ? 'page' : undefined}
               onClick={(event) => {
-                if (!onNavigate || !isPlainClick(event)) return
+                if (!onNavigate || !isPlainClick(event)) {
+                  return
+                }
                 event.preventDefault()
                 onNavigate(tab.id)
               }}

@@ -1028,10 +1028,6 @@ $app-rating-text: (
   overflow: hidden;
 }
 
-.app-feed__item--new {
-  animation: app-feed-flash 1.2s ease-out;
-}
-
 @keyframes app-feed-flash {
   from {
     background: var(--app-colour-brand-tint);
@@ -1042,9 +1038,9 @@ $app-rating-text: (
   }
 }
 
-@media (prefers-reduced-motion: reduce) {
+@media (prefers-reduced-motion: no-preference) {
   .app-feed__item--new {
-    animation: none;
+    animation: app-feed-flash 1.2s ease-out;
   }
 }
 
@@ -1131,6 +1127,11 @@ $app-rating-text: (
   flex-wrap: wrap;
   justify-content: flex-end;
   gap: govuk-spacing(2);
+  // A <fieldset>: drop the browser's border, padding and min-width.
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
 }
 
 .app-period__menu {
@@ -1201,10 +1202,15 @@ $app-rating-text: (
   position: absolute;
   top: calc(100% + 6px);
   right: 0;
+  left: auto;
   z-index: 30;
   width: min(17rem, 92vw);
+  // A non-modal <dialog>: drop the browser's centring, border and colour.
+  margin: 0;
+  color: inherit;
   padding: govuk-spacing(3) 16px 16px;
   overflow: hidden;
+  border: 0;
   border-top: 6px solid var(--app-colour-brand);
   border-radius: var(--app-radius);
   background: var(--app-colour-white);
@@ -1693,7 +1699,6 @@ $app-rating-text: (
 }
 .app-denied__star {
   fill: var(--app-colour-white);
-  animation: app-denied-twinkle 4.8s ease-in-out var(--star-delay, 0s) infinite;
 }
 .app-denied__hills {
   fill: var(--app-colour-speed-ink);
@@ -1704,7 +1709,6 @@ $app-rating-text: (
 }
 .app-denied__beam {
   transform-origin: 0 0;
-  animation: app-denied-sweep 9s ease-in-out infinite alternate;
 }
 .app-denied__tower {
   fill: var(--app-colour-white);
@@ -1730,16 +1734,7 @@ $app-rating-text: (
 .app-denied__sea--front path {
   fill: var(--app-colour-speed-ink);
 }
-.app-denied__sea--back {
-  animation: app-denied-drift 16s linear infinite;
-}
-.app-denied__sea--front {
-  animation: app-denied-drift 10s linear infinite reverse;
-}
 
-.app-denied__boat {
-  animation: app-denied-bob 5s ease-in-out infinite;
-}
 .app-denied__hull {
   fill: var(--app-colour-risk-ink);
 }
@@ -1768,7 +1763,6 @@ $app-rating-text: (
 }
 .app-denied__padlock {
   transform-origin: 0 13px;
-  animation: app-denied-rattle 7s ease-in-out infinite;
 }
 .app-denied__shackle {
   fill: none;
@@ -1785,9 +1779,6 @@ $app-rating-text: (
   fill: var(--app-colour-text);
 }
 
-.app-denied__buoy {
-  animation: app-denied-bob 3.6s ease-in-out infinite;
-}
 .app-denied__buoy-body {
   fill: var(--app-colour-error);
 }
@@ -1799,7 +1790,34 @@ $app-rating-text: (
 }
 .app-denied__buoy-light {
   fill: var(--app-colour-focus);
-  animation: app-denied-glow 3s ease-in-out infinite;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .app-denied__star {
+    animation: app-denied-twinkle 4.8s ease-in-out var(--star-delay, 0s)
+      infinite;
+  }
+  .app-denied__beam {
+    animation: app-denied-sweep 9s ease-in-out infinite alternate;
+  }
+  .app-denied__sea--back {
+    animation: app-denied-drift 16s linear infinite;
+  }
+  .app-denied__sea--front {
+    animation: app-denied-drift 10s linear infinite reverse;
+  }
+  .app-denied__boat {
+    animation: app-denied-bob 5s ease-in-out infinite;
+  }
+  .app-denied__padlock {
+    animation: app-denied-rattle 7s ease-in-out infinite;
+  }
+  .app-denied__buoy {
+    animation: app-denied-bob 3.6s ease-in-out infinite;
+  }
+  .app-denied__buoy-light {
+    animation: app-denied-glow 3s ease-in-out infinite;
+  }
 }
 
 .app-denied--paused .app-denied__scene * {

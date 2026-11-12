@@ -1,3 +1,5 @@
+import { HTTP } from './http-status.js'
+
 export const VALIDATION_FAILED =
   'Some of the information was not accepted. Check your answers and try again.'
 export const FORBIDDEN = 'You do not have permission to do this'
@@ -80,12 +82,18 @@ async function bodyMessage(res) {
   }
 }
 
+const STATUS_MESSAGES = new Map([
+  [HTTP.badRequest, VALIDATION_FAILED],
+  [HTTP.unprocessable, VALIDATION_FAILED],
+  [HTTP.forbidden, FORBIDDEN],
+  [HTTP.conflict, CONFLICT]
+])
+
 function byStatus(status, { fallback, notFound }) {
-  if (status === 400 || status === 422) return VALIDATION_FAILED
-  if (status === 403) return FORBIDDEN
-  if (status === 404) return notFound ?? NOT_FOUND
-  if (status === 409) return CONFLICT
-  return fallback ?? UNAVAILABLE
+  if (status === HTTP.notFound) {
+    return notFound ?? NOT_FOUND
+  }
+  return STATUS_MESSAGES.get(status) ?? fallback ?? UNAVAILABLE
 }
 
 // A 4xx body message is shown unless generic; a 5xx body never is.
@@ -107,9 +115,9 @@ export async function readApiError(res, options = {}) {
   }
   const usable =
     message &&
-    status >= 400 &&
-    status < 500 &&
-    ![403, 404].includes(status) &&
+    status >= HTTP.badRequest &&
+    status < HTTP.serverError &&
+    ![HTTP.forbidden, HTTP.notFound].includes(status) &&
     !GENERIC_VALIDATION.has(message)
   return new ApiError({
     status,
@@ -126,7 +134,9 @@ export function toApiError(error, fallback = UNAVAILABLE) {
 
 /** Throws the `readApiError` result for a failed response; returns it otherwise. */
 export async function ensureOk(res, options) {
-  if (!res.ok) throw await readApiError(res, options)
+  if (!res.ok) {
+    throw await readApiError(res, options)
+  }
   return res
 }
 

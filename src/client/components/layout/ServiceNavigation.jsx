@@ -12,7 +12,9 @@ function useMatchMedia(query) {
 
   useEffect(() => {
     const list = window.matchMedia?.(query)
-    if (!list) return undefined
+    if (!list) {
+      return undefined
+    }
 
     const onChange = () => setMatches(list.matches)
     onChange()
@@ -62,7 +64,6 @@ export function ServiceNavigation({
                 aria-controls={menuId}
                 aria-expanded={isWide ? undefined : isOpen}
                 hidden={isWide}
-                aria-hidden={isWide ? 'true' : undefined}
                 onClick={() => setIsOpen((open) => !open)}
               >
                 Menu
@@ -85,7 +86,9 @@ export function ServiceNavigation({
                       href={item.href}
                       aria-current={isActive ? 'page' : undefined}
                       onClick={(event) => {
-                        if (!onNavigate || !isPlainClick(event)) return
+                        if (!onNavigate || !isPlainClick(event)) {
+                          return
+                        }
                         event.preventDefault()
                         onNavigate(item.id)
                       }}

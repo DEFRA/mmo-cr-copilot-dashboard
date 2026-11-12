@@ -52,7 +52,9 @@ export function toWorkflow(raw) {
   if (!raw || !SOURCES.has(raw.source) || !Number.isInteger(raw.version)) {
     return null
   }
-  if (!Array.isArray(raw.stages) || raw.stages.length === 0) return null
+  if (!Array.isArray(raw.stages) || raw.stages.length === 0) {
+    return null
+  }
   const stages = raw.stages.filter(
     (s) =>
       typeof s?.id === 'string' &&
@@ -60,7 +62,9 @@ export function toWorkflow(raw) {
       KINDS.has(s.kind) &&
       isStringList(s.statuses)
   )
-  if (stages.length !== raw.stages.length) return null
+  if (stages.length !== raw.stages.length) {
+    return null
+  }
   const suggestions = Object.fromEntries(
     Object.entries(raw.suggestions ?? {}).filter(([, list]) =>
       isStringList(list)
@@ -117,7 +121,9 @@ export function stageOf(stages, name) {
 export function addStatusError(stages, stageId, text) {
   const name = tidyStatus(text)
   const stage = stages.find((s) => s.id === stageId)
-  if (!name) return 'Enter a status'
+  if (!name) {
+    return 'Enter a status'
+  }
   if (name.length > MAX_STATUS_LENGTH) {
     return `Status must be ${MAX_STATUS_LENGTH} characters or fewer`
   }
@@ -157,7 +163,10 @@ const stageKeys = (stages) =>
   new Map(
     (stages ?? []).map((s) => [
       s.id,
-      s.statuses.map(tidyStatus).sort().join('\n')
+      s.statuses
+        .map(tidyStatus)
+        .sort((a, b) => a.localeCompare(b))
+        .join('\n')
     ])
   )
 
@@ -165,9 +174,13 @@ const stageKeys = (stages) =>
 export function isWorkflowDirty(stages, saved) {
   const now = stageKeys(stages)
   const before = stageKeys(saved)
-  if (now.size !== before.size) return true
+  if (now.size !== before.size) {
+    return true
+  }
   for (const [id, key] of now) {
-    if (before.get(id) !== key) return true
+    if (before.get(id) !== key) {
+      return true
+    }
   }
   return false
 }
@@ -187,7 +200,9 @@ export function statusOptions(stages, stageId, suggestions, detected = []) {
   for (const name of [...(suggestions?.[stageId] ?? []), ...detected]) {
     const tidy = tidyStatus(name)
     const key = normaliseStatus(tidy)
-    if (!tidy || used.has(key) || seen.has(key)) continue
+    if (!tidy || used.has(key) || seen.has(key)) {
+      continue
+    }
     seen.add(key)
     options.push(tidy)
   }

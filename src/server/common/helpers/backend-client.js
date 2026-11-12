@@ -14,19 +14,28 @@ import { config } from '#/config/config.js'
 const JSON_HEADERS = { Accept: 'application/json' }
 
 // Callers may set only these; a browser header can never reach the backend.
-const ALLOWED_HEADERS = ['authorization', 'x-ingest-token']
+const ALLOWED_HEADERS = new Set(['authorization', 'x-ingest-token'])
 
 function allowedHeaders(headers = {}) {
   return Object.fromEntries(
     Object.entries(headers).filter(
       ([name, value]) =>
-        value !== undefined && ALLOWED_HEADERS.includes(name.toLowerCase())
+        value !== undefined && ALLOWED_HEADERS.has(name.toLowerCase())
     )
   )
 }
 
+// Without a regex: `/\/+$/` backtracks super-linearly on long input.
+function trimTrailingSlashes(value) {
+  let end = value.length
+  while (end > 0 && value[end - 1] === '/') {
+    end -= 1
+  }
+  return value.slice(0, end)
+}
+
 function buildUrl(baseUrl, path, query) {
-  const url = new URL(`${baseUrl.replace(/\/+$/, '')}${path}`)
+  const url = new URL(`${trimTrailingSlashes(baseUrl)}${path}`)
 
   for (const [key, value] of Object.entries(query ?? {})) {
     if (value !== undefined && value !== null) {

@@ -12,7 +12,13 @@ import {
 } from './govuk'
 import { useAuditLogs } from '../hooks/useAuditLogs'
 
-const PAGE_SIZES = [10, 25, 50, 100]
+const DEFAULT_PAGE_SIZE = 25
+const LARGE_PAGE_SIZE = 50
+const PAGE_SIZES = [10, DEFAULT_PAGE_SIZE, LARGE_PAGE_SIZE, 100]
+const HALF_DAY_HOURS = 12
+const LAST_HOUR = 23
+const LAST_MINUTE = 59
+const LAST_MS = 999
 const FROM_ID = 'audit-from'
 const TO_ID = 'audit-to'
 const PARTS = ['day', 'month', 'year']
@@ -44,19 +50,24 @@ function formatWhen(iso) {
     month: 'short',
     year: 'numeric'
   })
-  const hours = d.getHours() % 12 || 12
+  const hours = d.getHours() % HALF_DAY_HOURS || HALF_DAY_HOURS
   const minutes = String(d.getMinutes()).padStart(2, '0')
-  return `${date}, ${hours}:${minutes}${d.getHours() < 12 ? 'am' : 'pm'}`
+  const meridiem = d.getHours() < HALF_DAY_HOURS ? 'am' : 'pm'
+  return `${date}, ${hours}:${minutes}${meridiem}`
 }
 
 // The backend records the actor as `{ oid, name }`; older entries hold a plain string.
 export function actorLabel(actor) {
-  if (typeof actor === 'string') return actor
+  if (typeof actor === 'string') {
+    return actor
+  }
   return actor?.name || actor?.oid || 'Unknown'
 }
 
 function formatValue(value) {
-  if (value == null) return '—'
+  if (value == null) {
+    return '—'
+  }
   return Object.entries(value)
     .map(([key, v]) => `${key}: ${v}`)
     .join(', ')
@@ -65,7 +76,9 @@ function formatValue(value) {
 /** Parses a GOV.UK date input value into a Date, or an error and the fields at fault. */
 function parseDate(value, label) {
   const parts = PARTS.map((key) => String(value[key] ?? '').trim())
-  if (parts.every((p) => !p)) return {}
+  if (parts.every((p) => !p)) {
+    return {}
+  }
 
   const missing = PARTS.filter((_, i) => !parts[i])
   if (missing.length > 0) {
@@ -105,6 +118,46 @@ function pageItems(page, totalPages, goTo) {
   })
 }
 
+function filterErrors(from, to) {
+  const found = {}
+  if (from.error) {
+    found.from = from
+  }
+  if (to.error) {
+    found.to = to
+  }
+  if (from.date && to.date && from.date > to.date) {
+    found.to = {
+      error: 'Date to must be the same as or after date from',
+      fields: PARTS
+    }
+  }
+  return found
+}
+
+/** The filter as ISO bounds; `to` covers the whole of its day. */
+function filterRange(from, to) {
+  const end = to.date ? new Date(to.date) : null
+  end?.setHours(LAST_HOUR, LAST_MINUTE, LAST_MINUTE, LAST_MS)
+  return {
+    from: from.date ? from.date.toISOString() : null,
+    to: end ? end.toISOString() : null
+  }
+}
+
+const errorLink = (id, found) =>
+  found && { href: `#${id}-${found.fields[0]}`, text: found.error }
+
+function listState(entries, status) {
+  if (entries.length > 0) {
+    return 'populated'
+  }
+  if (status === 'error') {
+    return 'error'
+  }
+  return status === 'loading' || status === 'idle' ? 'loading' : 'empty'
+}
+
 /**
  * The audit trail of every change made through the dashboard, newest first,
  * paged and filterable by date. The filter applies only on submit.
@@ -118,7 +171,7 @@ export function AuditLogPanel({ projectSlug }) {
     from: null,
     to: null,
     page: 1,
-    pageSize: PAGE_SIZES[1]
+    pageSize: DEFAULT_PAGE_SIZE
   })
 
   const { entries, page, total, totalPages, status, refresh } = useAuditLogs({
@@ -130,28 +183,15 @@ export function AuditLogPanel({ projectSlug }) {
     event.preventDefault()
     const from = parseDate(fromInput, 'Date from')
     const to = parseDate(toInput, 'Date to')
-    const found = {}
-    if (from.error) found.from = from
-    if (to.error) found.to = to
-    if (from.date && to.date && from.date > to.date) {
-      found.to = {
-        error: 'Date to must be the same as or after date from',
-        fields: PARTS
-      }
-    }
+    const found = filterErrors(from, to)
 
     setAttempt((n) => n + 1)
     setErrors(found)
-    if (found.from || found.to) return
+    if (found.from || found.to) {
+      return
+    }
 
-    const end = to.date && new Date(to.date)
-    end?.setHours(23, 59, 59, 999)
-    setQuery((q) => ({
-      ...q,
-      from: from.date ? from.date.toISOString() : null,
-      to: end ? end.toISOString() : null,
-      page: 1
-    }))
+    setQuery((q) => ({ ...q, ...filterRange(from, to), page: 1 }))
   }
 
   const clearFilter = () => {
@@ -164,22 +204,10 @@ export function AuditLogPanel({ projectSlug }) {
   const goToPage = (next) => setQuery((q) => ({ ...q, page: next }))
 
   const errorList = [
-    errors.from && {
-      href: `#${FROM_ID}-${errors.from.fields[0]}`,
-      text: errors.from.error
-    },
-    errors.to && {
-      href: `#${TO_ID}-${errors.to.fields[0]}`,
-      text: errors.to.error
-    }
+    errorLink(FROM_ID, errors.from),
+    errorLink(TO_ID, errors.to)
   ].filter(Boolean)
-
-  let state = 'populated'
-  if (entries.length === 0) {
-    if (status === 'error') state = 'error'
-    else if (status === 'loading' || status === 'idle') state = 'loading'
-    else state = 'empty'
-  }
+  const state = listState(entries, status)
 
   return (
     <Panel

@@ -21,16 +21,22 @@ const save = () =>
 async function enter({ length, day, month, year }) {
   if (length !== undefined) {
     await userEvent.clear(lengthInput())
-    if (length) await userEvent.type(lengthInput(), length)
+    if (length) {
+      await userEvent.type(lengthInput(), length)
+    }
   }
   for (const [name, value] of [
     ['Day', day],
     ['Month', month],
     ['Year', year]
   ]) {
-    if (value === undefined) continue
+    if (value === undefined) {
+      continue
+    }
     await userEvent.clear(dateField(name))
-    if (value) await userEvent.type(dateField(name), value)
+    if (value) {
+      await userEvent.type(dateField(name), value)
+    }
   }
 }
 
@@ -90,20 +96,15 @@ describe('#SprintPeriodPanel', () => {
     ],
     [{ day: '', month: '', year: '' }, 'Enter the date a sprint started'],
     [{ day: '31', month: '2' }, 'The sprint start date must be a real date']
-  ])(
-    'Should not save %o and explain why',
-    async (input, message) => {
-      render(<SprintPeriodPanel project={PROJECT} />)
+  ])('Should not save %o and explain why', async (input, message) => {
+    render(<SprintPeriodPanel project={PROJECT} />)
 
-      await enter(input)
-      await save()
+    await enter(input)
+    await save()
 
-      expect(
-        screen.getByRole('link', { name: message })
-      ).toBeInTheDocument()
-      expect(fetchMock).not.toHaveBeenCalled()
-    }
-  )
+    expect(screen.getByRole('link', { name: message })).toBeInTheDocument()
+    expect(fetchMock).not.toHaveBeenCalled()
+  })
 
   test('Should show a refusal from the server', async () => {
     fetchMock.mockResponse(JSON.stringify({ message: 'no' }), { status: 403 })
@@ -119,13 +120,17 @@ describe('#SprintPeriodPanel', () => {
 
   test('Should report unsaved changes and cancel them', async () => {
     const onDirtyChange = vi.fn()
-    render(<SprintPeriodPanel project={PROJECT} onDirtyChange={onDirtyChange} />)
+    render(
+      <SprintPeriodPanel project={PROJECT} onDirtyChange={onDirtyChange} />
+    )
 
     await enter({ length: '10' })
     expect(onDirtyChange).toHaveBeenLastCalledWith(true)
     expect(screen.getByText(/You have unsaved changes/)).toBeVisible()
 
-    await userEvent.click(screen.getByRole('button', { name: 'Cancel changes' }))
+    await userEvent.click(
+      screen.getByRole('button', { name: 'Cancel changes' })
+    )
 
     expect(lengthInput()).toHaveValue('14')
     expect(onDirtyChange).toHaveBeenLastCalledWith(false)

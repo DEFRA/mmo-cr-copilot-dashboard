@@ -285,6 +285,11 @@
   outline: none;
 }
 
+// A live-region <output> that should lay out like a paragraph.
+.app-block {
+  display: block;
+}
+
 .app-section {
   margin-bottom: 36px;
 }

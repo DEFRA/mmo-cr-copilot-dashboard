@@ -1,0 +1,24 @@
+{
+  "schema": "ai-attribution-file/2",
+  "path": "src/client/components/dashboard/PeriodFilter.test.jsx",
+  "added": 6,
+  "counts": {
+    "aiCompletion": 0,
+    "aiChat": 0,
+    "aiAgent": 4,
+    "aiModified": 0,
+    "pasted": 0,
+    "typed": 0,
+    "untracked": 2
+  },
+  "ranges": {
+    "ai-agent": "365-366,368-369",
+    "untracked": "364,367"
+  },
+  "ai": [
+    [365, "a", "a7900dbf", 0],
+    [366, "a", "9845a6a3", 0],
+    [368, "a", "5fd9d9f9", 0],
+    [369, "a", "9845a6a3", 0]
+  ]
+}

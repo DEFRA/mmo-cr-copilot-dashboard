@@ -45,10 +45,14 @@ function sessionUserFrom(sessionUser) {
 
 function resolveDevUser(request) {
   const role = request.headers['x-dev-user-role']
-  if (role === 'unauthenticated' || role === 'none') return null
+  if (role === 'unauthenticated' || role === 'none') {
+    return null
+  }
 
   const sessionUser = request.yar?.get?.('user')
-  if (sessionUser && !role) return sessionUserFrom(sessionUser)
+  if (sessionUser && !role) {
+    return sessionUserFrom(sessionUser)
+  }
 
   const groupsHeader = request.headers['x-dev-user-groups']
   const groups = groupsHeader
@@ -64,7 +68,9 @@ function resolveDevUser(request) {
 
 // Never includes tokens: those are read only through getAccessToken.
 function resolveUser(request) {
-  if (config.get('auth.devBypass')) return resolveDevUser(request)
+  if (config.get('auth.devBypass')) {
+    return resolveDevUser(request)
+  }
   const sessionUser = request.yar?.get?.('user')
   return sessionUser ? sessionUserFrom(sessionUser) : null
 }
@@ -113,8 +119,12 @@ export const auth = {
         }
 
         request.user = resolveUser(request)
-        if (isPublicRoute(request)) return h.continue
-        if (!request.user) return rejectUnauthenticated(request, h)
+        if (isPublicRoute(request)) {
+          return h.continue
+        }
+        if (!request.user) {
+          return rejectUnauthenticated(request, h)
+        }
 
         if (request.headers[BACKGROUND_POLL_HEADER] !== '1') {
           touchSession(request)

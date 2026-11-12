@@ -38,9 +38,14 @@ const toStatus = (s) => ({
 
 // Another project's data is never shown, not even for the render before the effect runs.
 function forSlug(state, slug, idle) {
-  if (state.slug === slug) return state
+  if (state.slug === slug) {
+    return state
+  }
   return slug ? { ...idle, slug, status: 'loading' } : idle
 }
+
+const withoutSlug = (state) =>
+  Object.fromEntries(Object.entries(state).filter(([key]) => key !== 'slug'))
 
 const loading = (slug, idle) => (s) =>
   s.slug === slug
@@ -63,11 +68,15 @@ export function useJiraWorkflow(slug) {
     getJson(`${basePath(slug)}/workflow`, controller.signal, LOAD_FAILED)
       .then((raw) => {
         const workflow = toWorkflow(raw)
-        if (!workflow) throw new Error('Malformed workflow')
+        if (!workflow) {
+          throw new Error('Malformed workflow')
+        }
         setState({ slug, status: 'success', workflow, error: null })
       })
       .catch((err) => {
-        if (controller.signal.aborted || err.name === 'AbortError') return
+        if (controller.signal.aborted || err.name === 'AbortError') {
+          return
+        }
         const error =
           err.name === 'ApiError'
             ? { status: err.status, message: err.message }
@@ -112,8 +121,7 @@ export function useJiraWorkflow(slug) {
     [slug]
   )
 
-  const { slug: _slug, ...visible } = forSlug(state, slug, IDLE)
-  return { ...visible, save, reload }
+  return { ...withoutSlug(forSlug(state, slug, IDLE)), save, reload }
 }
 
 /** Statuses seen on the project's tickets and in Jira. Pass a null slug to stay idle. */
@@ -145,7 +153,9 @@ export function useJiraStatuses(slug) {
         })
       })
       .catch((err) => {
-        if (controller.signal.aborted || err.name === 'AbortError') return
+        if (controller.signal.aborted || err.name === 'AbortError') {
+          return
+        }
         setState((s) => ({ ...s, status: 'error' }))
       })
 
@@ -154,6 +164,5 @@ export function useJiraStatuses(slug) {
 
   const refresh = useCallback(() => setReloadToken((t) => t + 1), [])
 
-  const { slug: _slug, ...visible } = forSlug(state, slug, IDLE_STATUSES)
-  return { ...visible, refresh }
+  return { ...withoutSlug(forSlug(state, slug, IDLE_STATUSES)), refresh }
 }

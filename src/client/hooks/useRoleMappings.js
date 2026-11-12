@@ -16,7 +16,9 @@ export function useRoleMappings(enabled = true) {
   const [version, setVersion] = useState(0)
 
   useEffect(() => {
-    if (!enabled) return undefined
+    if (!enabled) {
+      return undefined
+    }
     const controller = new AbortController()
 
     apiFetch('/api/role-mappings', {
@@ -24,14 +26,20 @@ export function useRoleMappings(enabled = true) {
       headers: { Accept: 'application/json' }
     })
       .then(async (res) => {
-        if (!res.ok) throw new Error(`Request failed (${res.status})`)
+        if (!res.ok) {
+          throw new Error(`Request failed (${res.status})`)
+        }
         const body = await res.json()
-        if (!Array.isArray(body?.roleMappings)) throw new Error('Malformed')
+        if (!Array.isArray(body?.roleMappings)) {
+          throw new Error('Malformed')
+        }
         setMappings(body.roleMappings.filter(isMapping))
         setStatus('success')
       })
       .catch(() => {
-        if (!controller.signal.aborted) setStatus('error')
+        if (!controller.signal.aborted) {
+          setStatus('error')
+        }
       })
 
     return () => controller.abort()

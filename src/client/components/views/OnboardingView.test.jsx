@@ -25,8 +25,12 @@ const backend = ({
 } = {}) =>
   fetchMock.mockResponse(async (request) => {
     const { pathname } = new URL(request.url, 'http://localhost')
-    if (request.method === 'POST') return post(request)
-    if (request.method === 'PUT') return put(request)
+    if (request.method === 'POST') {
+      return post(request)
+    }
+    if (request.method === 'PUT') {
+      return put(request)
+    }
     if (pathname === '/api/repositories/unassigned') {
       return jsonOf({ repositories: unassigned })
     }
@@ -94,7 +98,9 @@ async function fillDetails(
     await user.type(screen.getByLabelText('Month'), '10')
     await user.type(screen.getByLabelText('Year'), '2025')
   }
-  if (jira) await user.type(screen.getByLabelText(/^Jira project key/), jira)
+  if (jira) {
+    await user.type(screen.getByLabelText(/^Jira project key/), jira)
+  }
 }
 
 async function completeDetails(user, options) {
@@ -119,7 +125,9 @@ async function chooseRepository(user, name) {
 
 async function completeRepositories(user, names = ['DEFRA/new-a']) {
   await openTask(user, 'Connect Repositories')
-  for (const name of names) await chooseRepository(user, name)
+  for (const name of names) {
+    await chooseRepository(user, name)
+  }
   await save(user)
   await screen.findByRole('heading', { level: 1, name: 'Onboard a Project' })
 }
@@ -932,7 +940,7 @@ describe('#OnboardingView repositories', () => {
 
     expect(
       await screen.findByText('Loading repositories that are sending data…')
-    ).toHaveAttribute('role', 'status')
+    ).toHaveProperty('tagName', 'OUTPUT')
   })
 
   test('Should return to the task list with the choice kept', async () => {

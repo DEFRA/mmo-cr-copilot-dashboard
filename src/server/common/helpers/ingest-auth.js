@@ -4,6 +4,10 @@ import { config } from '#/config/config.js'
 import { IngestTokenError, verifyGithubToken } from './github-oidc.js'
 import { isTokenValid } from './verify-token.js'
 
+const BEARER_PREFIX = 'bearer '
+const bearerToken = (authorization) =>
+  authorization.slice(BEARER_PREFIX.length).trim()
+
 export const INGEST_TOKEN_HEADER = 'x-ingest-token'
 export const INGEST_JTI_SEGMENT = 'ingest-jti'
 
@@ -25,8 +29,12 @@ function reject(request, reason) {
 // Stores each token id until it expires so a captured token cannot be replayed.
 async function claimTokenId(request, claims) {
   const cache = request.server.app.ingestJtiCache
-  if (!cache) return
-  if (await cache.get(claims.jti)) throw reject(request, 'replay')
+  if (!cache) {
+    return
+  }
+  if (await cache.get(claims.jti)) {
+    throw reject(request, 'replay')
+  }
   const ttl = Math.max(1000, claims.exp * 1000 - Date.now())
   await cache.set(claims.jti, true, ttl)
 }
@@ -59,9 +67,11 @@ export async function requireIngestToken(request, h) {
   if (typeof authorization === 'string' && /^bearer /i.test(authorization)) {
     let claims
     try {
-      claims = await verifyGithubToken(authorization.slice(7).trim())
+      claims = await verifyGithubToken(bearerToken(authorization))
     } catch (err) {
-      if (err instanceof IngestTokenError) throw reject(request, err.reason)
+      if (err instanceof IngestTokenError) {
+        throw reject(request, err.reason)
+      }
       throw err
     }
     await claimTokenId(request, claims)
@@ -88,7 +98,7 @@ export async function requireSurvivalToken(request, h) {
 
   let claims
   try {
-    claims = await verifyGithubToken(authorization.slice(7).trim(), undefined, {
+    claims = await verifyGithubToken(bearerToken(authorization), undefined, {
       workflowRefPrefix: config.get('ingest.oidc.survivalWorkflowRefPrefix'),
       allowedEvents: config
         .get('ingest.oidc.survivalAllowedEvents')
@@ -97,7 +107,9 @@ export async function requireSurvivalToken(request, h) {
         .filter(Boolean)
     })
   } catch (err) {
-    if (err instanceof IngestTokenError) throw reject(request, err.reason)
+    if (err instanceof IngestTokenError) {
+      throw reject(request, err.reason)
+    }
     throw err
   }
   await claimTokenId(request, claims)

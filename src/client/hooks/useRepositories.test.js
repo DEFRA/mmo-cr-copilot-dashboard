@@ -6,7 +6,9 @@ const route = (routes) =>
   fetchMock.mockResponse(async (request) => {
     const path = new URL(request.url, 'http://localhost').pathname
     const hit = routes[path]
-    if (hit === undefined) throw new Error(`unexpected ${path}`)
+    if (hit === undefined) {
+      throw new Error(`unexpected ${path}`)
+    }
     return typeof hit === 'number'
       ? { status: hit, body: '{}' }
       : JSON.stringify(hit)

@@ -157,7 +157,9 @@ describe('#auth plugin', () => {
         url: '/api/test/whoami',
         headers: { cookie }
       }))
-      if (statusCode !== 200) break
+      if (statusCode !== 200) {
+        break
+      }
     }
 
     expect(statusCode).toBe(statusCodes.unauthorized)

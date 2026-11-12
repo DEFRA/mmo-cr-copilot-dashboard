@@ -9,6 +9,7 @@ import {
   formatCredits,
   lines,
   plural,
+  pullRequests,
   ScopeHeader,
   Subsection
 } from './scope.jsx'
@@ -25,7 +26,7 @@ function Caveat({ insights }) {
       requests with Copilot-written lines have usage,{' '}
       {insights.coverage.prsWithCredits} with credits.{' '}
       <a className="govuk-link" href="#metric-copilot-usage-insights">
-        Metric definition
+        {'Metric definition'}
         <span className="govuk-visually-hidden">: Copilot usage insights</span>
       </a>
     </p>
@@ -56,7 +57,7 @@ export function CopilotUsageView({ payloads }) {
       level="Copilot usage"
       icon="sparkle"
       title="Model Usage and AI Credits"
-      meta={`${plural(insights.coverage.prsWithUsage, 'pull request')} with usage`}
+      meta={`${pullRequests(insights.coverage.prsWithUsage)} with usage`}
     />
   )
 
@@ -90,7 +91,7 @@ export function CopilotUsageView({ payloads }) {
           value={favourite?.model ?? '–'}
           compact
           badge="Most requests"
-          sub={`${favourite?.requestShare ?? 0}% of model requests · ${plural(favourite?.prCount ?? 0, 'pull request')}`}
+          sub={`${favourite?.requestShare ?? 0}% of model requests · ${pullRequests(favourite?.prCount ?? 0)}`}
           family="adoption"
           showFamily={false}
           icon="sparkle"
@@ -111,7 +112,7 @@ export function CopilotUsageView({ payloads }) {
           sub={
             totals.credits === null
               ? 'Not recorded'
-              : `${formatCredits(totals.creditsPerRequest)} per request · ${plural(prsWithCredits, 'pull request')} with credits`
+              : `${formatCredits(totals.creditsPerRequest)} per request · ${pullRequests(prsWithCredits)} with credits`
           }
           family="risk"
           showFamily={false}
@@ -128,7 +129,7 @@ export function CopilotUsageView({ payloads }) {
           sub={
             insights.medianCreditsPerPr === null
               ? 'Not recorded'
-              : `Median across ${plural(prsWithCredits, 'pull request')}`
+              : `Median across ${pullRequests(prsWithCredits)}`
           }
           family="quality"
           showFamily={false}

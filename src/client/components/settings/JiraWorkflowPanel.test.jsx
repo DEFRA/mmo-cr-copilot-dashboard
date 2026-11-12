@@ -125,7 +125,9 @@ const serve = (overrides = {}) => {
   }
   fetchMock.mockResponse(async (req) => {
     const { pathname } = new URL(req.url)
-    if (pathname.endsWith('/jira/statuses')) return server.statuses
+    if (pathname.endsWith('/jira/statuses')) {
+      return server.statuses
+    }
     return req.method === 'PUT' ? server.put : server.workflow
   })
 }

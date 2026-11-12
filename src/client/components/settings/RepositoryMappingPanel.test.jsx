@@ -378,7 +378,7 @@ describe('#RepositoryMappingPanel', () => {
       expect(table).toHaveTextContent('DEFRA/mine-3')
       expect(
         screen.getByText('Showing 1 of 6 connected repositories')
-      ).toHaveAttribute('role', 'status')
+      ).toHaveProperty('tagName', 'OUTPUT')
     })
 
     test('Should match a connected repository by its Sonar key', async () => {
@@ -407,7 +407,7 @@ describe('#RepositoryMappingPanel', () => {
       ).toBeNull()
       expect(
         screen.getByText('No connected repositories match “zzz”')
-      ).toHaveAttribute('role', 'status')
+      ).toHaveProperty('tagName', 'OUTPUT')
       expect(
         screen.getByLabelText('Search connected repositories')
       ).toBeVisible()

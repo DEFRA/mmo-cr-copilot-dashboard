@@ -1,0 +1,25 @@
+{
+  "schema": "ai-attribution-file/2",
+  "path": "src/server/routes/ingest/controller.test.js",
+  "added": 24,
+  "counts": {
+    "aiCompletion": 0,
+    "aiChat": 0,
+    "aiAgent": 5,
+    "aiModified": 0,
+    "pasted": 0,
+    "typed": 0,
+    "untracked": 19
+  },
+  "ranges": {
+    "ai-agent": "48,51,175,178,207",
+    "untracked": "46-47,49-50,173-174,176-177,205-206,305-310,340-342"
+  },
+  "ai": [
+    [48, "a", "9845a6a3", 0],
+    [51, "a", "9845a6a3", 0],
+    [175, "a", "9845a6a3", 0],
+    [178, "a", "9845a6a3", 0],
+    [207, "a", "9845a6a3", 0]
+  ]
+}

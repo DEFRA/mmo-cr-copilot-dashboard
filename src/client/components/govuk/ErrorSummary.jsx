@@ -6,7 +6,9 @@ function focusTarget(event, href) {
   const target = href?.startsWith('#')
     ? document.getElementById(href.slice(1))
     : null
-  if (!target) return
+  if (!target) {
+    return
+  }
 
   event.preventDefault()
   target.focus()
@@ -26,7 +28,9 @@ export function ErrorSummary({
   const summaryRef = useRef(null)
 
   useEffect(() => {
-    if (autoFocus) summaryRef.current?.focus()
+    if (autoFocus) {
+      summaryRef.current?.focus()
+    }
   }, [autoFocus])
 
   return (

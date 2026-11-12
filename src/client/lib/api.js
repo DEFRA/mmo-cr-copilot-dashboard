@@ -1,3 +1,5 @@
+import { HTTP } from './http-status.js'
+
 /**
  * The dashboard is served by its own Hapi backend-for-frontend, which proxies
  * `/api/*` through to mmo-cr-copilot-backend. Every call is therefore
@@ -12,7 +14,9 @@ let redirecting = false
 
 /** Sends the browser to sign in again, returning to the current page after. */
 export function redirectToLogin() {
-  if (redirecting) return
+  if (redirecting) {
+    return
+  }
   redirecting = true
   const { pathname, search, hash } = window.location
   const returnTo = encodeURIComponent(`${pathname}${search}${hash}`)
@@ -25,7 +29,9 @@ export function redirectToLogin() {
  */
 export async function apiFetch(path, init) {
   const response = await fetch(apiUrl(path), init)
-  if (response.status === 401) redirectToLogin()
+  if (response.status === HTTP.unauthorized) {
+    redirectToLogin()
+  }
   return response
 }
 

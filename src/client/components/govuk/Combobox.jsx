@@ -1,13 +1,98 @@
 import { useEffect, useId, useState } from 'react'
 
-import { ErrorMessage } from './ErrorMessage.jsx'
-import { Hint } from './Hint.jsx'
+import {
+  FieldLabel,
+  FieldMessages,
+  describedByIds,
+  formGroupClass
+} from './FieldParts.jsx'
 import { cx, joinIds } from './utils.js'
 
 const sameText = (a, b) => a.toLowerCase() === b.toLowerCase()
 
+function ComboboxOptions({
+  items,
+  active,
+  listId,
+  labelId,
+  optionId,
+  onChoose
+}) {
+  return (
+    <ul
+      className="app-combobox__list"
+      id={listId}
+      role="listbox"
+      aria-labelledby={labelId}
+    >
+      {items.map((item, index) => {
+        const choose = () => onChoose(item.value, Boolean(item.custom))
+        return (
+          <li
+            key={item.custom ? `add:${item.value}` : item.value}
+            id={optionId(index)}
+            role="option"
+            aria-selected={index === active}
+            className={cx(
+              'app-combobox__option',
+              item.custom && 'app-combobox__option--add'
+            )}
+            onMouseDown={(event) => event.preventDefault()}
+            onClick={choose}
+            onKeyDown={(event) => {
+              if (event.key === 'Enter') {
+                choose()
+              }
+            }}
+          >
+            {item.text}
+          </li>
+        )
+      })}
+    </ul>
+  )
+}
+
 // Typing changes the count on every key; announce only once the user pauses.
 export const ANNOUNCE_DELAY_MS = 1400
+
+// Options containing the typed text, plus an "Add" item for new custom text.
+function comboboxItems({ value, options, allowCustom, addText }) {
+  const query = value.trim()
+  const needle = query.toLowerCase()
+  const found = query
+    ? options.filter((option) => option.toLowerCase().includes(needle))
+    : options
+  const canAdd =
+    allowCustom && query && !options.some((option) => sameText(option, query))
+  const items = found.map((text) => ({ value: text, text }))
+  if (canAdd) {
+    items.push({ value: query, text: addText(query), custom: true })
+  }
+  return { query, found, canAdd, items }
+}
+
+function statusMessage({
+  open,
+  found,
+  query,
+  canAdd,
+  itemName,
+  itemNamePlural
+}) {
+  if (!open) {
+    return ''
+  }
+  if (found.length > 0) {
+    const noun = found.length === 1 ? itemName : itemNamePlural
+    return `${found.length} ${noun} found`
+  }
+  if (!query) {
+    return ''
+  }
+  const hint = canAdd ? ', press Enter to add' : ''
+  return `No matching ${itemNamePlural}${hint}`
+}
 
 /**
  * Text input with a filtered listbox, after the WAI-ARIA APG combobox with
@@ -38,24 +123,17 @@ export function Combobox({
   const fieldId = id ?? generatedId
   const listId = `${fieldId}-listbox`
   const optionId = (index) => `${fieldId}-option-${index}`
-  const hintId = hint ? `${fieldId}-hint` : undefined
-  const errorId = errorMessage ? `${fieldId}-error` : undefined
+  const { hintId, errorId } = describedByIds(fieldId, hint, errorMessage)
   const [open, setOpen] = useState(false)
   const [active, setActive] = useState(-1)
   const [announced, setAnnounced] = useState('')
 
-  const query = value.trim()
-  const found = query
-    ? options.filter((option) =>
-        option.toLowerCase().includes(query.toLowerCase())
-      )
-    : options
-  const canAdd =
-    allowCustom && query && !options.some((option) => sameText(option, query))
-  const items = [
-    ...found.map((text) => ({ value: text, text })),
-    ...(canAdd ? [{ value: query, text: addText(query), custom: true }] : [])
-  ]
+  const { query, found, canAdd, items } = comboboxItems({
+    value,
+    options,
+    allowCustom,
+    addText
+  })
   const expanded = open && items.length > 0
   const activeItem = expanded ? items[active] : undefined
 
@@ -78,42 +156,66 @@ export function Combobox({
   }
 
   const move = (step) => {
-    if (items.length === 0) return
+    if (items.length === 0) {
+      return
+    }
     const from = expanded ? active : -1
     const first = step > 0 ? 0 : items.length - 1
     setOpen(true)
     setActive(from < 0 ? first : (from + step + items.length) % items.length)
   }
 
-  const handleKeyDown = (event) => {
-    if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
-      event.preventDefault()
-      move(event.key === 'ArrowDown' ? 1 : -1)
-    } else if (event.key === 'Enter') {
+  // Each handler returns true when it handled the key, so the default is prevented.
+  const keyHandlers = {
+    ArrowDown: () => {
+      move(1)
+      return true
+    },
+    ArrowUp: () => {
+      move(-1)
+      return true
+    },
+    Enter: () => {
       if (activeItem) {
-        event.preventDefault()
         choose(activeItem.value, Boolean(activeItem.custom))
-      } else if (allowCustom && query) {
-        event.preventDefault()
+        return true
+      }
+      if (allowCustom && query) {
         choose(query, true)
+        return true
       }
-    } else if (event.key === 'Escape') {
+      return false
+    },
+    Escape: () => {
       if (open) {
-        event.preventDefault()
         close()
-      } else if (value) {
-        event.preventDefault()
-        onChange('')
+        return true
       }
+      if (value) {
+        onChange('')
+        return true
+      }
+      return false
     }
   }
 
-  let message = ''
-  if (open && found.length > 0) {
-    message = `${found.length} ${found.length === 1 ? itemName : itemNamePlural} found`
-  } else if (open && query) {
-    message = `No matching ${itemNamePlural}${canAdd ? ', press Enter to add' : ''}`
+  const handleKeyDown = (event) => {
+    const handler = Object.hasOwn(keyHandlers, event.key)
+      ? keyHandlers[event.key]
+      : null
+    if (handler?.()) {
+      event.preventDefault()
+    }
   }
+
+  const message = statusMessage({
+    open,
+    found,
+    query,
+    canAdd,
+    itemName,
+    itemNamePlural
+  })
 
   useEffect(() => {
     if (!message) {
@@ -125,22 +227,20 @@ export function Combobox({
   }, [message])
 
   return (
-    <div
-      className={cx(
-        'govuk-form-group',
-        errorMessage && 'govuk-form-group--error',
-        formGroupClassName
-      )}
-    >
-      <label
-        className={cx('govuk-label', labelSize && `govuk-label--${labelSize}`)}
-        htmlFor={fieldId}
-        id={`${fieldId}-label`}
+    <div className={formGroupClass(errorMessage, formGroupClassName)}>
+      <FieldLabel
+        fieldId={fieldId}
+        labelId={`${fieldId}-label`}
+        size={labelSize}
       >
         {label}
-      </label>
-      {hint && <Hint id={hintId}>{hint}</Hint>}
-      {errorMessage && <ErrorMessage id={errorId}>{errorMessage}</ErrorMessage>}
+      </FieldLabel>
+      <FieldMessages
+        hint={hint}
+        hintId={hintId}
+        errorMessage={errorMessage}
+        errorId={errorId}
+      />
       <div className="app-combobox">
         <input
           autoCapitalize="none"
@@ -174,34 +274,17 @@ export function Combobox({
           onBlur={close}
         />
         {expanded && (
-          <ul
-            className="app-combobox__list"
-            id={listId}
-            role="listbox"
-            aria-labelledby={`${fieldId}-label`}
-          >
-            {items.map((item, index) => (
-              <li
-                key={item.custom ? `add:${item.value}` : item.value}
-                id={optionId(index)}
-                role="option"
-                aria-selected={index === active}
-                className={cx(
-                  'app-combobox__option',
-                  item.custom && 'app-combobox__option--add'
-                )}
-                onMouseDown={(event) => event.preventDefault()}
-                onClick={() => choose(item.value, Boolean(item.custom))}
-              >
-                {item.text}
-              </li>
-            ))}
-          </ul>
+          <ComboboxOptions
+            items={items}
+            active={active}
+            listId={listId}
+            labelId={`${fieldId}-label`}
+            optionId={optionId}
+            onChoose={choose}
+          />
         )}
       </div>
-      <div role="status" className="govuk-visually-hidden">
-        {announced}
-      </div>
+      <output className="govuk-visually-hidden">{announced}</output>
     </div>
   )
 }

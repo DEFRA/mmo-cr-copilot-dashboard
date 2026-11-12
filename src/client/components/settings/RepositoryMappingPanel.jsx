@@ -6,17 +6,13 @@ import {
   Combobox,
   ErrorSummary,
   NotificationBanner,
-  Table,
   TextInput
 } from '../govuk'
-import { cx } from '../govuk/utils.js'
 import { jsonWrite } from '../../lib/api'
 import { ensureOk, readApiError, toApiError } from '../../lib/api-errors'
 import { isRepositoryName } from '../../lib/onboarding'
 import { ROLES, canAdministerProject } from '../../lib/roles'
-
-// A list longer than this gets a search box, unless it always has one.
-const SEARCH_THRESHOLD = 5
+import { SearchableTable } from './SearchableTable.jsx'
 
 // Mirrors the backend's SonarCloud project key rule.
 const SONAR_KEY_PATTERN = /^[\w.:-]+$/
@@ -26,7 +22,9 @@ const SONAR_KEY_FALLBACK =
 
 /** Why a trimmed SonarCloud key cannot be saved, or null. Blank clears a set key. */
 function sonarKeyError(key, hadKey) {
-  if (!key) return hadKey ? null : 'Enter a SonarCloud project key'
+  if (!key) {
+    return hadKey ? null : 'Enter a SonarCloud project key'
+  }
   if (key.length > SONAR_KEY_MAX) {
     return 'SonarCloud project key must be 255 characters or fewer'
   }
@@ -36,67 +34,12 @@ function sonarKeyError(key, hadKey) {
   return null
 }
 
-/** A repository table in a scrolling container, with a search box once it is long. */
-function SearchableTable({
-  noun,
-  items,
-  alwaysSearch = false,
-  caption,
-  head,
-  searchText,
-  toRow
-}) {
-  const [query, setQuery] = useState('')
-  const searchable = alwaysSearch || items.length > SEARCH_THRESHOLD
-  const needle = searchable ? query.trim().toLowerCase() : ''
-  const shown = needle
-    ? items.filter((item) => searchText(item).toLowerCase().includes(needle))
-    : items
-
-  let result = ''
-  if (needle) {
-    result =
-      shown.length === 0
-        ? `No ${noun} match “${query.trim()}”`
-        : `Showing ${shown.length} of ${items.length} ${noun}`
+/** The error to summarise: the SonarCloud key edit's, else the add form's. */
+function summaryProblem(keyEdit, keyInputId, error, inputId) {
+  if (keyEdit?.error) {
+    return { href: `#${keyInputId}`, text: keyEdit.error }
   }
-
-  return (
-    <>
-      {searchable && (
-        <>
-          <TextInput
-            type="search"
-            label={`Search ${noun}`}
-            labelSize="s"
-            width="30"
-            spellCheck={false}
-            autoComplete="off"
-            formGroupClassName="govuk-!-margin-bottom-2"
-            value={query}
-            onChange={(event) => setQuery(event.target.value)}
-          />
-          <p
-            className={cx('govuk-hint', !needle && 'govuk-visually-hidden')}
-            role="status"
-          >
-            {result}
-          </p>
-        </>
-      )}
-      {shown.length > 0 && (
-        <div className="app-scroll-list">
-          <Table
-            className="govuk-!-margin-bottom-0"
-            caption={caption}
-            captionHidden
-            head={head}
-            rows={shown.map(toRow)}
-          />
-        </div>
-      )}
-    </>
-  )
+  return error ? { href: `#${inputId}`, text: error } : null
 }
 
 const ACTIONS_HEAD = {
@@ -141,7 +84,9 @@ export function RepositoryMappingPanel({
   const editingName = keyEdit?.fullName
 
   useEffect(() => {
-    if (editingName) keyInputRef.current?.focus()
+    if (editingName) {
+      keyInputRef.current?.focus()
+    }
   }, [editingName])
 
   const fail = (message) => {
@@ -179,7 +124,9 @@ export function RepositoryMappingPanel({
   }
 
   const saveKey = async (fullName, key) => {
-    if (keyInFlight.current) return
+    if (keyInFlight.current) {
+      return
+    }
     keyInFlight.current = true
     setKeySaving(true)
     setNotice(null)
@@ -224,7 +171,7 @@ export function RepositoryMappingPanel({
       keyFailed(problem)
       return
     }
-    saveKey(keyEdit.fullName, key || null)
+    void saveKey(keyEdit.fullName, key || null)
   }
 
   const map = async (fullName, verb) => {
@@ -296,7 +243,7 @@ export function RepositoryMappingPanel({
       )
       return
     }
-    map(name, 'added to the project')
+    void map(name, 'added to the project')
   }
 
   const submit = (event) => {
@@ -305,9 +252,15 @@ export function RepositoryMappingPanel({
   }
 
   const state = () => {
-    if (mine.length > 0) return 'populated'
-    if (status === 'error') return 'error'
-    if (status === 'loading' || status === 'idle') return 'loading'
+    if (mine.length > 0) {
+      return 'populated'
+    }
+    if (status === 'error') {
+      return 'error'
+    }
+    if (status === 'loading' || status === 'idle') {
+      return 'loading'
+    }
     return 'empty'
   }
 
@@ -325,9 +278,7 @@ export function RepositoryMappingPanel({
 
   const sectionGap = 'govuk-!-margin-bottom-6'
 
-  let problem = null
-  if (keyEdit?.error) problem = { href: `#${keyInputId}`, text: keyEdit.error }
-  else if (error) problem = { href: `#${inputId}`, text: error }
+  const problem = summaryProblem(keyEdit, keyInputId, error, inputId)
 
   const sonarKeyCell = (r) => {
     if (editingName === r.fullName) {
@@ -355,7 +306,9 @@ export function RepositoryMappingPanel({
               <Button
                 variant="warning"
                 disabled={keySaving}
-                onClick={() => saveKey(r.fullName, null)}
+                onClick={() => {
+                  void saveKey(r.fullName, null)
+                }}
               >
                 Remove key
               </Button>

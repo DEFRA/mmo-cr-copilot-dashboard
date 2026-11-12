@@ -1,6 +1,7 @@
 import Boom from '@hapi/boom'
 
 import { config } from '#/config/config.js'
+import { statusCodes } from '#/server/common/constants/status-codes.js'
 import { backendRequest } from '#/server/common/helpers/backend-client.js'
 import {
   EntraTokenError,
@@ -54,7 +55,9 @@ export function touchSession(request, now = Date.now()) {
 /** Returns the reason the session has timed out, or null while it is valid. */
 export function sessionTimeoutReason(request, now = Date.now()) {
   const meta = request.yar?.get?.(META_KEY)
-  if (!meta) return null
+  if (!meta) {
+    return null
+  }
   if (now - meta.authenticatedAt > config.get('session.absoluteTimeoutMs')) {
     return 'absolute'
   }
@@ -79,7 +82,7 @@ async function refreshSession(request, tokens) {
       headers: { authorization: `Bearer ${refreshed.accessToken}` },
       logger: request.logger
     })
-    if (statusCode === 200 && payload?.user) {
+    if (statusCode === statusCodes.ok && payload?.user) {
       request.yar.set(USER_KEY, payload.user)
     }
   } catch (err) {
@@ -98,13 +101,19 @@ async function refreshSession(request, tokens) {
  */
 export async function getAccessToken(request, { forceRefresh = false } = {}) {
   // Set by the auth plugin only when the explicit dev bypass supplies the user.
-  if (request.app?.devAccessToken) return request.app.devAccessToken
+  if (request.app?.devAccessToken) {
+    return request.app.devAccessToken
+  }
 
   const tokens = getTokens(request)
-  if (!tokens?.accessToken) throw Boom.unauthorized('Authentication required')
+  if (!tokens?.accessToken) {
+    throw Boom.unauthorized('Authentication required')
+  }
 
   const now = Date.now()
-  if (!forceRefresh && isFresh(tokens, now)) return tokens.accessToken
+  if (!forceRefresh && isFresh(tokens, now)) {
+    return tokens.accessToken
+  }
 
   if (!tokens.refreshToken) {
     clearSession(request)
@@ -125,29 +134,36 @@ export async function getAccessToken(request, { forceRefresh = false } = {}) {
     request.yar.set(TOKENS_KEY, refreshed)
     return refreshed.accessToken
   } catch (err) {
-    if (!(err instanceof EntraTokenError)) throw err
-    request.logger?.warn(
-      {
-        event: {
-          category: 'authentication',
-          action: 'token-refresh',
-          outcome: 'failure',
-          reason: `refresh-${err.kind}`
-        }
-      },
-      'Token refresh failed'
-    )
-    if (err.kind === 'reauth') {
-      clearSession(request)
-      throw Boom.unauthorized('Session expired')
-    }
-    if (
-      err.kind === 'transient' &&
-      !forceRefresh &&
-      tokens.expiresAt > Date.now()
-    ) {
-      return tokens.accessToken
-    }
-    throw Boom.badGateway('Sign-in service is unavailable')
+    return refreshFailed(request, err, { tokens, forceRefresh })
   }
+}
+
+// A transient Entra failure keeps a still-valid token; anything else ends or fails the request.
+function refreshFailed(request, err, { tokens, forceRefresh }) {
+  if (!(err instanceof EntraTokenError)) {
+    throw err
+  }
+  request.logger?.warn(
+    {
+      event: {
+        category: 'authentication',
+        action: 'token-refresh',
+        outcome: 'failure',
+        reason: `refresh-${err.kind}`
+      }
+    },
+    'Token refresh failed'
+  )
+  if (err.kind === 'reauth') {
+    clearSession(request)
+    throw Boom.unauthorized('Session expired')
+  }
+  if (
+    err.kind === 'transient' &&
+    !forceRefresh &&
+    tokens.expiresAt > Date.now()
+  ) {
+    return tokens.accessToken
+  }
+  throw Boom.badGateway('Sign-in service is unavailable')
 }

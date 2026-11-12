@@ -157,15 +157,6 @@
 
 .app-error__stars circle {
   fill: var(--app-error-ink);
-  animation: app-error-twinkle 3.2s ease-in-out infinite;
-}
-
-.app-error__stars circle:nth-child(2n) {
-  animation-delay: -1.1s;
-}
-
-.app-error__stars circle:nth-child(3n) {
-  animation-delay: -2.3s;
 }
 
 .app-error__moon {
@@ -176,7 +167,6 @@
 .app-error__beam {
   transform-box: view-box;
   transform-origin: 120px 168px;
-  animation: app-error-sweep 6s ease-in-out infinite alternate;
   mix-blend-mode: screen;
 }
 
@@ -198,7 +188,6 @@
 
 .app-error__lamp {
   fill: var(--app-error-lamp);
-  animation: app-error-glow 6s ease-in-out infinite alternate;
 }
 
 .app-error__chain {
@@ -215,16 +204,10 @@
 .app-error__buoy {
   transform-box: fill-box;
   transform-origin: 50% 100%;
-  animation: app-error-bob 3s ease-in-out infinite;
-}
-
-.app-error__buoy--right {
-  animation-delay: -1.5s;
 }
 
 .app-error__buoy-light {
   fill: var(--app-error-lamp);
-  animation: app-error-blink 2.4s steps(1, end) infinite;
 }
 
 .app-error__padlock {
@@ -236,7 +219,6 @@
   stroke: var(--app-error-lock);
   stroke-width: 4;
   stroke-linecap: round;
-  animation: app-error-lock 4s ease-in-out 0.6s both;
 }
 
 .app-error__lock-body {
@@ -250,7 +232,6 @@
 .app-error__boat {
   transform-box: fill-box;
   transform-origin: 50% 90%;
-  animation: app-error-rock 3.6s ease-in-out infinite;
 }
 
 .app-error__hull {
@@ -273,11 +254,6 @@
 
 .app-error__masthead {
   fill: var(--app-error-lamp);
-  animation: app-error-blink 3s steps(1, end) infinite;
-}
-
-.app-error__wave {
-  animation: app-error-roll 9s linear infinite;
 }
 
 .app-error__wave--back {
@@ -286,7 +262,6 @@
 
 .app-error__wave--front {
   fill: var(--app-error-sea-front);
-  animation-duration: 6s;
 }
 
 .app-error__rain {
@@ -304,23 +279,81 @@
   display: none;
 }
 
-.app-error--lost .app-error__boat {
-  animation:
-    app-error-rock 3.6s ease-in-out infinite,
-    app-error-drift 14s ease-in-out infinite alternate;
-}
-
 .app-error--storm .app-error__moon {
   display: none;
 }
 
 .app-error--storm .app-error__rain {
   display: block;
-  animation: app-error-pour 0.9s linear infinite;
 }
 
-.app-error--storm .app-error__boat {
-  animation-duration: 1.8s;
+/* Motion only for those who have not asked for less. */
+@media (prefers-reduced-motion: no-preference) {
+  .app-error__stars circle {
+    animation: app-error-twinkle 3.2s ease-in-out infinite;
+  }
+
+  .app-error__stars circle:nth-child(2n) {
+    animation-delay: -1.1s;
+  }
+
+  .app-error__stars circle:nth-child(3n) {
+    animation-delay: -2.3s;
+  }
+
+  .app-error__beam {
+    animation: app-error-sweep 6s ease-in-out infinite alternate;
+  }
+
+  .app-error__lamp {
+    animation: app-error-glow 6s ease-in-out infinite alternate;
+  }
+
+  .app-error__buoy {
+    animation: app-error-bob 3s ease-in-out infinite;
+  }
+
+  .app-error__buoy--right {
+    animation-delay: -1.5s;
+  }
+
+  .app-error__buoy-light {
+    animation: app-error-blink 2.4s steps(1, end) infinite;
+  }
+
+  .app-error__shackle {
+    animation: app-error-lock 4s ease-in-out 0.6s both;
+  }
+
+  .app-error__boat {
+    animation: app-error-rock 3.6s ease-in-out infinite;
+  }
+
+  .app-error__masthead {
+    animation: app-error-blink 3s steps(1, end) infinite;
+  }
+
+  .app-error__wave {
+    animation: app-error-roll 9s linear infinite;
+  }
+
+  .app-error__wave--front {
+    animation-duration: 6s;
+  }
+
+  .app-error--lost .app-error__boat {
+    animation:
+      app-error-rock 3.6s ease-in-out infinite,
+      app-error-drift 14s ease-in-out infinite alternate;
+  }
+
+  .app-error--storm .app-error__rain {
+    animation: app-error-pour 0.9s linear infinite;
+  }
+
+  .app-error--storm .app-error__boat {
+    animation-duration: 1.8s;
+  }
 }
 
 @keyframes app-error-twinkle {
@@ -408,12 +441,6 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .app-error *,
-  .app-error *::before,
-  .app-error *::after {
-    animation: none !important;
-  }
-
   .app-error__beam {
     transform: rotate(-2deg);
   }

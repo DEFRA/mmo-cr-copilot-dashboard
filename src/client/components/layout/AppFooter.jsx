@@ -30,7 +30,9 @@ export function AppFooter({ onNavigate }) {
                     className="defra-footer__link"
                     href={`#/${page.id}`}
                     onClick={(event) => {
-                      if (!onNavigate || !isPlainClick(event)) return
+                      if (!onNavigate || !isPlainClick(event)) {
+                        return
+                      }
                       event.preventDefault()
                       onNavigate(page.id)
                     }}
@@ -52,7 +54,7 @@ export function AppFooter({ onNavigate }) {
               <a className="defra-footer__link" href={OGL} rel="license">
                 Open Government Licence v3.0
               </a>
-              , except where otherwise stated
+              {', except where otherwise stated'}
             </span>
           </div>
         </div>

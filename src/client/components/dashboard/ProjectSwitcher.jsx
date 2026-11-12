@@ -73,7 +73,10 @@ export function ProjectSwitcher({
           className="app-switcher__menu"
         >
           {projects.map((proj) => (
-            <li key={proj.slug} role="presentation">
+            <li // NOSONAR: ARIA listbox pattern; the option is the button
+              key={proj.slug}
+              role="presentation"
+            >
               <button
                 type="button"
                 role="option"
@@ -97,7 +100,10 @@ export function ProjectSwitcher({
             </li>
           ))}
           {onManageProjects && (
-            <li className="app-switcher__manage" role="presentation">
+            <li // NOSONAR: ARIA listbox pattern
+              className="app-switcher__manage"
+              role="presentation"
+            >
               <a
                 className="govuk-link"
                 href="#/admin/projects"

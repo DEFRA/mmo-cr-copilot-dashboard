@@ -1,0 +1,33 @@
+{
+  "schema": "ai-attribution-file/2",
+  "path": "src/client/components/settings/RepositoryMappingPanel.jsx",
+  "added": 30,
+  "counts": {
+    "aiCompletion": 0,
+    "aiChat": 0,
+    "aiAgent": 13,
+    "aiModified": 0,
+    "pasted": 0,
+    "typed": 0,
+    "untracked": 17
+  },
+  "ranges": {
+    "ai-agent": "15,27,37-40,42,174,246,281,309-311",
+    "untracked": "25-26,87-89,127-129,255-263"
+  },
+  "ai": [
+    [15, "a", "57a0e312", 0],
+    [27, "a", "9845a6a3", 0],
+    [37, "a", "586ece2a", 0],
+    [38, "a", "726ced1c", 0],
+    [39, "a", "e4889f24", 0],
+    [40, "a", "7c19eaa5", 0],
+    [42, "a", "b29fbc47", 0],
+    [174, "a", "ad73b623", 0],
+    [246, "a", "9b7bf53e", 0],
+    [281, "a", "5a0f6f0f", 0],
+    [309, "a", "35b5aa2f", 0],
+    [310, "a", "17a41142", 0],
+    [311, "a", "9c1c639f", 0]
+  ]
+}

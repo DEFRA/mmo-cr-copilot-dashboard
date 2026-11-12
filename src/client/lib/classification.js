@@ -23,10 +23,13 @@ export const REBASE_MERGE_REGEX =
  */
 export const EXCLUDED_CLASSIFICATIONS = ['Rebase', 'Dependabot']
 
+export const COPILOT_ASSISTED = 'Copilot-assisted'
+export const HUMAN_AUTHORED = 'Human-authored'
+
 /** Every classification the backend accepts, in the order they are offered. */
 export const COMMIT_CLASSIFICATIONS = [
-  'Copilot-assisted',
-  'Human-authored',
+  COPILOT_ASSISTED,
+  HUMAN_AUTHORED,
   ...EXCLUDED_CLASSIFICATIONS
 ]
 

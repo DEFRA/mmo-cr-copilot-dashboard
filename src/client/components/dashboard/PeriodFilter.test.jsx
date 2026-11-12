@@ -361,8 +361,12 @@ describe('#PeriodFilter', () => {
     'Should have no axe violations when %s',
     async (view) => {
       const { container } = renderFilter()
-      if (view === 'sprints') await openMenu()
-      if (view === 'custom') await openCustom()
+      if (view === 'sprints') {
+        await openMenu()
+      }
+      if (view === 'custom') {
+        await openCustom()
+      }
 
       expect(await axeViolations(container)).toStrictEqual([])
     }

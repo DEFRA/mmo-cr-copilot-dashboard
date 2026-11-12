@@ -4,9 +4,13 @@ const NEEDS_QUOTES = /[",\r\n]/
 
 /** One RFC 4180 cell. Numbers are trusted; text that could run as a formula is prefixed with `'`. */
 export function escapeCsvCell(value) {
-  if (value === null || value === undefined) return ''
+  if (value === null || value === undefined) {
+    return ''
+  }
   let text = String(value)
-  if (typeof value !== 'number' && FORMULA_START.test(text)) text = `'${text}`
+  if (typeof value !== 'number' && FORMULA_START.test(text)) {
+    text = `'${text}`
+  }
   return NEEDS_QUOTES.test(text) ? `"${text.replaceAll('"', '""')}"` : text
 }
 

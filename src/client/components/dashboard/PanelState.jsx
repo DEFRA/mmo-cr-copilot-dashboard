@@ -23,9 +23,7 @@ export function PanelState({
           <span className="app-skeleton__line" />
           <span className="app-skeleton__block" />
         </div>
-        <p className="govuk-visually-hidden" role="status">
-          Loading {title}
-        </p>
+        <output className="govuk-visually-hidden">Loading {title}</output>
       </div>
     )
   }

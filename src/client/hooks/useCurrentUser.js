@@ -50,7 +50,9 @@ export function useCurrentUser() {
         setStatus('ready')
       })
       .catch(() => {
-        if (controller.signal.aborted) return
+        if (controller.signal.aborted) {
+          return
+        }
         setUser(null)
         setStatus('ready')
       })

@@ -12,6 +12,9 @@ import {
   valueAxis
 } from '../../lib/chart-style'
 
+const IN_PROGRESS = 'In progress'
+const statusText = (it) => (it.completed ? 'Completed' : IN_PROGRESS)
+
 const formatMerged = (iso) =>
   new Date(iso).toLocaleString(undefined, {
     dateStyle: 'medium',
@@ -60,7 +63,7 @@ export function DeliveryTimeBar({ items, title, height = 340, onSelect }) {
         trigger: 'item',
         formatter: (params) => {
           const it = items[params.dataIndex]
-          const status = it.completed ? 'Completed' : 'In progress'
+          const status = statusText(it)
           const merged =
             it.completed && it.prMergedAt
               ? `<br/>Merged: ${formatMerged(it.prMergedAt)}`
@@ -77,7 +80,7 @@ export function DeliveryTimeBar({ items, title, height = 340, onSelect }) {
       }),
       series: [
         statusSeries('Completed', true, { color: p.family.adoption.band }),
-        statusSeries('In progress', false, {
+        statusSeries(IN_PROGRESS, false, {
           color: p.family.risk.band,
           decal: decal(p)
         })
@@ -117,7 +120,7 @@ export function DeliveryTimeBar({ items, title, height = 340, onSelect }) {
               <tr key={it.prNumber}>
                 <td>#{it.prNumber}</td>
                 <td>{it.cycleHours}</td>
-                <td>{it.completed ? 'Completed' : 'In progress'}</td>
+                <td>{statusText(it)}</td>
               </tr>
             ))}
           </tbody>

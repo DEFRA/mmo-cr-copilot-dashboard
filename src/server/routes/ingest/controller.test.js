@@ -43,8 +43,12 @@ describe('#ingest route', () => {
   describe('When a token is configured', () => {
     beforeEach(() => {
       vi.spyOn(config, 'get').mockImplementation((key) => {
-        if (key === 'ingest.token') return INGEST_TOKEN
-        if (key === 'ingest.allowSharedToken') return true
+        if (key === 'ingest.token') {
+          return INGEST_TOKEN
+        }
+        if (key === 'ingest.allowSharedToken') {
+          return true
+        }
         return readConfig(key)
       })
     })
@@ -166,8 +170,12 @@ describe('#ingest route', () => {
 
     beforeEach(() => {
       vi.spyOn(config, 'get').mockImplementation((k) => {
-        if (k === 'ingest.oidc.ownerId') return '5528822'
-        if (k === 'ingest.token') return INGEST_TOKEN
+        if (k === 'ingest.oidc.ownerId') {
+          return '5528822'
+        }
+        if (k === 'ingest.token') {
+          return INGEST_TOKEN
+        }
         return readConfig(k)
       })
     })
@@ -194,7 +202,9 @@ describe('#ingest route', () => {
 
     const mockBackend = (mapped) =>
       fetchMock.mockResponse((req) => {
-        if (req.url === JWKS_URL) return JSON.stringify(jwks)
+        if (req.url === JWKS_URL) {
+          return JSON.stringify(jwks)
+        }
         if (req.url.includes('/api/ingest/repositories/')) {
           const fullName = decodeURIComponent(req.url.split('/').pop())
           return JSON.stringify({ fullName, mapped: mapped.includes(fullName) })
@@ -292,8 +302,12 @@ describe('#ingest route', () => {
 
     beforeEach(() => {
       vi.spyOn(config, 'get').mockImplementation((k) => {
-        if (k === 'ingest.oidc.ownerId') return '5528822'
-        if (k === 'ingest.token') return INGEST_TOKEN
+        if (k === 'ingest.oidc.ownerId') {
+          return '5528822'
+        }
+        if (k === 'ingest.token') {
+          return INGEST_TOKEN
+        }
         return readConfig(k)
       })
     })
@@ -323,7 +337,9 @@ describe('#ingest route', () => {
 
     const mockBackend = (mapped, survivalResponse) =>
       fetchMock.mockResponse((req) => {
-        if (req.url === JWKS_URL) return JSON.stringify(jwks)
+        if (req.url === JWKS_URL) {
+          return JSON.stringify(jwks)
+        }
         if (req.url.includes('/api/ingest/repositories/')) {
           const fullName = decodeURIComponent(req.url.split('/').pop())
           return JSON.stringify({ fullName, mapped: mapped.includes(fullName) })

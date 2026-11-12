@@ -89,12 +89,11 @@ export function ModelLeaderboardPanel({
       headingLevel={headingLevel}
       className="app-compare app-leaderboard"
     >
-      {/* Focusable so keyboard users can scroll the table on narrow screens. */}
-      <div
+      {/* Focusable so keyboard users can scroll the table on narrow screens (WCAG 2.1.1). */}
+      <section
         className="app-table-scroll"
-        role="region"
         aria-label="Copilot model leaderboard"
-        tabIndex={0}
+        tabIndex={0} // NOSONAR: a scrollable region must take focus (axe scrollable-region-focusable)
       >
         <SortableTable
           className="govuk-!-margin-bottom-0"
@@ -104,7 +103,7 @@ export function ModelLeaderboardPanel({
           rows={models.map((m) => toRow(m, favourite))}
           initialSort={{ id: 'requests', direction: 'descending' }}
         />
-      </div>
+      </section>
       {models.some((m) => m.model === 'other') && (
         <p className="govuk-body-s app-muted govuk-!-margin-top-3 govuk-!-margin-bottom-0">
           ‘other’ combines models beyond the 20-model limit per pull request.

@@ -20,8 +20,7 @@ const REFRESH_PREAMBLE = 'src/client/react-refresh-preamble.js'
 
 const logger = createLogger()
 
-let cachedManifest
-
+let cachedManifest = null
 function readManifest() {
   if (cachedManifest) {
     return cachedManifest
@@ -68,5 +67,5 @@ export function entryAssets({
 
 /** Test seam — the manifest is otherwise read once per process. */
 export function resetManifestCache() {
-  cachedManifest = undefined
+  cachedManifest = null
 }

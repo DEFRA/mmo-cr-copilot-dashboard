@@ -1,7 +1,11 @@
 import { useId } from 'react'
 
-import { ErrorMessage } from './ErrorMessage.jsx'
-import { Hint } from './Hint.jsx'
+import {
+  FieldLabel,
+  FieldMessages,
+  describedByIds,
+  formGroupClass
+} from './FieldParts.jsx'
 import { cx, joinIds } from './utils.js'
 
 /**
@@ -23,25 +27,19 @@ export function TextInput({
 }) {
   const generatedId = useId()
   const fieldId = id ?? generatedId
-  const hintId = hint ? `${fieldId}-hint` : undefined
-  const errorId = errorMessage ? `${fieldId}-error` : undefined
+  const { hintId, errorId } = describedByIds(fieldId, hint, errorMessage)
 
   return (
-    <div
-      className={cx(
-        'govuk-form-group',
-        errorMessage && 'govuk-form-group--error',
-        formGroupClassName
-      )}
-    >
-      <label
-        className={cx('govuk-label', labelSize && `govuk-label--${labelSize}`)}
-        htmlFor={fieldId}
-      >
+    <div className={formGroupClass(errorMessage, formGroupClassName)}>
+      <FieldLabel fieldId={fieldId} size={labelSize}>
         {label}
-      </label>
-      {hint && <Hint id={hintId}>{hint}</Hint>}
-      {errorMessage && <ErrorMessage id={errorId}>{errorMessage}</ErrorMessage>}
+      </FieldLabel>
+      <FieldMessages
+        hint={hint}
+        hintId={hintId}
+        errorMessage={errorMessage}
+        errorId={errorId}
+      />
       <input
         className={cx(
           'govuk-input',
