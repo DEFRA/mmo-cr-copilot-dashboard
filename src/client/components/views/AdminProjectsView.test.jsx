@@ -2,6 +2,7 @@ import { render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 
 import { axeViolations } from '#/test-helpers/axe.js'
+import { JIRA_KEY_ADD_HINT, JIRA_KEY_CHANGE_HINT } from '../../lib/jira.js'
 import {
   AdminProjectsView,
   validateComplexityModel
@@ -446,31 +447,94 @@ describe('#AdminProjectsView Jira project key', () => {
   test.each([
     ['a project that has a key', 'KEY', 'MMOCR'],
     ['an AI-Native project', 'NAT', 'FESAI']
-  ])('Should show the key of %s as read-only text', async (_, slug, key) => {
+  ])('Should offer to change the key of %s', async (_, slug, key) => {
     backend()
     const { section, container } = await openSection(slug)
 
+    expect(
+      within(section).getByRole('heading', { name: 'Current Jira Project Key' })
+    ).toBeVisible()
     expect(within(section).getByText(key)).toBeVisible()
     expect(
-      within(section).getByText('The Jira project key cannot be changed.')
-    ).toBeVisible()
-    expect(within(section).queryByRole('textbox')).toBeNull()
+      within(section).getByRole('textbox', { name: 'New Jira project key' })
+    ).toHaveAccessibleDescription(JIRA_KEY_CHANGE_HINT)
     expect(
-      within(section).queryByRole('button', { name: /Jira project key/ })
-    ).toBeNull()
+      within(section).getByRole('button', { name: 'Change Jira project key' })
+    ).toBeVisible()
     expect(await axeViolations(container)).toStrictEqual([])
   })
 
-  test('Should let a key-less AI-Adopted project add a key once', async () => {
+  test('Should change a stored key', async () => {
+    backend()
+    const { user, section } = await openSection('KEY')
+
+    await user.type(
+      within(section).getByRole('textbox', { name: 'New Jira project key' }),
+      'crar'
+    )
+    await user.click(
+      within(section).getByRole('button', { name: 'Change Jira project key' })
+    )
+
+    expect(
+      await screen.findByText(
+        'Jira project key for Keyed Adopted changed from MMOCR to CRAR.'
+      )
+    ).toBeVisible()
+    const [url, init] = putOf()
+    expect(url).toBe('/api/projects/KEY')
+    expect(JSON.parse(init.body)).toStrictEqual({
+      jira: { projectKeys: ['CRAR'] }
+    })
+  })
+
+  test('Should refuse the current key without calling the backend', async () => {
+    backend()
+    const { user, section } = await openSection('KEY')
+
+    await user.type(
+      within(section).getByRole('textbox', { name: 'New Jira project key' }),
+      'MMOCR'
+    )
+    await user.click(
+      within(section).getByRole('button', { name: 'Change Jira project key' })
+    )
+
+    expect(
+      within(screen.getByRole('alert')).getByRole('link', {
+        name: 'Enter a Jira project key that is different from the current one'
+      })
+    ).toBeVisible()
+    expect(putOf()).toBeUndefined()
+  })
+
+  test('Should ask for a reload when someone else changed the key first', async () => {
+    backend(refuse(409, 'The Jira project key was changed by someone else'))
+    const { user, section } = await openSection('KEY')
+
+    await user.type(
+      within(section).getByRole('textbox', { name: 'New Jira project key' }),
+      'CRAR'
+    )
+    await user.click(
+      within(section).getByRole('button', { name: 'Change Jira project key' })
+    )
+
+    expect(
+      await within(await screen.findByRole('alert')).findByText(
+        'Someone else changed this at the same time. Reload the page and try again.'
+      )
+    ).toBeVisible()
+  })
+
+  test('Should let a key-less project add a key', async () => {
     backend()
     const { user, section, container } = await openSection('NKA')
 
     const field = within(section).getByRole('textbox', {
       name: 'Jira project key'
     })
-    expect(field).toHaveAccessibleDescription(
-      'You can add a Jira project key once. It cannot be changed afterwards.'
-    )
+    expect(field).toHaveAccessibleDescription(JIRA_KEY_ADD_HINT)
     expect(await axeViolations(container)).toStrictEqual([])
 
     await user.type(field, 'mmocr')
@@ -488,7 +552,9 @@ describe('#AdminProjectsView Jira project key', () => {
     })
     expect(init.headers['x-requested-with']).toBe('XMLHttpRequest')
     expect(await within(section).findByText('MMOCR')).toBeVisible()
-    expect(within(section).queryByRole('textbox')).toBeNull()
+    expect(
+      within(section).getByRole('textbox', { name: 'New Jira project key' })
+    ).toHaveValue('')
   })
 
   test('Should tell the app to refresh its projects after a key is saved, and not when it is refused', async () => {
@@ -520,7 +586,7 @@ describe('#AdminProjectsView Jira project key', () => {
   })
 
   test('Should show a backend Jira key message on the field and in the summary', async () => {
-    backend(refuse(400, 'The Jira project key cannot be changed'))
+    backend(refuse(400, 'The Jira project key cannot be removed'))
     const { user, section, container } = await openSection('NKA')
 
     await user.type(
@@ -533,14 +599,14 @@ describe('#AdminProjectsView Jira project key', () => {
 
     const summary = await screen.findByRole('alert')
     const link = within(summary).getByRole('link', {
-      name: 'The Jira project key cannot be changed'
+      name: 'The Jira project key cannot be removed'
     })
     expect(link.getAttribute('href')).toMatch(/^#.+-key$/)
     expect(summary.closest('.govuk-error-summary')).toHaveFocus()
     expect(
       within(section).getByRole('textbox', { name: 'Jira project key' })
     ).toHaveAccessibleDescription(
-      expect.stringContaining('Error: The Jira project key cannot be changed')
+      expect.stringContaining('Error: The Jira project key cannot be removed')
     )
     expect(await axeViolations(container)).toStrictEqual([])
   })
@@ -641,6 +707,6 @@ describe('#AdminProjectsView Jira project key', () => {
       .closest('section')
 
     expect(within(section).queryByRole('textbox')).toBeNull()
-    expect(within(section).queryByText(/cannot be changed/)).toBeNull()
+    expect(within(section).queryByText(/Current Jira Project Key/)).toBeNull()
   })
 })

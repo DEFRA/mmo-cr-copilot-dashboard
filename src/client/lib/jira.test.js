@@ -1,6 +1,6 @@
 import {
-  JIRA_KEY_ADD_ONCE,
-  JIRA_KEY_FIXED,
+  JIRA_KEY_ADD_HINT,
+  JIRA_KEY_CHANGE_HINT,
   hasJira,
   jiraKeyEdit,
   jiraKeyOf
@@ -33,31 +33,28 @@ describe('#hasJira', () => {
 })
 
 describe('#jiraKeyEdit', () => {
-  test('Should fix a stored key', () => {
-    expect(
-      jiraKeyEdit({ type: 'ai-adopted', jira: { projectKeys: ['MMOCR'] } })
-    ).toStrictEqual({ mode: 'fixed', key: 'MMOCR', hint: JIRA_KEY_FIXED })
-  })
+  test.each(['ai-adopted', 'ai-native'])(
+    'Should let a stored key of an %s project be changed',
+    (type) => {
+      expect(
+        jiraKeyEdit({ type, jira: { projectKeys: ['MMOCR'] } })
+      ).toStrictEqual({
+        mode: 'change',
+        key: 'MMOCR',
+        hint: JIRA_KEY_CHANGE_HINT
+      })
+    }
+  )
 
-  test('Should fix the key of an AI-Native project', () => {
-    expect(
-      jiraKeyEdit({ type: 'ai-native', jira: { projectKeys: ['MMOCR'] } }).mode
-    ).toBe('fixed')
-    expect(jiraKeyEdit({ type: 'ai-native' })).toStrictEqual({
-      mode: 'fixed',
-      key: null,
-      hint: JIRA_KEY_FIXED
-    })
-  })
-
-  test('Should let a key-less AI-Adopted project add one once', () => {
-    expect(jiraKeyEdit({ type: 'ai-adopted' })).toStrictEqual({
+  test.each([
+    ['an AI-Adopted project', { type: 'ai-adopted' }],
+    ['an AI-Native project', { type: 'ai-native' }],
+    ['an empty key list', { type: 'ai-adopted', jira: { projectKeys: [] } }]
+  ])('Should let %s without a key add one', (_, project) => {
+    expect(jiraKeyEdit(project)).toStrictEqual({
       mode: 'add',
       key: null,
-      hint: JIRA_KEY_ADD_ONCE
+      hint: JIRA_KEY_ADD_HINT
     })
-    expect(
-      jiraKeyEdit({ type: 'ai-adopted', jira: { projectKeys: [] } }).mode
-    ).toBe('add')
   })
 })

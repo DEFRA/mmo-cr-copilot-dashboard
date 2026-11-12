@@ -4,21 +4,17 @@ export function jiraKeyOf(project) {
   return typeof key === 'string' && key.trim() !== '' ? key.trim() : null
 }
 
-export const JIRA_KEY_FIXED = 'The Jira project key cannot be changed.'
-export const JIRA_KEY_ADD_ONCE =
-  'You can add a Jira project key once. It cannot be changed afterwards.'
+export const JIRA_KEY_ADD_HINT =
+  'Jira metrics use issues from this Jira project, for example MMOCR.'
+export const JIRA_KEY_CHANGE_HINT =
+  'Jira metrics switch to issues in the new Jira project. Pull requests that only mention the old key show no Jira data.'
 
-/**
- * How a project's Jira key may be edited. A stored key is fixed for good, an
- * AI-Native project's key is never edited here, and a key-less AI-Adopted
- * project may add one once.
- */
+/** How a project's Jira key may be edited: added when it has none, otherwise changed (backend ADR 0013). */
 export function jiraKeyEdit(project) {
   const key = jiraKeyOf(project)
-  if (key || project?.type === 'ai-native') {
-    return { mode: 'fixed', key, hint: JIRA_KEY_FIXED }
-  }
-  return { mode: 'add', key: null, hint: JIRA_KEY_ADD_ONCE }
+  return key
+    ? { mode: 'change', key, hint: JIRA_KEY_CHANGE_HINT }
+    : { mode: 'add', key: null, hint: JIRA_KEY_ADD_HINT }
 }
 
 /**

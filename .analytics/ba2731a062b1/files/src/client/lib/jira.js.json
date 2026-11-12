@@ -1,0 +1,27 @@
+{
+  "schema": "ai-attribution-file/2",
+  "path": "src/client/lib/jira.js",
+  "added": 8,
+  "counts": {
+    "aiCompletion": 0,
+    "aiChat": 0,
+    "aiAgent": 8,
+    "aiModified": 0,
+    "pasted": 0,
+    "typed": 0,
+    "untracked": 0
+  },
+  "ranges": {
+    "ai-agent": "7-10,12,15-17"
+  },
+  "ai": [
+    [7, "a", "4e6fcde9", 0],
+    [8, "a", "39a21f37", 0],
+    [9, "a", "9508c08f", 0],
+    [10, "a", "8f0c5906", 0],
+    [12, "a", "88b95d0b", 0],
+    [15, "a", "5fe9c6e6", 0],
+    [16, "a", "28741ed3", 0],
+    [17, "a", "1278f90e", 0]
+  ]
+}

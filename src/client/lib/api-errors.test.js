@@ -150,9 +150,16 @@ describe('#readApiError', () => {
     [
       'project',
       400,
-      'The Jira project key cannot be changed',
+      'The Jira project key cannot be removed',
       'jiraKey',
-      'The Jira project key cannot be changed'
+      'The Jira project key cannot be removed'
+    ],
+    [
+      'project',
+      409,
+      'The Jira project key was changed by someone else',
+      null,
+      CONFLICT
     ],
     [
       'sonarKey',

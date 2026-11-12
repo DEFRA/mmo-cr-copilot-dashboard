@@ -36,8 +36,14 @@ const KNOWN_ERRORS = [
   {
     context: 'project',
     status: 400,
-    message: 'The Jira project key cannot be changed',
+    message: 'The Jira project key cannot be removed',
     field: 'jiraKey'
+  },
+  {
+    context: 'project',
+    status: 409,
+    message: 'The Jira project key was changed by someone else',
+    text: CONFLICT
   },
   {
     context: 'sonarKey',

@@ -1399,7 +1399,7 @@ describe('#api proxy routes', () => {
         'PUT',
         '/api/projects/ALPH',
         400,
-        'The Jira project key cannot be changed'
+        'The Jira project key cannot be removed'
       ],
       [
         'PUT',

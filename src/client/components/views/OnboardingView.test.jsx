@@ -1360,7 +1360,7 @@ describe('#OnboardingView submission', () => {
 
   test.each([
     'AI-Native projects require exactly one Jira project key',
-    'The Jira project key cannot be changed'
+    'The Jira project key cannot be removed'
   ])(
     'Should show the backend Jira key message "%s" on the Jira key field',
     async (message) => {

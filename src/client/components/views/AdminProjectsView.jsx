@@ -269,7 +269,6 @@ function ComplexityModel({ projects, onSaved }) {
 
 const JIRA_KEY_FAILED = 'The Jira project key could not be saved'
 
-// A stored key is read-only; a key-less AI-Adopted project may add one once.
 function ProjectJiraKey({ projects, onSaved }) {
   const baseId = useId()
   const projectId = `${baseId}-project`
@@ -293,7 +292,11 @@ function ProjectJiraKey({ projects, onSaved }) {
     event.preventDefault()
     if (saving) return
     const key = value.trim().toUpperCase()
-    const problem = jiraKeyError(key, true)
+    const problem =
+      jiraKeyError(key, true) ??
+      (key === edit.key
+        ? 'Enter a Jira project key that is different from the current one'
+        : null)
     setAttempt((a) => a + 1)
     if (problem) {
       setError({ field: true, text: problem })
@@ -313,7 +316,11 @@ function ProjectJiraKey({ projects, onSaved }) {
         }
       )
       setValue('')
-      onSaved(`Jira project key ${key} added to ${project.name}.`)
+      onSaved(
+        edit.key
+          ? `Jira project key for ${project.name} changed from ${edit.key} to ${key}.`
+          : `Jira project key ${key} added to ${project.name}.`
+      )
     } catch (err) {
       const { field, message } = toApiError(err, JIRA_KEY_FAILED)
       setError({ field: field === 'jiraKey', text: message })
@@ -342,20 +349,23 @@ function ProjectJiraKey({ projects, onSaved }) {
           ...projects.map((p) => ({ value: p.slug, text: p.name }))
         ]}
       />
-      {edit?.mode === 'fixed' && (
+      {edit?.mode === 'change' && (
         <>
-          <h3 className="govuk-heading-s">Jira project key</h3>
-          <p className="govuk-body govuk-!-margin-bottom-1">
-            {edit.key ?? 'None'}
-          </p>
-          <p className="govuk-hint">{edit.hint}</p>
+          <h3 className="govuk-heading-s govuk-!-margin-bottom-1">
+            Current Jira Project Key
+          </h3>
+          <p className="govuk-body">{edit.key}</p>
         </>
       )}
-      {edit?.mode === 'add' && (
+      {edit && (
         <>
           <TextInput
             id={keyId}
-            label="Jira project key"
+            label={
+              edit.mode === 'change'
+                ? 'New Jira project key'
+                : 'Jira project key'
+            }
             labelSize="s"
             hint={edit.hint}
             errorMessage={error?.field ? error.text : undefined}
@@ -367,7 +377,9 @@ function ProjectJiraKey({ projects, onSaved }) {
             onChange={(event) => setValue(event.target.value.toUpperCase())}
           />
           <Button type="submit" disabled={saving}>
-            Add Jira project key
+            {edit.mode === 'change'
+              ? 'Change Jira project key'
+              : 'Add Jira project key'}
           </Button>
         </>
       )}

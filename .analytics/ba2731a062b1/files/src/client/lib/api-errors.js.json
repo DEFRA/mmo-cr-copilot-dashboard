@@ -1,0 +1,26 @@
+{
+  "schema": "ai-attribution-file/2",
+  "path": "src/client/lib/api-errors.js",
+  "added": 7,
+  "counts": {
+    "aiCompletion": 0,
+    "aiChat": 0,
+    "aiAgent": 7,
+    "aiModified": 0,
+    "pasted": 0,
+    "typed": 0,
+    "untracked": 0
+  },
+  "ranges": {
+    "ai-agent": "39,42-47"
+  },
+  "ai": [
+    [39, "a", "93978c24", 0],
+    [42, "a", "2c944dad", 0],
+    [43, "a", "85899ab8", 0],
+    [44, "a", "798e01d3", 0],
+    [45, "a", "cafb2cd1", 0],
+    [46, "a", "f60ade94", 0],
+    [47, "a", "a005a581", 0]
+  ]
+}
