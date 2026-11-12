@@ -1,0 +1,38 @@
+{
+  "schema": "ai-attribution-file/2",
+  "path": "src/server/routes/api/controller.js",
+  "added": 19,
+  "counts": {
+    "aiCompletion": 0,
+    "aiChat": 0,
+    "aiAgent": 19,
+    "aiModified": 0,
+    "pasted": 0,
+    "typed": 0,
+    "untracked": 0
+  },
+  "ranges": {
+    "ai-agent": "252-255,836-850"
+  },
+  "ai": [
+    [252, "a", "a1944e15", 0],
+    [253, "a", "ddf6da2f", 0],
+    [254, "a", "7adf1ed1", 0],
+    [255, "a", "a31996cd", 0],
+    [836, "a", "2c944dad", 0],
+    [837, "a", "83cd39b3", 0],
+    [838, "a", "12691dad", 0],
+    [839, "a", "3ef3eeb9", 0],
+    [840, "a", "712da2df", 0],
+    [841, "a", "a005a581", 0],
+    [842, "a", "d9e16ba5", 0],
+    [843, "a", "206fa921", 0],
+    [844, "a", "0c9d6e3b", 0],
+    [845, "a", "2785cc6d", 0],
+    [846, "a", "83cd39b3", 0],
+    [847, "a", "e4e5615e", 0],
+    [848, "a", "ee44a98c", 0],
+    [849, "a", "9845a6a3", 0],
+    [850, "a", "a005a581", 0]
+  ]
+}

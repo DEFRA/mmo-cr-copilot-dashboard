@@ -16,8 +16,9 @@ const isValidWindow = (w) =>
 /**
  * The project's sprint calendar from the server, newest first. An empty list
  * means "use the local fixed cadence", including while loading and on error.
+ * A new `revision` (the saved sprint period) fetches the calendar again.
  */
-export function useProjectSprints(slug, count = 4) {
+export function useProjectSprints(slug, count = 4, revision = null) {
   const [state, setState] = useState({ sprints: [], status: 'idle' })
 
   useEffect(() => {
@@ -48,7 +49,7 @@ export function useProjectSprints(slug, count = 4) {
       })
 
     return () => controller.abort()
-  }, [slug, count])
+  }, [slug, count, revision])
 
   return state
 }

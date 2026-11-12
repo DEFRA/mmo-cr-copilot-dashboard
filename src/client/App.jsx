@@ -313,7 +313,14 @@ export default function App() {
   // ── Global time-window filter ──────────────────────────────────────────────
   // Live = the current sprint; custom = a user-selected [start, end) range.
   const [filter, setFilter] = useState({ mode: 'live', start: null, end: null })
-  const { sprints: projectSprints } = useProjectSprints(activeSlug)
+  const sprintCalendar = activeProject?.sprintCalendar
+  const { sprints: projectSprints } = useProjectSprints(
+    activeSlug,
+    4,
+    sprintCalendar
+      ? `${sprintCalendar.cadenceDays}|${sprintCalendar.anchorDate}`
+      : null
+  )
   // Server windows are used only when the newest one really contains today.
   const serverSprints = useMemo(() => {
     const now = Date.now()
@@ -681,6 +688,7 @@ export default function App() {
             navigate({ level: 'settings', tab }, { confirmed: true })
           }
           onUnsavedChange={setUnsaved}
+          onProjectChanged={refreshProjects}
         />
       )
     }

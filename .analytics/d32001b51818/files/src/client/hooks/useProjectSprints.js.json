@@ -1,0 +1,22 @@
+{
+  "schema": "ai-attribution-file/2",
+  "path": "src/client/hooks/useProjectSprints.js",
+  "added": 3,
+  "counts": {
+    "aiCompletion": 0,
+    "aiChat": 0,
+    "aiAgent": 3,
+    "aiModified": 0,
+    "pasted": 0,
+    "typed": 0,
+    "untracked": 0
+  },
+  "ranges": {
+    "ai-agent": "19,21,52"
+  },
+  "ai": [
+    [19, "a", "6f366c55", 0],
+    [21, "a", "cca732f5", 0],
+    [52, "a", "5d6c52db", 0]
+  ]
+}

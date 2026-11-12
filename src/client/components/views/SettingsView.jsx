@@ -7,6 +7,7 @@ import { PersonaMappingsSection } from '../settings/PersonaMappingsSection'
 import { RepositoryMappingPanel } from '../settings/RepositoryMappingPanel'
 import { RoleMappingsPanel } from '../settings/RoleMappingsPanel'
 import { RoleTag } from '../settings/RoleTag'
+import { SprintPeriodPanel } from '../settings/SprintPeriodPanel'
 import {
   SettingsSubNavigation,
   settingsTabsFor
@@ -38,9 +39,12 @@ export function SettingsView({
   contributors = [],
   tab,
   onTabChange,
-  onUnsavedChange
+  onUnsavedChange,
+  onProjectChanged
 }) {
   const [workflowDirty, setWorkflowDirty] = useState(false)
+  const [sprintDirty, setSprintDirty] = useState(false)
+  const unsaved = workflowDirty || sprintDirty
   const resolvedRole = effectiveRole(role, isDashboardAdmin)
   const canAdminister = canAdministerProject(resolvedRole)
   const repos = useRepositories(canAdminister)
@@ -54,13 +58,13 @@ export function SettingsView({
   const activeTab = tabs.some((t) => t.id === tab) ? tab : tabs[0].id
 
   useEffect(() => {
-    onUnsavedChange?.(workflowDirty)
-  }, [workflowDirty, onUnsavedChange])
+    onUnsavedChange?.(unsaved)
+  }, [unsaved, onUnsavedChange])
 
   useEffect(() => () => onUnsavedChange?.(false), [onUnsavedChange])
 
   const handleTabChange = (next) => {
-    if (next !== activeTab && !confirmDiscard(workflowDirty)) return
+    if (next !== activeTab && !confirmDiscard(unsaved)) return
     onTabChange?.(next)
   }
 
@@ -107,11 +111,19 @@ export function SettingsView({
         />
       )}
       {activeTab === 'jira-workflow' && (
-        <JiraWorkflowPanel
-          key={project?.slug}
-          project={project}
-          onDirtyChange={setWorkflowDirty}
-        />
+        <>
+          <SprintPeriodPanel
+            key={project?.slug}
+            project={project}
+            onSaved={onProjectChanged}
+            onDirtyChange={setSprintDirty}
+          />
+          <JiraWorkflowPanel
+            key={project?.slug}
+            project={project}
+            onDirtyChange={setWorkflowDirty}
+          />
+        </>
       )}
       {activeTab === 'roles' && <RoleMappingsPanel projects={projects} />}
       {activeTab === 'audit-log' && (

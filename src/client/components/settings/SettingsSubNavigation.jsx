@@ -4,14 +4,14 @@ import { SETTINGS_TABS, toHash } from '../../lib/routes'
 const TAB_LABEL = {
   personas: 'Persona Mappings',
   repositories: 'Repositories',
-  'jira-workflow': 'Jira Workflow and Definition of Done',
+  'jira-workflow': 'JIRA',
   roles: 'Role Mappings',
   'audit-log': 'Audit Log'
 }
 
 /**
- * The settings sections a caller may open; the Jira workflow and Definition of
- * Done needs a Jira key, roles are dashboard-admin only, the audit log is open.
+ * The settings sections a caller may open; JIRA (sprint period and workflow) needs
+ * a Jira key, roles are dashboard-admin only, the audit log is open.
  */
 export function settingsTabsFor({
   canAdminister,

@@ -496,6 +496,49 @@ describe('#api proxy routes', () => {
     })
   })
 
+  describe('Project sprint calendar', () => {
+    const url = '/api/projects/ALPH/sprint-calendar'
+    const calendar = { cadenceDays: 7, anchorDate: '2026-11-02T00:00:00.000Z' }
+
+    test('Should forward the sprint period to the backend', async () => {
+      fetchMock.mockResponse(JSON.stringify({ slug: 'ALPH' }))
+
+      const { statusCode } = await write({
+        method: 'PUT',
+        url,
+        payload: { ...calendar, extra: true }
+      })
+
+      expect(statusCode).toBe(statusCodes.ok)
+      expect(upstreamUrl()).toBe(`${BACKEND}${url}`)
+      const [, options] = fetchMock.mock.calls[0]
+      expect(options.method).toBe('PUT')
+      expect(JSON.parse(options.body)).toEqual(calendar)
+    })
+
+    test.each([
+      ['no length', { anchorDate: calendar.anchorDate }],
+      ['no start date', { cadenceDays: 7 }],
+      ['a length over 30', { ...calendar, cadenceDays: 31 }]
+    ])('Should reject %s without calling the backend', async (_, payload) => {
+      const { statusCode } = await write({ method: 'PUT', url, payload })
+
+      expect(statusCode).toBe(statusCodes.badRequest)
+      expect(fetchMock).not.toHaveBeenCalled()
+    })
+
+    test('Should refuse a write without the CSRF header', async () => {
+      const { statusCode } = await server.inject({
+        method: 'PUT',
+        url,
+        payload: calendar
+      })
+
+      expect(statusCode).toBe(statusCodes.forbidden)
+      expect(fetchMock).not.toHaveBeenCalled()
+    })
+  })
+
   describe('Project Jira workflow', () => {
     const base = '/api/projects/ALPH/jira'
     const body = {

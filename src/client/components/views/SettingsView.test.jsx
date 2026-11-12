@@ -487,12 +487,9 @@ describe('#SettingsView', () => {
       ).not.toBeInTheDocument()
     })
 
-    describe('Jira workflow tab', () => {
+    describe('JIRA tab', () => {
       const JIRA_PROJECT = { ...PROJECT, jira: { projectKeys: ['ALPHA'] } }
-      const jiraLink = () =>
-        screen.queryByRole('link', {
-          name: 'Jira Workflow and Definition of Done'
-        })
+      const jiraLink = () => screen.queryByRole('link', { name: 'JIRA' })
 
       test('Should offer a project admin the tab when the project has a Jira key', () => {
         renderSettings({ project: JIRA_PROJECT })
@@ -650,6 +647,32 @@ describe('#SettingsView', () => {
           expect(onUnsavedChange).toHaveBeenLastCalledWith(false)
         })
 
+        test('Should show the sprint period first and warn about an unsaved one', async () => {
+          vi.spyOn(window, 'confirm').mockReturnValue(false)
+          const onTabChange = vi.fn()
+          renderSettings({
+            project: JIRA_PROJECT,
+            tab: 'jira-workflow',
+            onTabChange
+          })
+          const headings = screen
+            .getAllByRole('heading', { level: 2 })
+            .map((h) => h.textContent)
+          expect(headings[0]).toBe('Sprint Period')
+
+          const length = screen.getByRole('textbox', {
+            name: 'Sprint length in days'
+          })
+          await userEvent.clear(length)
+          await userEvent.type(length, '7')
+          await userEvent.click(
+            screen.getByRole('link', { name: 'Persona Mappings' })
+          )
+
+          expect(window.confirm).toHaveBeenCalled()
+          expect(onTabChange).not.toHaveBeenCalled()
+        })
+
         test('Should show the new project’s workflow, not the old one, after a project switch', async () => {
           const view = renderSettings({
             project: { ...JIRA_PROJECT, slug: 'alpha' },
@@ -683,18 +706,13 @@ describe('#SettingsView', () => {
       ).not.toBeInTheDocument()
     })
 
-    test('Should keep a default mapping read-only', () => {
-      renderSettings({
-        mappings: [
-          ...MAPPINGS,
-          { githubHandle: 'olddefault', persona: 'qa', scope: 'default' }
-        ]
-      })
+    test('Should offer Change and Delete for every mapping', () => {
+      renderSettings()
 
-      expect(screen.getByText('Default for every project')).toBeInTheDocument()
-      expect(
-        screen.queryByRole('button', { name: /persona for olddefault/ })
-      ).not.toBeInTheDocument()
+      expect(screen.queryByText('Default for every project')).toBeNull()
+      for (const { githubHandle } of MAPPINGS) {
+        expect(changeButton(githubHandle)).toBeInTheDocument()
+      }
     })
   })
 })

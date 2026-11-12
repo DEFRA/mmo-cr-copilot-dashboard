@@ -48,4 +48,17 @@ describe('#useProjectSprints', () => {
 
     expect(fetchMock).not.toHaveBeenCalled()
   })
+
+  test('Should fetch again when the sprint period changes', async () => {
+    fetchMock.mockResponse(JSON.stringify({ sprints: [] }))
+    const { result, rerender } = renderHook(
+      ({ revision }) => useProjectSprints('mmo-cr', 4, revision),
+      { initialProps: { revision: '14|2026-07-08' } }
+    )
+    await waitFor(() => expect(result.current.status).toBe('success'))
+
+    rerender({ revision: '7|2026-11-02' })
+
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(2))
+  })
 })

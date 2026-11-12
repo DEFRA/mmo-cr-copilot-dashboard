@@ -279,39 +279,33 @@ export function PersonaMappingsSection({
                     <Tag key="persona" colour={PERSONA_TAG[m.persona]}>
                       {personaMeta(m.persona).label}
                     </Tag>,
-                    m.scope === 'default' ? (
-                      <span key="actions" className="app-muted">
-                        Default for every project
-                      </span>
-                    ) : (
-                      <span key="actions">
-                        <button
-                          type="button"
-                          className="app-link-button"
-                          onClick={() => startChange(m)}
-                        >
-                          Change
-                          <span className="govuk-visually-hidden">
-                            {' '}
-                            persona for {m.githubHandle}
-                          </span>
-                        </button>
-                        <button
-                          type="button"
-                          className="app-link-button govuk-!-margin-left-3"
-                          onClick={() => {
-                            setNotice(null)
-                            setConfirming(m.githubHandle)
-                          }}
-                        >
-                          Delete
-                          <span className="govuk-visually-hidden">
-                            {' '}
-                            persona mapping for {m.githubHandle}
-                          </span>
-                        </button>
-                      </span>
-                    )
+                    <span key="actions">
+                      <button
+                        type="button"
+                        className="app-link-button"
+                        onClick={() => startChange(m)}
+                      >
+                        Change
+                        <span className="govuk-visually-hidden">
+                          {' '}
+                          persona for {m.githubHandle}
+                        </span>
+                      </button>
+                      <button
+                        type="button"
+                        className="app-link-button govuk-!-margin-left-3"
+                        onClick={() => {
+                          setNotice(null)
+                          setConfirming(m.githubHandle)
+                        }}
+                      >
+                        Delete
+                        <span className="govuk-visually-hidden">
+                          {' '}
+                          persona mapping for {m.githubHandle}
+                        </span>
+                      </button>
+                    </span>
                   ]
                 }))}
               />

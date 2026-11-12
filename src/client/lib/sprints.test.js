@@ -8,8 +8,44 @@ import {
   toDateTimeLocal,
   toDateInput,
   toTimeInput,
-  parseDateTime
+  parseDateTime,
+  sprintPeriodErrors
 } from './sprints.js'
+
+describe('#sprintPeriodErrors', () => {
+  const start = { day: '2', month: '11', year: '2026' }
+
+  test.each(['1', '14', ' 30 '])('Should accept a length of %s', (length) => {
+    expect(sprintPeriodErrors({ length, start })).toEqual({})
+  })
+
+  test.each(['0', '31', '1.5', '-2', 'two'])(
+    'Should reject a length of %s',
+    (length) => {
+      expect(sprintPeriodErrors({ length, start }).length).toBe(
+        'Sprint length must be a whole number of days from 1 to 30'
+      )
+    }
+  )
+
+  test('Should ask for both fields when they are empty', () => {
+    expect(
+      sprintPeriodErrors({ length: '', start: { day: '', month: '', year: '' } })
+    ).toEqual({
+      length: 'Enter the sprint length in days',
+      start: 'Enter the date a sprint started'
+    })
+  })
+
+  test('Should reject a date that does not exist', () => {
+    expect(
+      sprintPeriodErrors({
+        length: '14',
+        start: { day: '30', month: '2', year: '2026' }
+      })
+    ).toEqual({ start: 'The sprint start date must be a real date' })
+  })
+})
 
 // The anchor sprint runs 8 Jul 2026 → 22 Jul 2026 (end exclusive), local time.
 const anchor = new Date(2026, 6, 8)

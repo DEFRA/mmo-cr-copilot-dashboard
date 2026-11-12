@@ -33,7 +33,8 @@ const ACTION_LABEL = {
   'role-mapping.deleted': 'Role mapping removed',
   'role-mapping.migrated': 'Role mappings migrated',
   'pr-jira-links.updated': 'Jira links changed',
-  'complexity-model.updated': 'Complexity model changed'
+  'complexity-model.updated': 'Complexity model changed',
+  'sprint-calendar.updated': 'Sprint period changed'
 }
 
 function formatWhen(iso) {
