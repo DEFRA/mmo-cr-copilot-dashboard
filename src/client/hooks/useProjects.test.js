@@ -3,14 +3,14 @@ import { act, renderHook, waitFor } from '@testing-library/react'
 import { useProjects } from './useProjects.js'
 
 const PROJECT_A = {
-  slug: 'proj-a',
+  slug: 'PRJA',
   name: 'Project A',
   type: 'ai-adopted',
   adoptionStartDate: '2026-01-01T00:00:00.000Z'
 }
 
 const PROJECT_B = {
-  slug: 'proj-b',
+  slug: 'PRJB',
   name: 'Project B',
   type: 'ai-native',
   adoptionStartDate: '2026-02-01T00:00:00.000Z'
@@ -87,7 +87,7 @@ describe('#useProjects', () => {
   })
 
   test('Should ignore a remembered project the caller no longer has', async () => {
-    localStorage.setItem('mmo-active-project', 'gone')
+    localStorage.setItem('mmo-active-project', 'GONE')
     fetchMock.mockResponse(JSON.stringify([PROJECT_A]))
 
     const { result } = renderHook(() => useProjects())
@@ -103,15 +103,30 @@ describe('#useProjects', () => {
     await waitFor(() => expect(result.current.loading).toBe(false))
 
     act(() => {
-      result.current.selectProject('proj-b')
+      result.current.selectProject('PRJB')
     })
 
     expect(result.current.activeProject).toEqual(PROJECT_B)
-    expect(localStorage.getItem('mmo-active-project')).toBe('proj-b')
+    expect(localStorage.getItem('mmo-active-project')).toBe('PRJB')
+  })
+
+  test('Should never store or trust a value that is not a project slug', async () => {
+    localStorage.setItem('mmo-active-project', '<script>')
+    fetchMock.mockResponse(JSON.stringify([PROJECT_A, PROJECT_B]))
+
+    const { result } = renderHook(() => useProjects())
+    await waitFor(() => expect(result.current.loading).toBe(false))
+    expect(result.current.activeProject).toEqual(PROJECT_A)
+
+    act(() => {
+      result.current.selectProject('not a slug')
+    })
+
+    expect(localStorage.getItem('mmo-active-project')).toBe('<script>')
   })
 
   test('Should restore active project from localStorage on mount', async () => {
-    localStorage.setItem('mmo-active-project', 'proj-b')
+    localStorage.setItem('mmo-active-project', 'PRJB')
     fetchMock.mockResponse(JSON.stringify([PROJECT_A, PROJECT_B]))
 
     const { result } = renderHook(() => useProjects())

@@ -34,9 +34,15 @@ const REFRESH = /^Refresh\s?audit log$/
 
 const typeDate = async (legend, { day, month, year }) => {
   const group = within(screen.getByRole('group', { name: legend }))
-  if (day) await userEvent.type(group.getByLabelText('Day'), day)
-  if (month) await userEvent.type(group.getByLabelText('Month'), month)
-  if (year) await userEvent.type(group.getByLabelText('Year'), year)
+  if (day) {
+    await userEvent.type(group.getByLabelText('Day'), day)
+  }
+  if (month) {
+    await userEvent.type(group.getByLabelText('Month'), month)
+  }
+  if (year) {
+    await userEvent.type(group.getByLabelText('Year'), year)
+  }
 }
 
 const apply = () =>

@@ -1,7 +1,7 @@
 import { useMemo } from 'react'
 import { Chart } from './Chart'
 import { getAppPalette } from '../../lib/palette'
-import { decal, escapeHtml, legend, tooltip } from '../../lib/chart-style'
+import { bottomLegend, decal, escapeHtml, tooltip } from '../../lib/chart-style'
 
 /**
  * Pie of each model's share of requests. Colour is paired with a hatch pattern
@@ -17,12 +17,8 @@ export function ModelSharePie({ shares, height = 280 }) {
         formatter: ({ name, value, data }) =>
           `${escapeHtml(data?.model ?? name)}: ${value} requests (${data.share}%)`
       }),
-      legend: legend(p, {
+      legend: bottomLegend(p, {
         type: 'scroll',
-        top: undefined,
-        right: undefined,
-        bottom: 0,
-        left: 'center',
         formatter: (id) => {
           const entry = shares.find((s) => s.id === id)
           return entry ? `${entry.model} ${entry.share}%` : id

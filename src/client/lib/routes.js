@@ -72,7 +72,9 @@ function projectPath(nav) {
     case 'ticket':
       return `ticket/${enc(nav.ticket)}`
     default:
-      if (LIST_PATHS[nav.level]) return LIST_PATHS[nav.level]
+      if (LIST_PATHS[nav.level]) {
+        return LIST_PATHS[nav.level]
+      }
       return nav.section ? `overview/${nav.section}` : 'overview'
   }
 }
@@ -86,7 +88,9 @@ function globalHash(nav) {
 function parseGlobal(path) {
   for (const level of Object.keys(GLOBAL_PATHS)) {
     const base = GLOBAL_PATHS[level]
-    if (path === base) return { level }
+    if (path === base) {
+      return { level }
+    }
     const sub = SUB_PATHS[level]
     if (sub && path.startsWith(`${base}/`)) {
       const value = path.slice(base.length + 1)
@@ -97,55 +101,99 @@ function parseGlobal(path) {
 }
 
 export function toHash(nav) {
-  if (isGlobalLevel(nav.level)) return globalHash(nav)
+  if (isGlobalLevel(nav.level)) {
+    return globalHash(nav)
+  }
   const prefix = nav.project ? `#/projects/${enc(nav.project)}` : '#'
   return `${prefix}/${projectPath(nav)}`
 }
 
+// Repository sub-pages: `repo/<name>[/<kind>[/<value>]]`.
+const REPOSITORY_KINDS = {
+  'cycle-time': (repository, value) =>
+    value === undefined ? { level: 'repoCycle', repository } : null,
+  pull: (repository, value) =>
+    /^[1-9]\d*$/.test(value ?? '')
+      ? { level: 'pr', repository, prNumber: Number(value) }
+      : null,
+  contributor: (repository, value) =>
+    value ? { level: 'contributor', contributor: value, repository } : null
+}
+
+// Own keys only: a hash segment such as `constructor` must not match Object.prototype.
+const handlerFor = (table, key) =>
+  Object.hasOwn(table, key) ? table[key] : null
+
 function parseRepository([repository, kind, value, ...rest]) {
-  if (!repository || rest.length > 0) return null
-  if (kind === undefined) return { level: 'repo', repository }
-  if (kind === 'cycle-time' && value === undefined) {
-    return { level: 'repoCycle', repository }
+  if (!repository || rest.length > 0) {
+    return null
   }
-  if (kind === 'pull' && /^[1-9]\d*$/.test(value ?? '')) {
-    return { level: 'pr', repository, prNumber: Number(value) }
+  if (kind === undefined) {
+    return { level: 'repo', repository }
   }
-  if (kind === 'contributor' && value) {
-    return { level: 'contributor', contributor: value, repository }
+  return handlerFor(REPOSITORY_KINDS, kind)?.(repository, value) ?? null
+}
+
+function parseOverview(rest) {
+  if (rest.length === 0) {
+    return { level: 'overview' }
   }
-  return null
+  return rest.length === 1 && OVERVIEW_SECTIONS.has(rest[0])
+    ? { level: 'overview', section: rest[0] }
+    : null
+}
+
+const single = (rest, valid) => rest.length === 1 && valid(rest[0])
+
+const PROJECT_HEADS = {
+  overview: parseOverview,
+  repository: parseRepository,
+  contributor: (rest) =>
+    single(rest, Boolean)
+      ? { level: 'contributor', contributor: rest[0] }
+      : null,
+  ticket: (rest) =>
+    single(rest, (key) => TICKET_KEY.test(key))
+      ? { level: 'ticket', ticket: rest[0] }
+      : null
 }
 
 function parseProjectPath(segments) {
-  const [head, ...rest] = segments
-  if (head === undefined || head === 'overview') {
-    if (rest.length === 0) return { level: 'overview' }
-    if (rest.length === 1 && OVERVIEW_SECTIONS.has(rest[0])) {
-      return { level: 'overview', section: rest[0] }
-    }
-    return null
-  }
-  if (head === 'repository') return parseRepository(rest)
-  if (head === 'contributor' && rest.length === 1 && rest[0]) {
-    return { level: 'contributor', contributor: rest[0] }
-  }
-  if (head === 'ticket' && rest.length === 1 && TICKET_KEY.test(rest[0])) {
-    return { level: 'ticket', ticket: rest[0] }
+  const [head = 'overview', ...rest] = segments
+  const parse = handlerFor(PROJECT_HEADS, head)
+  if (parse) {
+    return parse(rest)
   }
   const list = Object.keys(LIST_PATHS).find((l) => LIST_PATHS[l] === head)
   return list && rest.length === 0 ? { level: list } : null
+}
+
+// Without a regex: `/\/+$/` backtracks super-linearly on long input.
+function trimSlashes(value) {
+  let start = 0
+  let end = value.length
+  while (start < end && value[start] === '/') {
+    start += 1
+  }
+  while (end > start && value[end - 1] === '/') {
+    end -= 1
+  }
+  return value.slice(start, end)
 }
 
 /** Parses a location hash; anything unrecognised is the project overview. */
 export function fromHash(hash = '') {
   let raw = String(hash).replace(/^#/, '')
   // Some browsers hand back the whole hash percent-encoded (`#%2Foverview`).
-  if (/^%2F/i.test(raw)) raw = safeDecode(raw)
-  const path = raw.replace(/^\/+/, '').replace(/\/+$/, '')
+  if (/^%2F/i.test(raw)) {
+    raw = safeDecode(raw)
+  }
+  const path = trimSlashes(raw)
 
   const global = parseGlobal(path)
-  if (global) return global
+  if (global) {
+    return global
+  }
 
   let segments = path === '' ? [] : path.split('/').map(safeDecode)
   let project

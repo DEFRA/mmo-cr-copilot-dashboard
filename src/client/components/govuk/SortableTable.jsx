@@ -6,7 +6,9 @@ import { cellSortValue } from './utils.js'
 const collator = new Intl.Collator('en', { numeric: true, sensitivity: 'base' })
 
 function compareValues(a, b) {
-  if (typeof a === 'number' && typeof b === 'number') return a - b
+  if (typeof a === 'number' && typeof b === 'number') {
+    return a - b
+  }
   return collator.compare(String(a ?? ''), String(b ?? ''))
 }
 
@@ -46,7 +48,9 @@ export function SortableTable({ caption, head, rows, initialSort, ...rest }) {
 
   const sortedRows = useMemo(() => {
     const index = head.findIndex((column) => column.id === sort?.id)
-    if (index < 0) return rows
+    if (index < 0) {
+      return rows
+    }
 
     const sign = sort.direction === 'descending' ? -1 : 1
     return [...rows].sort(
@@ -69,7 +73,9 @@ export function SortableTable({ caption, head, rows, initialSort, ...rest }) {
   }
 
   const sortableHead = head.map((column) => {
-    if (column.sortable === false) return column
+    if (column.sortable === false) {
+      return column
+    }
 
     const ariaSort = sort?.id === column.id ? sort.direction : 'none'
     return {
@@ -99,14 +105,9 @@ export function SortableTable({ caption, head, rows, initialSort, ...rest }) {
         head={sortableHead}
         rows={sortedRows}
       />
-      <div
-        role="status"
-        aria-live="polite"
-        aria-atomic="true"
-        className="govuk-visually-hidden"
-      >
+      <output aria-atomic="true" className="govuk-visually-hidden">
         {announcement}
-      </div>
+      </output>
     </>
   )
 }

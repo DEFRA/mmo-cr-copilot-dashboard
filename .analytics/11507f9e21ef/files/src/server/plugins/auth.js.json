@@ -1,0 +1,28 @@
+{
+  "schema": "ai-attribution-file/2",
+  "path": "src/server/plugins/auth.js",
+  "added": 15,
+  "counts": {
+    "aiCompletion": 0,
+    "aiChat": 0,
+    "aiAgent": 8,
+    "aiModified": 0,
+    "pasted": 0,
+    "typed": 0,
+    "untracked": 7
+  },
+  "ranges": {
+    "ai-agent": "49-50,55,73,122-124,127",
+    "untracked": "48,53-54,71-72,125-126"
+  },
+  "ai": [
+    [49, "a", "5f5592e1", 0],
+    [50, "a", "9845a6a3", 0],
+    [55, "a", "9845a6a3", 0],
+    [73, "a", "9845a6a3", 0],
+    [122, "a", "56519acc", 0],
+    [123, "a", "6769db13", 0],
+    [124, "a", "9845a6a3", 0],
+    [127, "a", "9845a6a3", 0]
+  ]
+}

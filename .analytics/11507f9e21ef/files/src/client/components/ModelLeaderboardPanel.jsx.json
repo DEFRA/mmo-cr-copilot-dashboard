@@ -1,0 +1,23 @@
+{
+  "schema": "ai-attribution-file/2",
+  "path": "src/client/components/ModelLeaderboardPanel.jsx",
+  "added": 4,
+  "counts": {
+    "aiCompletion": 0,
+    "aiChat": 0,
+    "aiAgent": 4,
+    "aiModified": 0,
+    "pasted": 0,
+    "typed": 0,
+    "untracked": 0
+  },
+  "ranges": {
+    "ai-agent": "92-93,96,106"
+  },
+  "ai": [
+    [92, "a", "4d493eb1", 0],
+    [93, "a", "5952a65f", 0],
+    [96, "a", "7c58cb8b", 0],
+    [106, "a", "cbb6e01b", 0]
+  ]
+}

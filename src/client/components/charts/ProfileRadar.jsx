@@ -31,8 +31,11 @@ export function ProfileRadar({
   const toggle = (key) =>
     setHidden((prev) => {
       const next = new Set(prev)
-      if (next.has(key)) next.delete(key)
-      else next.add(key)
+      if (next.has(key)) {
+        next.delete(key)
+      } else {
+        next.add(key)
+      }
       return next
     })
 
@@ -95,7 +98,9 @@ export function ProfileRadar({
         ? {
             click: (params) => {
               const match = series.find((s) => s.name === params.name)
-              if (match) onSelect(match.key ?? match.name)
+              if (match) {
+                onSelect(match.key ?? match.name)
+              }
             }
           }
         : undefined,

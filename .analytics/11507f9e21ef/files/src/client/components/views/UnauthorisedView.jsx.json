@@ -1,0 +1,38 @@
+{
+  "schema": "ai-attribution-file/2",
+  "path": "src/client/components/views/UnauthorisedView.jsx",
+  "added": 19,
+  "counts": {
+    "aiCompletion": 0,
+    "aiChat": 0,
+    "aiAgent": 19,
+    "aiModified": 0,
+    "pasted": 0,
+    "typed": 0,
+    "untracked": 0
+  },
+  "ranges": {
+    "ai-agent": "9-17,28-35,59,144"
+  },
+  "ai": [
+    [9, "a", "7bb1b282", 0],
+    [10, "a", "a512af9c", 0],
+    [11, "a", "cdd837db", 0],
+    [12, "a", "951ed7c9", 0],
+    [13, "a", "9da771f7", 0],
+    [14, "a", "2a7d417c", 0],
+    [15, "a", "86f2ee50", 0],
+    [16, "a", "2a1e1832", 0],
+    [17, "a", "9845a6a3", 0],
+    [28, "a", "7d155712", 0],
+    [29, "a", "e17a5325", 0],
+    [30, "a", "4fa72749", 0],
+    [31, "a", "1d6dbe76", 0],
+    [32, "a", "34d21e5d", 0],
+    [33, "a", "072b89de", 0],
+    [34, "a", "eea53689", 0],
+    [35, "a", "9c035439", 0],
+    [59, "a", "428d1d1e", 0],
+    [144, "a", "2287739c", 0]
+  ]
+}

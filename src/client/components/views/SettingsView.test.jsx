@@ -86,7 +86,9 @@ describe('#SettingsView', () => {
     if (handle) {
       await userEvent.type(screen.getByLabelText('GitHub handle'), handle)
     }
-    if (persona) await userEvent.click(screen.getByLabelText(persona))
+    if (persona) {
+      await userEvent.click(screen.getByLabelText(persona))
+    }
     await userEvent.click(screen.getByRole('button', { name: 'Save mapping' }))
   }
 

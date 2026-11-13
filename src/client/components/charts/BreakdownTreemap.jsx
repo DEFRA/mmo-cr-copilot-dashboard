@@ -3,6 +3,9 @@ import { Chart } from './Chart'
 import { getAppPalette } from '../../lib/palette'
 import { escapeHtml, textStyle, tooltip } from '../../lib/chart-style'
 
+const HIGH_RATE = 65
+const MID_RATE = 30
+
 /**
  * Treemap of hierarchical composition — repo → PR → lines touched. Area encodes
  * volume; a three-step assist scale encodes Copilot assist rate, which is also
@@ -14,8 +17,12 @@ export function BreakdownTreemap({ nodes, title, height = 360, onSelect }) {
     const p = getAppPalette()
     const assist = p.family.assist
     const styleForRate = (r) => {
-      if (r >= 65) return { fill: assist.ink, ink: p.white }
-      if (r >= 30) return { fill: assist.band, ink: p.text }
+      if (r >= HIGH_RATE) {
+        return { fill: assist.ink, ink: p.white }
+      }
+      if (r >= MID_RATE) {
+        return { fill: assist.band, ink: p.text }
+      }
       return { fill: assist.tint, ink: p.text }
     }
 

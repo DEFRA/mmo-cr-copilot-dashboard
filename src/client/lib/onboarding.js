@@ -45,7 +45,9 @@ export function parseDate({ day, month, year }) {
 
 /** Day, month and year strings for a date input, from an ISO date. */
 export function toDateParts(iso) {
-  if (!iso) return { day: '', month: '', year: '' }
+  if (!iso) {
+    return { day: '', month: '', year: '' }
+  }
   const date = new Date(iso)
   return {
     day: String(date.getUTCDate()),
@@ -61,8 +63,12 @@ export function adoptionDateError(adoption, required, now = new Date()) {
     return required ? 'Enter the date the team adopted Copilot' : null
   }
   const date = parseDate(adoption)
-  if (!date) return 'Adoption start date must be a real date'
-  if (date > now) return 'Adoption start date must be today or in the past'
+  if (!date) {
+    return 'Adoption start date must be a real date'
+  }
+  if (date > now) {
+    return 'Adoption start date must be today or in the past'
+  }
   return null
 }
 
@@ -86,41 +92,65 @@ export function jiraKeyError(jiraKey, required = false) {
   if (/[,\s]/.test(jiraKey)) {
     return 'Enter one Jira project key, with no commas or spaces, like MMOCR'
   }
-  if (!jiraKey && required) return 'Enter a Jira project key'
+  if (!jiraKey && required) {
+    return 'Enter a Jira project key'
+  }
   if (jiraKey && !JIRA_KEY_PATTERN.test(jiraKey)) {
     return 'Jira project key must start with a letter and only contain letters, numbers or underscores'
   }
   return null
 }
 
+const MAX_PROJECT_NAME_LENGTH = 80
+
+function projectNameError(name) {
+  if (!name) {
+    return 'Enter a project name'
+  }
+  return name.length > MAX_PROJECT_NAME_LENGTH
+    ? `Project name must be ${MAX_PROJECT_NAME_LENGTH} characters or fewer`
+    : null
+}
+
+function slugError(slug) {
+  if (!slug) {
+    return 'Enter a project slug'
+  }
+  if (!/^[A-Z]+$/.test(slug)) {
+    return 'Slug must only contain letters, no numbers'
+  }
+  return SLUG_PATTERN.test(slug) ? null : 'Slug must be 3 to 4 letters'
+}
+
 /** Field errors for the project details step, keyed by field. */
 export function validateProject(form, now = new Date()) {
   const errors = {}
-  const name = form.name.trim()
-  if (!name) errors.name = 'Enter a project name'
-  else if (name.length > 80) {
-    errors.name = 'Project name must be 80 characters or fewer'
+  const nameProblem = projectNameError(form.name.trim())
+  if (nameProblem) {
+    errors.name = nameProblem
+  }
+  const slugProblem = slugError(form.slug.toUpperCase())
+  if (slugProblem) {
+    errors.slug = slugProblem
   }
 
-  const slug = form.slug.toUpperCase()
-  if (!slug) errors.slug = 'Enter a project slug'
-  else if (!/^[A-Z]+$/.test(slug)) {
-    errors.slug = 'Slug must only contain letters, no numbers'
-  } else if (!SLUG_PATTERN.test(slug)) {
-    errors.slug = 'Slug must be 3 to 4 letters'
+  if (!form.type) {
+    errors.type = 'Select the project type'
   }
-
-  if (!form.type) errors.type = 'Select the project type'
 
   const adoptionError = adoptionDateError(
     form.adoption,
     form.type === 'ai-adopted',
     now
   )
-  if (adoptionError) errors.adoption = adoptionError
+  if (adoptionError) {
+    errors.adoption = adoptionError
+  }
 
   const jiraError = jiraKeyError(jiraKeyOf(form), jiraKeyRequired(form.type))
-  if (jiraError) errors.jiraKey = jiraError
+  if (jiraError) {
+    errors.jiraKey = jiraError
+  }
   return errors
 }
 
@@ -151,7 +181,9 @@ export function addRepository(list, value, mapped = []) {
 
 /** `{ list }` says what is wrong with the added repositories; `{}` is valid. */
 export function validateRepositories(names, mapped = []) {
-  if (names.length === 0) return { list: 'Add at least one repository' }
+  if (names.length === 0) {
+    return { list: 'Add at least one repository' }
+  }
   const taken = names.find((name) => mapped.some((m) => sameName(m, name)))
   return taken ? { list: `${taken} is already mapped to a project` } : {}
 }

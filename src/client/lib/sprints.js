@@ -12,8 +12,8 @@ const SPRINT_LENGTH_DAYS = 14
 const DAY_MS = 24 * 60 * 60 * 1000
 const SPRINT_LENGTH_MS = SPRINT_LENGTH_DAYS * DAY_MS
 
-/** Known sprint start (local midnight). Month is 0-indexed → 6 = July. */
-const SPRINT_ANCHOR = new Date(2026, 6, 8, 0, 0, 0, 0)
+/** Known sprint start (local midnight, no zone suffix). */
+const SPRINT_ANCHOR = new Date('2026-07-08T00:00:00')
 
 function toTime(d) {
   return d instanceof Date ? d.getTime() : new Date(d).getTime()
@@ -112,7 +112,9 @@ export function toTimeInput(date) {
 export function parseDateTime(date, time) {
   const d = /^(\d{1,2})\/(\d{1,2})\/(\d{4})$/.exec(String(date).trim())
   const t = /^(\d{2}):(\d{2})$/.exec(String(time ?? ''))
-  if (!d || !t) return null
+  if (!d || !t) {
+    return null
+  }
   const [day, month, year] = [Number(d[1]), Number(d[2]) - 1, Number(d[3])]
   const parsed = new Date(year, month, day, Number(t[1]), Number(t[2]))
   return parsed.getDate() === day && parsed.getMonth() === month ? parsed : null
@@ -128,23 +130,34 @@ export const DEFAULT_SPRINT_CALENDAR = {
 
 export const MAX_SPRINT_LENGTH_DAYS = 30
 
-/** Field errors for the sprint period form (`length`, `start`); empty when valid. */
-export function sprintPeriodErrors({ length, start }) {
-  const errors = {}
+function sprintLengthError(length) {
   const days = String(length ?? '').trim()
   if (!days) {
-    errors.length = 'Enter the sprint length in days'
-  } else if (
-    !/^\d+$/.test(days) ||
-    Number(days) < 1 ||
-    Number(days) > MAX_SPRINT_LENGTH_DAYS
-  ) {
-    errors.length = `Sprint length must be a whole number of days from 1 to ${MAX_SPRINT_LENGTH_DAYS}`
+    return 'Enter the sprint length in days'
   }
+  const valid =
+    /^\d+$/.test(days) &&
+    Number(days) >= 1 &&
+    Number(days) <= MAX_SPRINT_LENGTH_DAYS
+  return valid
+    ? null
+    : `Sprint length must be a whole number of days from 1 to ${MAX_SPRINT_LENGTH_DAYS}`
+}
+
+function sprintStartError(start) {
   if (!start.day && !start.month && !start.year) {
-    errors.start = 'Enter the date a sprint started'
-  } else if (!parseDate(start)) {
-    errors.start = 'The sprint start date must be a real date'
+    return 'Enter the date a sprint started'
   }
-  return errors
+  return parseDate(start) ? null : 'The sprint start date must be a real date'
+}
+
+/** Field errors for the sprint period form (`length`, `start`); empty when valid. */
+export function sprintPeriodErrors({ length, start }) {
+  const errors = {
+    length: sprintLengthError(length),
+    start: sprintStartError(start)
+  }
+  return Object.fromEntries(
+    Object.entries(errors).filter(([, message]) => message)
+  )
 }

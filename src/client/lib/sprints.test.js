@@ -30,7 +30,10 @@ describe('#sprintPeriodErrors', () => {
 
   test('Should ask for both fields when they are empty', () => {
     expect(
-      sprintPeriodErrors({ length: '', start: { day: '', month: '', year: '' } })
+      sprintPeriodErrors({
+        length: '',
+        start: { day: '', month: '', year: '' }
+      })
     ).toEqual({
       length: 'Enter the sprint length in days',
       start: 'Enter the date a sprint started'

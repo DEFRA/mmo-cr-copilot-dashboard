@@ -36,7 +36,9 @@ export function StackedBar({
       accent: p.family.leverage.band
     }
     const decalFor = (s, i) => {
-      if (s.colorToken === 'copilot') return undefined
+      if (s.colorToken === 'copilot') {
+        return undefined
+      }
       return decal(p, s.colorToken === 'manual' ? 1 : i)
     }
     const catAxis = categoryAxis(p, categories)

@@ -29,24 +29,29 @@ import { readRuntimeConfig } from '../lib/runtime-config'
 
 const MIN_BACKOFF_MS = 1_000
 const MAX_BACKOFF_MS = 30_000
+const JITTER_RATIO = 0.3
 
 function jitter(ms) {
-  return ms + Math.random() * ms * 0.3
+  return ms + Math.random() * ms * JITTER_RATIO
 }
+
+const isObject = (value) => value !== null && typeof value === 'object'
+const hasIdentity = (data) =>
+  typeof data.prNumber === 'number' &&
+  data.prNumber > 0 &&
+  typeof data.repository === 'string' &&
+  data.repository.length > 0
+const hasSummary = (summary) =>
+  isObject(summary) &&
+  typeof summary.copilotAssistedRate === 'number' &&
+  typeof summary.totalCommits === 'number'
 
 // ── Shape validation ─────────────────────────────────────────────────────────
 export function isValidPayload(data) {
   return (
-    data !== null &&
-    typeof data === 'object' &&
-    typeof data.prNumber === 'number' &&
-    data.prNumber > 0 &&
-    typeof data.repository === 'string' &&
-    data.repository.length > 0 &&
-    data.summary !== null &&
-    typeof data.summary === 'object' &&
-    typeof data.summary.copilotAssistedRate === 'number' &&
-    typeof data.summary.totalCommits === 'number' &&
+    isObject(data) &&
+    hasIdentity(data) &&
+    hasSummary(data.summary) &&
     Array.isArray(data.commitBreakdown) &&
     Array.isArray(data.contributorBreakdown)
   )
@@ -75,6 +80,36 @@ export function collectPayloads(body) {
   return [...latest.values()]
 }
 
+// Replaces one PR's payload in the list, keeping every other PR.
+const withPayload = (current, payload) => [
+  ...current.filter(
+    (p) =>
+      p.repository !== payload.repository || p.prNumber !== payload.prNumber
+  ),
+  payload
+]
+
+// One poll of the project feed; throws on any failure, including a malformed body.
+async function fetchPayloads(projectSlug, signal, background) {
+  const path = `/api/projects/${encodeURIComponent(projectSlug)}/payloads`
+  const response = await apiFetch(path, {
+    signal,
+    headers: {
+      Accept: 'application/json',
+      // Timer polls must not keep an idle session alive
+      ...(background ? { 'x-background-poll': '1' } : {})
+    }
+  })
+  if (!response.ok) {
+    throw new Error(`Request failed (${response.status})`)
+  }
+  const collected = collectPayloads(await response.json())
+  if (collected === null) {
+    throw new Error('Malformed response')
+  }
+  return collected
+}
+
 export function useLiveFeed({ projectSlug, pollIntervalMs } = {}) {
   const interval = pollIntervalMs ?? readRuntimeConfig().pollIntervalMs
   const [payloads, setPayloads] = useState([])
@@ -100,25 +135,11 @@ export function useLiveFeed({ projectSlug, pollIntervalMs } = {}) {
       let delay = interval
 
       try {
-        const path = `/api/projects/${encodeURIComponent(projectSlug)}/payloads`
-        const response = await apiFetch(path, {
-          signal: controller.signal,
-          headers: {
-            Accept: 'application/json',
-            // Timer polls must not keep an idle session alive
-            ...(background ? { 'x-background-poll': '1' } : {})
-          }
-        })
-
-        if (!response.ok) {
-          throw new Error(`Request failed (${response.status})`)
-        }
-
-        const collected = collectPayloads(await response.json())
-        if (collected === null) {
-          throw new Error('Malformed response')
-        }
-
+        const collected = await fetchPayloads(
+          projectSlug,
+          controller.signal,
+          background
+        )
         if (!mountedRef.current) {
           return
         }
@@ -128,7 +149,8 @@ export function useLiveFeed({ projectSlug, pollIntervalMs } = {}) {
         setPayloads(collected)
         setLastMessageAt(new Date())
         setStatus('open')
-      } catch (error) {
+      } catch {
+        // Any failure backs off; an abort on unmount just stops.
         if (controller.signal.aborted || !mountedRef.current) {
           return
         }
@@ -139,7 +161,9 @@ export function useLiveFeed({ projectSlug, pollIntervalMs } = {}) {
       }
 
       if (mountedRef.current) {
-        timerRef.current = setTimeout(() => poll(true), delay)
+        timerRef.current = setTimeout(() => {
+          void poll(true)
+        }, delay)
       }
     },
     [interval, projectSlug]
@@ -152,7 +176,9 @@ export function useLiveFeed({ projectSlug, pollIntervalMs } = {}) {
     backoffRef.current = MIN_BACKOFF_MS
     mountedRef.current = true
     // No project yet (still loading, or no access): there is nothing to poll.
-    if (projectSlug) poll()
+    if (projectSlug) {
+      void poll()
+    }
 
     return () => {
       mountedRef.current = false
@@ -162,17 +188,9 @@ export function useLiveFeed({ projectSlug, pollIntervalMs } = {}) {
   }, [poll, projectSlug])
 
   const applyPayload = useCallback((payload) => {
-    if (!isValidPayload(payload)) {
-      return
+    if (isValidPayload(payload)) {
+      setPayloads((current) => withPayload(current, payload))
     }
-
-    setPayloads((current) => [
-      ...current.filter(
-        (p) =>
-          p.repository !== payload.repository || p.prNumber !== payload.prNumber
-      ),
-      payload
-    ])
   }, [])
 
   return { payloads, status, lastMessageAt, applyPayload }

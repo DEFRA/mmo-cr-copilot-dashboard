@@ -9,6 +9,14 @@ import { METRICS_DOC, PERIOD_CHIP, ScopeHeader } from './scope.jsx'
 
 const NOT_ENOUGH = 'Not enough comparable pull requests'
 
+function leverageSummary(score, comparableCount) {
+  if (comparableCount === 0) {
+    return `${NOT_ENOUGH} yet.`
+  }
+  const bands = comparableCount === 1 ? 'band' : 'bands'
+  return `Copilot Leverage: ${score}× faster across ${comparableCount} comparable ${bands}.`
+}
+
 /** How Copilot Leverage v2 is calculated, with this project's band data (ADR 0004). */
 export function LeverageView({ leverage }) {
   const headingId = useId()
@@ -32,29 +40,27 @@ export function LeverageView({ leverage }) {
         title="How Copilot Leverage is calculated"
         meta="Like-for-like comparison by pull request complexity"
       />
-      <>
-        <p className="govuk-body">
-          Every pull request gets a complexity score from 1 to 100, from the
-          lines it changes, the files it touches and the modules it spans.
-          Generated files, lockfiles and tests are left out. Scores fall into
-          five bands, XS to XL.
-        </p>
-        <p className="govuk-body">
-          Pull requests merged before the project adopted Copilot form the
-          baseline. Within each band, the median coding cycle time of baseline
-          pull requests is compared with that of pull requests in the selected
-          period. Comparing within a band stops a run of small pull requests
-          from looking like a productivity gain.
-        </p>
-        <p className="govuk-body">
-          A band is compared only when it has at least 5 pull requests on each
-          side. Leverage is the average speed-up across the bands that qualify.{' '}
-          <a className="govuk-link" href={`${METRICS_DOC}#metric-leverage-v2`}>
-            Metric definition
-            <span className="govuk-visually-hidden">: Copilot Leverage v2</span>
-          </a>
-        </p>
-      </>
+      <p className="govuk-body">
+        Every pull request gets a complexity score from 1 to 100, from the lines
+        it changes, the files it touches and the modules it spans. Generated
+        files, lockfiles and tests are left out. Scores fall into five bands, XS
+        to XL.
+      </p>
+      <p className="govuk-body">
+        Pull requests merged before the project adopted Copilot form the
+        baseline. Within each band, the median coding cycle time of baseline
+        pull requests is compared with that of pull requests in the selected
+        period. Comparing within a band stops a run of small pull requests from
+        looking like a productivity gain.
+      </p>
+      <p className="govuk-body">
+        A band is compared only when it has at least 5 pull requests on each
+        side. Leverage is the average speed-up across the bands that qualify.{' '}
+        <a className="govuk-link" href={`${METRICS_DOC}#metric-leverage-v2`}>
+          {'Metric definition'}
+          <span className="govuk-visually-hidden">: Copilot Leverage v2</span>
+        </a>
+      </p>
 
       {status === 'error' && (
         <PanelState
@@ -69,9 +75,7 @@ export function LeverageView({ leverage }) {
       {status === 'success' && (
         <>
           <InsetText>
-            {comparable.length > 0
-              ? `Copilot Leverage: ${data.overallLeverageScore}× faster across ${comparable.length} comparable ${comparable.length === 1 ? 'band' : 'bands'}.`
-              : `${NOT_ENOUGH} yet.`}{' '}
+            {leverageSummary(data.overallLeverageScore, comparable.length)}{' '}
             {adoptionDate &&
               `Baseline: pull requests merged before ${adoptionDate}.`}
           </InsetText>

@@ -110,7 +110,9 @@ describe('#useDeliveryMetrics', () => {
     test('Should keep the last data and stop when a repeat request fails', async () => {
       let fail = false
       fetchMock.mockResponse(async (req) => {
-        if (fail) return { status: 503, body: '' }
+        if (fail) {
+          return { status: 503, body: '' }
+        }
         return req.url.includes('/delivery-metrics')
           ? JSON.stringify({ storiesDelivered: 1, jira: { pending: true } })
           : JSON.stringify({ issues: [] })

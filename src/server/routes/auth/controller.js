@@ -2,6 +2,7 @@ import { createHash, randomBytes } from 'node:crypto'
 import Boom from '@hapi/boom'
 
 import { config } from '#/config/config.js'
+import { statusCodes } from '#/server/common/constants/status-codes.js'
 import { backendRequest } from '#/server/common/helpers/backend-client.js'
 import {
   devAccessToken,
@@ -23,6 +24,8 @@ import {
 import { PUBLIC_ROUTE } from '#/server/plugins/auth.js'
 
 const OIDC_SESSION_KEY = 'oidc'
+const SIGN_IN_FAILED = 'Sign-in failed'
+const NOT_VERIFIED = 'Sign-in could not be verified'
 const GROUP_OVERAGE_MESSAGE =
   'Your account belongs to too many groups for this service to read. Contact the service team.'
 
@@ -32,8 +35,12 @@ const devBypass = () => config.get('auth.devBypass')
 
 /** A same-site path to return to after sign-in; anything else goes home. */
 export function safeReturnTo(value) {
-  if (typeof value !== 'string' || !value.startsWith('/')) return '/'
-  if (value.startsWith('//') || value.startsWith('/\\')) return '/'
+  if (typeof value !== 'string' || !value.startsWith('/')) {
+    return '/'
+  }
+  if (value.startsWith('//') || value.startsWith('/\\')) {
+    return '/'
+  }
   return value
 }
 
@@ -84,7 +91,9 @@ async function signInDevPersona(request, role) {
       request,
       accessToken
     )
-    if (statusCode === 200 && payload?.user) user = payload.user
+    if (statusCode === statusCodes.ok && payload?.user) {
+      user = payload.user
+    }
   } catch (err) {
     request.logger?.warn({ err }, 'Dev sign-in could not reach the backend')
   }
@@ -111,8 +120,107 @@ function tokenExchangeFailure(request, err) {
   return signInFailure(
     request,
     'token-exchange',
-    Boom.unauthorized('Sign-in failed')
+    Boom.unauthorized(SIGN_IN_FAILED)
   )
+}
+
+function authorizeUrl(settings, { state, nonce, codeChallenge }) {
+  const url = new URL(
+    `https://login.microsoftonline.com/${settings.tenantId}/oauth2/v2.0/authorize`
+  )
+  const params = {
+    client_id: settings.clientId,
+    response_type: 'code',
+    redirect_uri: settings.redirectUri,
+    response_mode: 'query',
+    scope: requestedScopes(settings),
+    state,
+    nonce,
+    code_challenge: codeChallenge,
+    code_challenge_method: 'S256'
+  }
+  Object.entries(params).forEach(([key, value]) =>
+    url.searchParams.set(key, value)
+  )
+  return url.toString()
+}
+
+// The callback must answer the sign-in this session started.
+function assertCallback(request, pending) {
+  const { query } = request
+  if (query?.error) {
+    throw signInFailure(
+      request,
+      'provider-error',
+      Boom.unauthorized('Sign-in was not completed')
+    )
+  }
+  if (!pending || !query?.state || query.state !== pending.state) {
+    throw signInFailure(request, 'state', Boom.badRequest(NOT_VERIFIED))
+  }
+  if (!query?.code) {
+    throw signInFailure(request, 'code', Boom.badRequest(NOT_VERIFIED))
+  }
+}
+
+async function exchangeTokens(request, settings, pending) {
+  try {
+    return await exchangeCode(settings, {
+      code: request.query.code,
+      codeVerifier: pending.codeVerifier
+    })
+  } catch (err) {
+    throw tokenExchangeFailure(request, err)
+  }
+}
+
+async function assertIdToken(request, tokens, settings, pending) {
+  let claims
+  try {
+    claims = await verifyIdToken(tokens.idToken, settings)
+  } catch (err) {
+    request.logger?.error({ err }, 'ID token verification failed')
+    throw signInFailure(request, 'id-token', Boom.unauthorized(SIGN_IN_FAILED))
+  }
+  if (claims.nonce !== pending.nonce) {
+    throw signInFailure(request, 'nonce', Boom.unauthorized(SIGN_IN_FAILED))
+  }
+  if (hasGroupOverage(claims)) {
+    throw signInFailure(
+      request,
+      'group-overage',
+      Boom.forbidden(GROUP_OVERAGE_MESSAGE)
+    )
+  }
+  if (!tokens.accessToken || !tokens.refreshToken) {
+    throw signInFailure(
+      request,
+      'no-access-token',
+      Boom.unauthorized(SIGN_IN_FAILED)
+    )
+  }
+}
+
+async function authorisedUser(request, accessToken) {
+  const { statusCode, payload } = await authorizeWithBackend(
+    request,
+    accessToken
+  )
+  if (statusCode === statusCodes.forbidden) {
+    throw signInFailure(
+      request,
+      'access-denied',
+      Boom.forbidden('No assigned roles in this application')
+    )
+  }
+  if (statusCode !== statusCodes.ok || !payload?.user) {
+    throw signInFailure(
+      request,
+      'backend-auth',
+      Boom.unauthorized('Sign-in failed at authorization service')
+    )
+  }
+  return payload.user
 }
 
 // Routes handling Entra ID authentication, sessions, and current user identity.
@@ -140,19 +248,9 @@ export const authRoutes = [
           returnTo: safeReturnTo(request.query?.returnTo)
         })
 
-        const authUrl = new URL(
-          `https://login.microsoftonline.com/${settings.tenantId}/oauth2/v2.0/authorize`
+        return h.redirect(
+          authorizeUrl(settings, { state, nonce, codeChallenge })
         )
-        authUrl.searchParams.set('client_id', settings.clientId)
-        authUrl.searchParams.set('response_type', 'code')
-        authUrl.searchParams.set('redirect_uri', settings.redirectUri)
-        authUrl.searchParams.set('response_mode', 'query')
-        authUrl.searchParams.set('scope', requestedScopes(settings))
-        authUrl.searchParams.set('state', state)
-        authUrl.searchParams.set('nonce', nonce)
-        authUrl.searchParams.set('code_challenge', codeChallenge)
-        authUrl.searchParams.set('code_challenge_method', 'S256')
-        return h.redirect(authUrl.toString())
       }
 
       if (!devBypass()) {
@@ -174,7 +272,9 @@ export const authRoutes = [
       )
 
       if (!isConfigured) {
-        if (!devBypass()) throw Boom.notFound()
+        if (!devBypass()) {
+          throw Boom.notFound()
+        }
         await signInDevPersona(request)
         return h.redirect('/')
       }
@@ -182,94 +282,11 @@ export const authRoutes = [
       const pending = request.yar.get(OIDC_SESSION_KEY)
       request.yar.clear(OIDC_SESSION_KEY)
 
-      if (request.query?.error) {
-        throw signInFailure(
-          request,
-          'provider-error',
-          Boom.unauthorized('Sign-in was not completed')
-        )
-      }
-      if (
-        !pending ||
-        !request.query?.state ||
-        request.query.state !== pending.state
-      ) {
-        throw signInFailure(
-          request,
-          'state',
-          Boom.badRequest('Sign-in could not be verified')
-        )
-      }
-      if (!request.query?.code) {
-        throw signInFailure(
-          request,
-          'code',
-          Boom.badRequest('Sign-in could not be verified')
-        )
-      }
+      assertCallback(request, pending)
+      const tokens = await exchangeTokens(request, settings, pending)
+      await assertIdToken(request, tokens, settings, pending)
+      const user = await authorisedUser(request, tokens.accessToken)
 
-      let tokens
-      try {
-        tokens = await exchangeCode(settings, {
-          code: request.query.code,
-          codeVerifier: pending.codeVerifier
-        })
-      } catch (err) {
-        throw tokenExchangeFailure(request, err)
-      }
-
-      let claims
-      try {
-        claims = await verifyIdToken(tokens.idToken, settings)
-      } catch (err) {
-        request.logger?.error({ err }, 'ID token verification failed')
-        throw signInFailure(
-          request,
-          'id-token',
-          Boom.unauthorized('Sign-in failed')
-        )
-      }
-
-      if (claims.nonce !== pending.nonce) {
-        throw signInFailure(
-          request,
-          'nonce',
-          Boom.unauthorized('Sign-in failed')
-        )
-      }
-      if (hasGroupOverage(claims)) {
-        throw signInFailure(
-          request,
-          'group-overage',
-          Boom.forbidden(GROUP_OVERAGE_MESSAGE)
-        )
-      }
-
-      if (!tokens.accessToken || !tokens.refreshToken) {
-        throw signInFailure(
-          request,
-          'no-access-token',
-          Boom.unauthorized('Sign-in failed')
-        )
-      }
-
-      const backendRes = await authorizeWithBackend(request, tokens.accessToken)
-      if (backendRes.statusCode === 403) {
-        throw signInFailure(
-          request,
-          'access-denied',
-          Boom.forbidden('No assigned roles in this application')
-        )
-      }
-      if (backendRes.statusCode !== 200 || !backendRes.payload?.user) {
-        throw signInFailure(
-          request,
-          'backend-auth',
-          Boom.unauthorized('Sign-in failed at authorization service')
-        )
-      }
-
-      const user = backendRes.payload.user
       saveSignIn(request, {
         user,
         tokens: {
@@ -301,7 +318,9 @@ export const authRoutes = [
     path: '/api/me',
     options: PUBLIC_ROUTE,
     handler(request, h) {
-      if (!request.user) return h.response({ authenticated: false })
+      if (!request.user) {
+        return h.response({ authenticated: false })
+      }
       const { oid, name, email, roles, projectRoles, allowedProjects } =
         request.user
       return h.response({

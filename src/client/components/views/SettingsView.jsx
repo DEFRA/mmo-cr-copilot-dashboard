@@ -64,7 +64,9 @@ export function SettingsView({
   useEffect(() => () => onUnsavedChange?.(false), [onUnsavedChange])
 
   const handleTabChange = (next) => {
-    if (next !== activeTab && !confirmDiscard(unsaved)) return
+    if (next !== activeTab && !confirmDiscard(unsaved)) {
+      return
+    }
     onTabChange?.(next)
   }
 

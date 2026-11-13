@@ -1,0 +1,36 @@
+{
+  "schema": "ai-attribution-file/2",
+  "path": "src/server/common/helpers/github-oidc.js",
+  "added": 17,
+  "counts": {
+    "aiCompletion": 0,
+    "aiChat": 0,
+    "aiAgent": 17,
+    "aiModified": 0,
+    "pasted": 0,
+    "typed": 0,
+    "untracked": 0
+  },
+  "ranges": {
+    "ai-agent": "5,35-36,55,57-69"
+  },
+  "ai": [
+    [5, "a", "2446fb6c", 0],
+    [35, "a", "c1d12076", 0],
+    [36, "a", "10d0129a", 0],
+    [55, "a", "9845a6a3", 0],
+    [57, "a", "0bb5101c", 0],
+    [58, "a", "f9c90677", 0],
+    [59, "a", "b13f0991", 0],
+    [60, "a", "945ef7de", 0],
+    [61, "a", "f1055d55", 0],
+    [62, "a", "6a08de7d", 0],
+    [63, "a", "f4d9929b", 0],
+    [64, "a", "919ef64b", 0],
+    [65, "a", "b5ae43c8", 0],
+    [66, "a", "ff82e7c1", 0],
+    [67, "a", "28ae27fb", 0],
+    [68, "a", "9845a6a3", 0],
+    [69, "a", "2f2b9d7d", 0]
+  ]
+}

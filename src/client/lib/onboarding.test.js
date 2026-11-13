@@ -193,7 +193,9 @@ describe('#validateProject', () => {
       validateProject(details({ jiraKey: 'a,b' }), NOW).jiraKey
     ]
 
-    for (const message of messages) expect(message).not.toMatch(/capital/i)
+    for (const message of messages) {
+      expect(message).not.toMatch(/capital/i)
+    }
   })
 
   test('Should need an adoption date for an AI-Adopted project only', () => {

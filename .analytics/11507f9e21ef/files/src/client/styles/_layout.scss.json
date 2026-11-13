@@ -1,0 +1,23 @@
+{
+  "schema": "ai-attribution-file/2",
+  "path": "src/client/styles/_layout.scss",
+  "added": 4,
+  "counts": {
+    "aiCompletion": 0,
+    "aiChat": 0,
+    "aiAgent": 4,
+    "aiModified": 0,
+    "pasted": 0,
+    "typed": 0,
+    "untracked": 0
+  },
+  "ranges": {
+    "ai-agent": "288-291"
+  },
+  "ai": [
+    [288, "a", "dd2fa7ce", 0],
+    [289, "a", "4a6441a8", 0],
+    [290, "a", "739f7643", 0],
+    [291, "a", "9845a6a3", 0]
+  ]
+}

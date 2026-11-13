@@ -50,37 +50,43 @@ function PaginationLink({ link, children, ...rest }) {
   )
 }
 
-function ArrowLink({ link, type, blockLevel }) {
+function ArrowTitle({ link, type, blockLevel }) {
   const defaultText = type === 'prev' ? 'Previous' : 'Next'
+  return (
+    <span
+      className={cx(
+        'govuk-pagination__link-title',
+        blockLevel &&
+          !link.labelText &&
+          'govuk-pagination__link-title--decorated'
+      )}
+    >
+      {link.text ?? (
+        <>
+          {defaultText}
+          <span className="govuk-visually-hidden"> page</span>
+        </>
+      )}
+    </span>
+  )
+}
+
+function ArrowLink({ link, type, blockLevel }) {
+  const arrowFirst = blockLevel || type === 'prev'
+  const label = blockLevel ? link.labelText : null
 
   return (
     <div className={`govuk-pagination__${type}`}>
       <PaginationLink link={link} rel={link.href ? type : undefined}>
-        {(blockLevel || type === 'prev') && <Arrow type={type} />}
-        <span
-          className={cx(
-            'govuk-pagination__link-title',
-            blockLevel &&
-              !link.labelText &&
-              'govuk-pagination__link-title--decorated'
-          )}
-        >
-          {link.text ?? (
-            <>
-              {defaultText}
-              <span className="govuk-visually-hidden"> page</span>
-            </>
-          )}
-        </span>
-        {blockLevel && link.labelText && (
+        {arrowFirst && <Arrow type={type} />}
+        <ArrowTitle link={link} type={type} blockLevel={blockLevel} />
+        {label && (
           <>
             <span className="govuk-visually-hidden">:</span>
-            <span className="govuk-pagination__link-label">
-              {link.labelText}
-            </span>
+            <span className="govuk-pagination__link-label">{label}</span>
           </>
         )}
-        {!blockLevel && type === 'next' && <Arrow type={type} />}
+        {!arrowFirst && <Arrow type={type} />}
       </PaginationLink>
     </div>
   )

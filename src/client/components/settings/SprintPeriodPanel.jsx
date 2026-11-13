@@ -1,4 +1,4 @@
-import { useEffect, useId, useState } from 'react'
+import { useId, useState } from 'react'
 
 import { Panel } from '../dashboard'
 import {
@@ -10,6 +10,7 @@ import {
   TextInput,
   WarningText
 } from '../govuk'
+import { useUnsavedGuard } from '../../hooks/useUnsavedGuard.js'
 import { jsonWrite } from '../../lib/api'
 import { checkedWrite, toApiError } from '../../lib/api-errors'
 import { formatDate, parseDate, toDateParts } from '../../lib/onboarding'
@@ -33,6 +34,7 @@ const sameForm = (a, b) =>
   )
 
 const daysText = (n) => `${n} ${Number(n) === 1 ? 'day' : 'days'}`
+const errorLink = (id, text) => text && { href: `#${id}`, text }
 
 /** Settings → JIRA: the project's sprint length and the date one sprint started. */
 export function SprintPeriodPanel({ project, onSaved, onDirtyChange }) {
@@ -62,30 +64,20 @@ export function SprintPeriodPanel({ project, onSaved, onDirtyChange }) {
     setEdit((e) => ({ ...e, form: { ...e.form, ...update } }))
   }
 
-  useEffect(() => {
-    if (!dirty) return undefined
-    const warn = (event) => {
-      event.preventDefault()
-      event.returnValue = ''
-    }
-    window.addEventListener('beforeunload', warn)
-    return () => window.removeEventListener('beforeunload', warn)
-  }, [dirty])
-
-  useEffect(() => {
-    onDirtyChange?.(dirty)
-  }, [dirty, onDirtyChange])
-
-  useEffect(() => () => onDirtyChange?.(false), [onDirtyChange])
+  useUnsavedGuard(dirty, onDirtyChange)
 
   const submit = async (event) => {
     event.preventDefault()
-    if (saving) return
+    if (saving) {
+      return
+    }
     setNotice(null)
     setAttempt((a) => a + 1)
     const problems = sprintPeriodErrors(form)
     setErrors(problems)
-    if (Object.keys(problems).length > 0) return
+    if (Object.keys(problems).length > 0) {
+      return
+    }
     const cadenceDays = Number(form.length)
     const anchorDate = parseDate(form.start).toISOString()
     setSaving(true)
@@ -112,8 +104,8 @@ export function SprintPeriodPanel({ project, onSaved, onDirtyChange }) {
   }
 
   const errorList = [
-    errors.length && { href: `#${lengthId}`, text: errors.length },
-    errors.start && { href: `#${startId}-day`, text: errors.start },
+    errorLink(lengthId, errors.length),
+    errorLink(`${startId}-day`, errors.start),
     errors.form && { text: errors.form }
   ].filter(Boolean)
 
@@ -145,7 +137,7 @@ export function SprintPeriodPanel({ project, onSaved, onDirtyChange }) {
             {daysText(calendar.cadenceDays)}, counted from{' '}
             {formatDate(calendar.anchorDate)}
           </strong>
-          .
+          {'.'}
         </p>
         {project?.jira?.boardId && (
           <InsetText>

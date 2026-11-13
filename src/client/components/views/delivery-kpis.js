@@ -6,6 +6,8 @@ const days = (n) => (n === null || n === undefined ? '–' : `${n} days`)
 const prLabel = (pr) => `${shortRepoName(pr.repository)} #${pr.prNumber}`
 const isBug = (row) => /bug|defect/i.test(row.type)
 const isStory = (row) => /story/i.test(row.type)
+const THROUGHPUT_ANCHOR = 'metric-throughput'
+const byDesc = (field) => (a, b) => (b[field] ?? 0) - (a[field] ?? 0)
 
 /**
  * Delivery KPI cards keyed by id, from the backend delivery metrics and the
@@ -33,7 +35,28 @@ export function buildDeliveryKpis({
     items: tickets(done, (r) => days(r.cycleDays))
   }
   const failed = new Set(metrics.failedTickets ?? [])
+  const ctx = {
+    metrics,
+    done,
+    unlinked,
+    inProgress,
+    onOpenPR,
+    tickets,
+    delivered,
+    failed
+  }
 
+  return {
+    ...leadKpis(ctx),
+    ...qualityKpis(ctx),
+    ...throughputKpis(ctx),
+    ...flowKpis(ctx),
+    ...pullRequestKpis(ctx),
+    ...outputKpis(ctx)
+  }
+}
+
+function leadKpis({ metrics, done, tickets, delivered }) {
   return {
     changeLead: {
       id: 'change-lead',
@@ -73,7 +96,12 @@ export function buildDeliveryKpis({
         hint: ' ticket',
         items: tickets(done.filter(isBug), (r) => days(r.cycleDays))
       }
-    },
+    }
+  }
+}
+
+function qualityKpis({ metrics, done, tickets, failed }) {
+  return {
     changeFail: {
       id: 'change-fail',
       label: 'Change fail rate',
@@ -120,16 +148,20 @@ export function buildDeliveryKpis({
       drill: {
         title: 'Cycle time by ticket',
         hint: ' ticket',
-        items: tickets(
-          [...done].sort((a, b) => (b.cycleDays ?? 0) - (a.cycleDays ?? 0)),
-          (r) => days(r.cycleDays)
+        items: tickets([...done].sort(byDesc('cycleDays')), (r) =>
+          days(r.cycleDays)
         )
       }
-    },
+    }
+  }
+}
+
+function throughputKpis({ metrics, done, tickets }) {
+  return {
     throughput: {
       id: 'throughput',
       label: 'Stories delivered',
-      anchor: 'metric-throughput',
+      anchor: THROUGHPUT_ANCHOR,
       family: 'output',
       icon: 'ticket',
       value: value(metrics.storiesDelivered),
@@ -143,7 +175,7 @@ export function buildDeliveryKpis({
     storyPoints: {
       id: 'story-points',
       label: 'Story points delivered',
-      anchor: 'metric-throughput',
+      anchor: THROUGHPUT_ANCHOR,
       family: 'output',
       icon: 'layers',
       value: value(metrics.storyPointsDelivered),
@@ -159,7 +191,7 @@ export function buildDeliveryKpis({
     bugsDelivered: {
       id: 'bugs-delivered',
       label: 'Bugs delivered',
-      anchor: 'metric-throughput',
+      anchor: THROUGHPUT_ANCHOR,
       family: 'quality',
       icon: 'bug',
       value: value(metrics.bugsDelivered),
@@ -173,7 +205,7 @@ export function buildDeliveryKpis({
     otherDelivered: {
       id: 'other-delivered',
       label: 'Other items delivered',
-      anchor: 'metric-throughput',
+      anchor: THROUGHPUT_ANCHOR,
       family: 'output',
       icon: 'ticket',
       value: value(metrics.otherItemsDelivered),
@@ -186,7 +218,12 @@ export function buildDeliveryKpis({
           (r) => r.type || '–'
         )
       }
-    },
+    }
+  }
+}
+
+function flowKpis({ metrics, done, tickets, delivered }) {
+  return {
     flow: {
       id: 'flow',
       label: 'Flow efficiency',
@@ -239,7 +276,19 @@ export function buildDeliveryKpis({
           (r) => plural(r.reopenCount, 'reopen')
         )
       }
-    },
+    }
+  }
+}
+
+function pullRequestKpis({
+  metrics,
+  done,
+  unlinked,
+  onOpenPR,
+  tickets,
+  delivered
+}) {
+  return {
     sdu: {
       id: 'sdu',
       label: 'Standard deployable units',
@@ -293,12 +342,16 @@ export function buildDeliveryKpis({
       drill: {
         title: 'Lead time by ticket',
         hint: ' ticket',
-        items: tickets(
-          [...done].sort((a, b) => (b.leadDays ?? 0) - (a.leadDays ?? 0)),
-          (r) => days(r.leadDays)
+        items: tickets([...done].sort(byDesc('leadDays')), (r) =>
+          days(r.leadDays)
         )
       }
-    },
+    }
+  }
+}
+
+function outputKpis({ metrics, done, inProgress, tickets, delivered }) {
+  return {
     wip: {
       id: 'wip',
       label: 'Work in progress',

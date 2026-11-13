@@ -8,6 +8,14 @@ export default [
     noStyle: true
   }),
   {
+    // SonarCloud S121 (DEFRA profile): every if/else/loop body has braces.
+    // S9383 wants deliberately un-awaited promises marked with `void`.
+    rules: {
+      curly: ['error', 'all'],
+      'no-void': ['error', { allowAsStatement: true }]
+    }
+  },
+  {
     // Every subscription, timer and fetch in this app lives in a hook, so the
     // rules of hooks are load-bearing rather than stylistic. The React Compiler
     // rules in this plugin's `recommended` preset are deliberately not enabled:

@@ -34,7 +34,9 @@ const backend = ({
 } = {}) =>
   fetchMock.mockResponse(async (request) => {
     const path = new URL(request.url, 'http://localhost').pathname
-    if (path === '/api/me') return JSON.stringify(me)
+    if (path === '/api/me') {
+      return JSON.stringify(me)
+    }
     if (path === '/api/projects') {
       return projectsStatus === 200
         ? JSON.stringify({ projects })
@@ -43,7 +45,9 @@ const backend = ({
     if (path.startsWith('/api/sonar')) {
       return JSON.stringify({ configured: false })
     }
-    if (feedDown) throw new Error('offline')
+    if (feedDown) {
+      throw new Error('offline')
+    }
     return JSON.stringify({ payloads })
   })
 
@@ -1106,7 +1110,9 @@ describe('#App onboarding and help', () => {
         })
         return JSON.stringify({})
       }
-      if (path === '/api/projects') return JSON.stringify({ projects })
+      if (path === '/api/projects') {
+        return JSON.stringify({ projects })
+      }
       if (path === '/api/repositories/unassigned') {
         return JSON.stringify({ repositories: ['DEFRA/new-a'] })
       }

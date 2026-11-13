@@ -10,6 +10,9 @@ import {
   valueAxis
 } from '../../lib/chart-style'
 
+const MIN_SYMBOL = 10
+const SYMBOL_RANGE = 42
+
 const GROUPS = [
   { category: 'Copilot-assisted', token: 'copilot', symbol: 'circle' },
   { category: 'Human-authored', token: 'human', symbol: 'diamond' }
@@ -47,7 +50,7 @@ export function HotspotScatter({ points, title, xName, yName, height = 340 }) {
         // Draw in one pass: progressive chunks (from 3,000 points) can leave the SVG blank.
         progressive: 0,
         symbol: g.symbol,
-        symbolSize: (data) => 10 + (data.size / maxSize) * 42,
+        symbolSize: (data) => MIN_SYMBOL + (data.size / maxSize) * SYMBOL_RANGE,
         itemStyle: {
           color: p[g.token],
           opacity: 0.8,

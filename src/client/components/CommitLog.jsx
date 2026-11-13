@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 
 import { ClassificationBadge, Panel } from './dashboard'
+import { cx } from './govuk/utils.js'
 import { COMMIT_CLASSIFICATIONS } from '../lib/classification'
 import { effectiveClassification } from '../lib/selectors'
 
@@ -29,8 +30,94 @@ function CommitBadge({ classification }) {
   return <ClassificationBadge classification={classification} long />
 }
 
+/** Inline select to re-classify one commit, with Save and Cancel. */
+function ClassificationEditor({
+  commit,
+  draft,
+  rowError,
+  isPending,
+  selectRef,
+  onDraft,
+  onSave,
+  onCancel
+}) {
+  const selectId = `commit-class-${commit}`
+  const errorId = `${selectId}-error`
+  const onKeyDown = (e) => {
+    if (e.key === 'Escape') {
+      onCancel()
+    }
+    if (e.key === 'Enter') {
+      e.preventDefault()
+      void onSave()
+    }
+  }
+
+  return (
+    <div
+      className={cx(
+        'govuk-form-group govuk-!-margin-bottom-0',
+        rowError && 'govuk-form-group--error'
+      )}
+    >
+      <label className="govuk-label govuk-visually-hidden" htmlFor={selectId}>
+        {`Classification for commit ${commit}`}
+      </label>
+      {rowError && (
+        <p id={errorId} className="govuk-error-message" role="alert">
+          <span className="govuk-visually-hidden">Error:</span> {rowError}
+        </p>
+      )}
+      <select
+        ref={selectRef}
+        id={selectId}
+        className={cx('govuk-select', rowError && 'govuk-select--error')}
+        aria-describedby={rowError ? errorId : undefined}
+        value={draft}
+        disabled={isPending}
+        onChange={(e) => onDraft(e.target.value)}
+        onKeyDown={onKeyDown}
+      >
+        {COMMIT_CLASSIFICATIONS.map((option) => (
+          <option key={option} value={option}>
+            {option}
+          </option>
+        ))}
+      </select>
+      <div className="govuk-button-group govuk-!-margin-top-2 govuk-!-margin-bottom-0">
+        <button
+          type="button"
+          className="govuk-button govuk-!-margin-bottom-0"
+          disabled={isPending}
+          aria-disabled={isPending || undefined}
+          onClick={onSave}
+        >
+          Save{' '}
+          <span className="govuk-visually-hidden">
+            {`classification for commit ${commit}`}
+          </span>
+        </button>
+        <button
+          type="button"
+          className="govuk-button govuk-button--secondary govuk-!-margin-bottom-0"
+          disabled={isPending}
+          aria-disabled={isPending || undefined}
+          onClick={onCancel}
+        >
+          Cancel{' '}
+          <span className="govuk-visually-hidden">
+            {`editing classification for commit ${commit}`}
+          </span>
+        </button>
+      </div>
+    </div>
+  )
+}
+
 function logStatus(canReclassify, editable) {
-  if (!canReclassify) return null
+  if (!canReclassify) {
+    return null
+  }
   return editable
     ? 'Merged: classification can be corrected, every change is audited'
     : 'Open: classification can be corrected once merged'
@@ -67,7 +154,9 @@ export function CommitLog({
     }
 
     const commit = returnFocusTo.current
-    if (!commit) return
+    if (!commit) {
+      return
+    }
     returnFocusTo.current = null
     editButtons.current.get(commit)?.focus()
   }, [editingCommit])
@@ -111,15 +200,20 @@ export function CommitLog({
   }
 
   const renderCorrection = (c) => {
-    if (!editable) return <span className="app-muted">Once merged</span>
+    if (!editable) {
+      return <span className="app-muted">Once merged</span>
+    }
 
     if (editingCommit !== c.commit) {
       return (
         <button
           type="button"
           ref={(el) => {
-            if (el) editButtons.current.set(c.commit, el)
-            else editButtons.current.delete(c.commit)
+            if (el) {
+              editButtons.current.set(c.commit, el)
+            } else {
+              editButtons.current.delete(c.commit)
+            }
           }}
           className="app-link-button"
           onClick={() => startEdit(c.commit, c.classification)}
@@ -134,70 +228,17 @@ export function CommitLog({
 
     const isPending = pendingCommit === c.commit
     const rowError = error?.commit === c.commit ? error.message : null
-    const selectId = `commit-class-${c.commit}`
-    const errorId = `${selectId}-error`
-
     return (
-      <div
-        className={`govuk-form-group govuk-!-margin-bottom-0${rowError ? ' govuk-form-group--error' : ''}`}
-      >
-        <label className="govuk-label govuk-visually-hidden" htmlFor={selectId}>
-          Classification for commit {c.commit}
-        </label>
-        {rowError && (
-          <p id={errorId} className="govuk-error-message" role="alert">
-            <span className="govuk-visually-hidden">Error:</span> {rowError}
-          </p>
-        )}
-        <select
-          ref={selectRef}
-          id={selectId}
-          className={`govuk-select${rowError ? ' govuk-select--error' : ''}`}
-          aria-describedby={rowError ? errorId : undefined}
-          value={draft}
-          disabled={isPending}
-          onChange={(e) => setDraft(e.target.value)}
-          onKeyDown={(e) => {
-            if (e.key === 'Escape') closeEdit(c.commit)
-            if (e.key === 'Enter') {
-              e.preventDefault()
-              confirmEdit(c.commit, c.classification)
-            }
-          }}
-        >
-          {COMMIT_CLASSIFICATIONS.map((option) => (
-            <option key={option} value={option}>
-              {option}
-            </option>
-          ))}
-        </select>
-        <div className="govuk-button-group govuk-!-margin-top-2 govuk-!-margin-bottom-0">
-          <button
-            type="button"
-            className="govuk-button govuk-!-margin-bottom-0"
-            disabled={isPending}
-            aria-disabled={isPending || undefined}
-            onClick={() => confirmEdit(c.commit, c.classification)}
-          >
-            Save{' '}
-            <span className="govuk-visually-hidden">
-              classification for commit {c.commit}
-            </span>
-          </button>
-          <button
-            type="button"
-            className="govuk-button govuk-button--secondary govuk-!-margin-bottom-0"
-            disabled={isPending}
-            aria-disabled={isPending || undefined}
-            onClick={() => closeEdit(c.commit)}
-          >
-            Cancel{' '}
-            <span className="govuk-visually-hidden">
-              editing classification for commit {c.commit}
-            </span>
-          </button>
-        </div>
-      </div>
+      <ClassificationEditor
+        commit={c.commit}
+        draft={draft}
+        rowError={rowError}
+        isPending={isPending}
+        selectRef={selectRef}
+        onDraft={setDraft}
+        onSave={() => confirmEdit(c.commit, c.classification)}
+        onCancel={() => closeEdit(c.commit)}
+      />
     )
   }
 

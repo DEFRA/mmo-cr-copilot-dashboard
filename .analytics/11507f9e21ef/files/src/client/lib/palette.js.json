@@ -1,0 +1,24 @@
+{
+  "schema": "ai-attribution-file/2",
+  "path": "src/client/lib/palette.js",
+  "added": 5,
+  "counts": {
+    "aiCompletion": 0,
+    "aiChat": 0,
+    "aiAgent": 5,
+    "aiModified": 0,
+    "pasted": 0,
+    "typed": 0,
+    "untracked": 0
+  },
+  "ranges": {
+    "ai-agent": "26-27,42-44"
+  },
+  "ai": [
+    [26, "a", "f3ef88e2", 0],
+    [27, "a", "88e557c0", 0],
+    [42, "a", "52564fa9", 0],
+    [43, "a", "fd1c7dfa", 0],
+    [44, "a", "ce68cc55", 0]
+  ]
+}

@@ -1,0 +1,23 @@
+{
+  "schema": "ai-attribution-file/2",
+  "path": "src/client/components/govuk/Tabs.jsx",
+  "added": 9,
+  "counts": {
+    "aiCompletion": 0,
+    "aiChat": 0,
+    "aiAgent": 3,
+    "aiModified": 0,
+    "pasted": 0,
+    "typed": 0,
+    "untracked": 6
+  },
+  "ranges": {
+    "ai-agent": "43,59,73",
+    "untracked": "41-42,69-72"
+  },
+  "ai": [
+    [43, "a", "9845a6a3", 0],
+    [59, "a", "5afb8e23", 0],
+    [73, "a", "9845a6a3", 0]
+  ]
+}

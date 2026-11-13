@@ -2,6 +2,7 @@ import Boom from '@hapi/boom'
 import Joi from 'joi'
 
 import { config } from '#/config/config.js'
+import { statusCodes } from '#/server/common/constants/status-codes.js'
 import { backendRequest } from '#/server/common/helpers/backend-client.js'
 import {
   requireIngestToken,
@@ -9,12 +10,17 @@ import {
   INGEST_TOKEN_HEADER
 } from '#/server/common/helpers/ingest-auth.js'
 
+const MAX_REPOSITORY_LENGTH = 200
+const ingestFailure = (reason) => ({
+  event: { action: 'ingest', outcome: 'failure', reason }
+})
+
 // An OIDC caller may only publish for its own repository, and only once that repository is mapped.
 async function assertRepositoryAllowed(request, claims) {
   const repository = request.payload?.repository
   if (repository !== claims.repository) {
     request.logger.warn(
-      { event: { action: 'ingest', outcome: 'failure', reason: 'repository' } },
+      ingestFailure('repository'),
       'Ingest payload repository does not match the token'
     )
     throw Boom.forbidden('Payload repository does not match the caller')
@@ -25,22 +31,35 @@ async function assertRepositoryAllowed(request, claims) {
     headers: { [INGEST_TOKEN_HEADER]: config.get('ingest.token') },
     logger: request.logger
   })
-  if (statusCode === 401) {
+  if (statusCode === statusCodes.unauthorized) {
     request.logger.error(
-      {
-        event: { action: 'ingest', outcome: 'failure', reason: 'backend-401' }
-      },
+      ingestFailure('backend-401'),
       'Backend rejected the ingest token during the repository lookup'
     )
   }
-  const mapped = statusCode === 200 && payload?.mapped === true
+  const mapped = statusCode === statusCodes.ok && payload?.mapped === true
   if (!mapped) {
     request.logger.warn(
-      { event: { action: 'ingest', outcome: 'failure', reason: 'unmapped' } },
+      ingestFailure('unmapped'),
       'Ingest payload repository is not mapped to a project'
     )
     throw Boom.forbidden('Repository is not mapped to a project')
   }
+}
+
+// Relays the backend's verdict unchanged; a rejection is logged for support.
+async function forwardToBackend(request, h, path, what) {
+  const { statusCode, payload } = await backendRequest({
+    path,
+    method: 'POST',
+    body: request.payload,
+    headers: { [INGEST_TOKEN_HEADER]: config.get('ingest.token') },
+    logger: request.logger
+  })
+  if (statusCode >= statusCodes.badRequest) {
+    request.logger.warn(`Backend rejected ${what} with status ${statusCode}`)
+  }
+  return h.response(payload).code(statusCode)
 }
 
 /**
@@ -64,22 +83,7 @@ export const ingestController = {
     if (request.app.ingestClaims) {
       await assertRepositoryAllowed(request, request.app.ingestClaims)
     }
-
-    const { statusCode, payload } = await backendRequest({
-      path: '/api/payloads',
-      method: 'POST',
-      body: request.payload,
-      headers: { [INGEST_TOKEN_HEADER]: config.get('ingest.token') },
-      logger: request.logger
-    })
-
-    if (statusCode >= 400) {
-      request.logger.warn(
-        `Backend rejected an ingest payload with status ${statusCode}`
-      )
-    }
-
-    return h.response(payload).code(statusCode)
+    return forwardToBackend(request, h, '/api/payloads', 'an ingest payload')
   }
 }
 
@@ -104,28 +108,13 @@ export const survivalController = {
     validate: {
       payload: Joi.object({
         kind: Joi.string().valid('ai-survival').required(),
-        repository: Joi.string().max(200).required(),
+        repository: Joi.string().max(MAX_REPOSITORY_LENGTH).required(),
         prNumber: Joi.number().integer().min(1).required()
       }).unknown(true)
     }
   },
   handler: async (request, h) => {
     await assertRepositoryAllowed(request, request.app.ingestClaims)
-
-    const { statusCode, payload } = await backendRequest({
-      path: '/api/survival',
-      method: 'POST',
-      body: request.payload,
-      headers: { [INGEST_TOKEN_HEADER]: config.get('ingest.token') },
-      logger: request.logger
-    })
-
-    if (statusCode >= 400) {
-      request.logger.warn(
-        `Backend rejected a survival record with status ${statusCode}`
-      )
-    }
-
-    return h.response(payload).code(statusCode)
+    return forwardToBackend(request, h, '/api/survival', 'a survival record')
   }
 }

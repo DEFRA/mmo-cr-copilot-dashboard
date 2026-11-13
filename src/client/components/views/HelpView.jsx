@@ -122,7 +122,10 @@ export function HelpView({ onBack, isAdmin = false, onOnboardProject }) {
           and sends the result to this dashboard. Add this file to the
           repository as <code>{WORKFLOW_PATH}</code>:
         </p>
-        <pre className="app-code-block" tabIndex={0}>
+        <pre
+          className="app-code-block"
+          tabIndex={0} // NOSONAR: a scrollable region must take focus (axe scrollable-region-focusable)
+        >
           <code>{WORKFLOW_LINES.join('\n')}</code>
         </pre>
 
@@ -133,7 +136,7 @@ export function HelpView({ onBack, isAdmin = false, onOnboardProject }) {
           <a className="govuk-link" href={DASHBOARD_URL}>
             Copilot analytics | mmo-cr-copilot-dashboard
           </a>
-          :
+          {':'}
         </p>
         <p className="govuk-body">
           <code>{INGEST_URL}</code>
@@ -224,7 +227,9 @@ export function HelpView({ onBack, isAdmin = false, onOnboardProject }) {
               className="govuk-link"
               href={onboardingHref}
               onClick={(event) => {
-                if (!onOnboardProject || !isPlainClick(event)) return
+                if (!onOnboardProject || !isPlainClick(event)) {
+                  return
+                }
                 event.preventDefault()
                 onOnboardProject()
               }}

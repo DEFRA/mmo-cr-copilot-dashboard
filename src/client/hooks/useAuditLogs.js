@@ -31,10 +31,18 @@ const EMPTY = {
 
 function buildQuery({ from, to, page, pageSize }) {
   const params = new URLSearchParams()
-  if (from) params.set('from', new Date(from).toISOString())
-  if (to) params.set('to', new Date(to).toISOString())
-  if (page) params.set('page', String(page))
-  if (pageSize) params.set('pageSize', String(pageSize))
+  if (from) {
+    params.set('from', new Date(from).toISOString())
+  }
+  if (to) {
+    params.set('to', new Date(to).toISOString())
+  }
+  if (page) {
+    params.set('page', String(page))
+  }
+  if (pageSize) {
+    params.set('pageSize', String(pageSize))
+  }
   return params.toString()
 }
 
@@ -53,7 +61,9 @@ export function useAuditLogs({
   const [reloadToken, setReloadToken] = useState(0)
 
   useEffect(() => {
-    if (!projectSlug) return undefined
+    if (!projectSlug) {
+      return undefined
+    }
     const controller = new AbortController()
     setState((s) => ({ ...s, status: 'loading', error: null }))
 
@@ -64,11 +74,15 @@ export function useAuditLogs({
       headers: { Accept: 'application/json' }
     })
       .then(async (res) => {
-        if (!res.ok) throw new Error(`Request failed (${res.status})`)
+        if (!res.ok) {
+          throw new Error(`Request failed (${res.status})`)
+        }
         return res.json()
       })
       .then((data) => {
-        if (controller.signal.aborted) return
+        if (controller.signal.aborted) {
+          return
+        }
         setState({
           entries: Array.isArray(data?.entries) ? data.entries : [],
           page: data?.page ?? 1,
@@ -80,7 +94,9 @@ export function useAuditLogs({
         })
       })
       .catch((err) => {
-        if (controller.signal.aborted || err.name === 'AbortError') return
+        if (controller.signal.aborted || err.name === 'AbortError') {
+          return
+        }
         setState((s) => ({
           ...s,
           status: 'error',

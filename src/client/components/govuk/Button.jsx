@@ -28,7 +28,7 @@ export function Button({
     }
 
     return (
-      <a
+      <a // NOSONAR: GOV.UK Frontend's link-button pattern; Space is handled above
         href={href}
         role="button"
         draggable="false"

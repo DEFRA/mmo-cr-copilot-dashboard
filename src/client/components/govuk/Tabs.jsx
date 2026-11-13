@@ -38,7 +38,9 @@ export function Tabs({
       End: last
     }
     const next = items[targets[event.key]]
-    if (!next) return
+    if (!next) {
+      return
+    }
 
     event.preventDefault()
     select(next)
@@ -54,7 +56,7 @@ export function Tabs({
         {items.map((item, index) => {
           const isSelected = item.id === activeId
           return (
-            <li
+            <li // NOSONAR: GOV.UK Frontend tabs; the list item must not interrupt the tablist
               key={item.id}
               role="presentation"
               className={cx(
@@ -64,8 +66,11 @@ export function Tabs({
             >
               <a
                 ref={(node) => {
-                  if (node) tabRefs.current.set(item.id, node)
-                  else tabRefs.current.delete(item.id)
+                  if (node) {
+                    tabRefs.current.set(item.id, node)
+                  } else {
+                    tabRefs.current.delete(item.id)
+                  }
                 }}
                 className="govuk-tabs__tab"
                 href={`#${panelId(item)}`}

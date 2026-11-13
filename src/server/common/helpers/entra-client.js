@@ -1,6 +1,7 @@
 import { createRemoteJWKSet, jwtVerify } from 'jose'
 
 import { config } from '#/config/config.js'
+import { statusCodes } from '#/server/common/constants/status-codes.js'
 
 const LOGIN_HOST = 'https://login.microsoftonline.com'
 const REAUTH_ERRORS = new Set(['invalid_grant', 'interaction_required'])
@@ -49,11 +50,10 @@ export function entraSettings() {
 }
 
 export function requestedScopes({ backendClientId, backendScope }) {
-  const backendScopeUri = backendClientId
-    ? backendClientId.startsWith('api://')
-      ? `${backendClientId}/${backendScope}`
-      : `api://${backendClientId}/${backendScope}`
-    : null
+  const audience = backendClientId?.startsWith('api://')
+    ? backendClientId
+    : `api://${backendClientId}`
+  const backendScopeUri = backendClientId ? `${audience}/${backendScope}` : null
   return ['openid', 'profile', 'email', 'offline_access', backendScopeUri]
     .filter(Boolean)
     .join(' ')
@@ -96,7 +96,10 @@ async function postToken(settings, params) {
     if (CONFIG_ERRORS.has(oauthError)) {
       throw new EntraTokenError('config', oauthError)
     }
-    if (res.status >= 500 || oauthError === 'temporarily_unavailable') {
+    if (
+      res.status >= statusCodes.internalServerError ||
+      oauthError === 'temporarily_unavailable'
+    ) {
       throw new EntraTokenError('transient', oauthError)
     }
     throw new EntraTokenError('reauth', oauthError)

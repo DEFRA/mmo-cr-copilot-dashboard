@@ -3,6 +3,7 @@ import { useId, useState } from 'react'
 import { headingCase, Icon, KpiCard, PanelState } from '../dashboard'
 import { familyClass } from '../dashboard/families.js'
 import { InsetText } from '../govuk'
+import { COPILOT_ASSISTED, HUMAN_AUTHORED } from '../../lib/classification.js'
 
 // docs/metrics.md is not served by the app, so definitions link to the public repository.
 export const METRICS_DOC =
@@ -12,11 +13,30 @@ export { PERIOD_CHIP } from '../dashboard/PeriodChip.jsx'
 export const lines = (n) => n.toLocaleString('en-GB')
 export const plural = (n, one, many = `${one}s`) =>
   `${n} ${n === 1 ? one : many}`
+export const pullRequests = (n) => plural(n, 'pull request')
+
+export const PR_COLUMN = { id: 'pr', label: 'Pull request' }
+
+/** Copilot-assisted then human-authored, as table rows or as donut slices. */
+export const authorshipRows = (copilot, human) => [
+  [COPILOT_ASSISTED, copilot],
+  [HUMAN_AUTHORED, human]
+]
+export const authorshipSlices = (copilot, human) => [
+  { name: COPILOT_ASSISTED, value: copilot },
+  { name: HUMAN_AUTHORED, value: human }
+]
+
+const SMALLEST_CREDIT = 0.01
 
 /** GitHub AI credits to 2 decimals; a non-zero amount below 0.01 is not shown as 0. */
 export function formatCredits(value) {
-  if (value === null || value === undefined) return 'Not recorded'
-  if (value > 0 && value < 0.01) return 'Under 0.01'
+  if (value === null || value === undefined) {
+    return 'Not recorded'
+  }
+  if (value > 0 && value < SMALLEST_CREDIT) {
+    return 'Under 0.01'
+  }
   return value.toLocaleString('en-GB', {
     minimumFractionDigits: 2,
     maximumFractionDigits: 2
@@ -59,7 +79,9 @@ export function Subsection({ title, family, icon, meta, children }) {
 
 /** Says why the Jira metrics are missing; shown to project admins only. */
 export function JiraHiddenNotice({ canAdminister }) {
-  if (!canAdminister) return null
+  if (!canAdminister) {
+    return null
+  }
   return (
     <InsetText className="govuk-!-margin-top-4">
       Jira delivery metrics are hidden because this project has no Jira project
@@ -106,7 +128,7 @@ function DrillPanel({ id, kpi }) {
           className="govuk-link app-drill__def"
           href={`${METRICS_DOC}#${kpi.anchor}`}
         >
-          Metric definition
+          {'Metric definition'}
           <span className="govuk-visually-hidden">: {kpi.label}</span>
         </a>
       </div>
@@ -153,7 +175,7 @@ export function KpiDrillGrid({ kpis, drillId, actionText }) {
   return (
     <>
       <div className="app-kpi-grid">
-        {kpis.map(({ id, drill, anchor, ...card }, index) => (
+        {kpis.map(({ id, drill: _drill, anchor: _anchor, ...card }, index) => (
           <KpiCard
             key={id}
             {...card}

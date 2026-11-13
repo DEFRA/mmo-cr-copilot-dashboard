@@ -22,10 +22,15 @@ import {
   Meter,
   OpenButton,
   PERIOD_CHIP,
+  PR_COLUMN,
   ScopeHeader,
+  authorshipRows,
+  authorshipSlices,
   lines,
-  plural
+  plural,
+  pullRequests
 } from './scope.jsx'
+import { COPILOT_ASSISTED, HUMAN_AUTHORED } from '../../lib/classification.js'
 
 const prLabel = (p) => `${p.repoName} #${p.prNumber}`
 
@@ -126,7 +131,7 @@ export function ContributorView({
       family: 'leverage',
       icon: 'repo',
       value: String(summary.repoCount),
-      sub: plural(summary.prCount, 'pull request')
+      sub: pullRequests(summary.prCount)
     },
     {
       label: 'Net lines delivered',
@@ -146,7 +151,7 @@ export function ContributorView({
           level="Drill-down"
           icon="person"
           title="Contributor overview"
-          meta={`${who} · ${plural(summary.repoCount, 'repository', 'repositories')} · ${plural(summary.prCount, 'pull request')}`}
+          meta={`${who} · ${plural(summary.repoCount, 'repository', 'repositories')} · ${pullRequests(summary.prCount)}`}
         />
 
         <div className="app-kpi-grid">
@@ -169,17 +174,17 @@ export function ContributorView({
               { id: 'class', label: 'Classification' },
               { id: 'commits', label: 'Commits', numeric: true }
             ]}
-            rows={[
-              ['Copilot-assisted', summary.copilotAssisted],
-              ['Human-authored', summary.humanAuthored]
-            ]}
+            rows={authorshipRows(
+              summary.copilotAssisted,
+              summary.humanAuthored
+            )}
           >
             <DistributionDonut
               title="Commit composition"
-              data={[
-                { name: 'Copilot-assisted', value: summary.copilotAssisted },
-                { name: 'Human-authored', value: summary.humanAuthored }
-              ]}
+              data={authorshipSlices(
+                summary.copilotAssisted,
+                summary.humanAuthored
+              )}
             />
           </ChartFigure>
           <ChartFigure
@@ -197,35 +202,32 @@ export function ContributorView({
             ]}
             rows={
               summary.linesTouched
-                ? [
-                    ['Copilot-assisted', summary.copilotAssistedLines],
-                    ['Human-authored', summary.humanAuthoredLines]
-                  ]
+                ? authorshipRows(
+                    summary.copilotAssistedLines,
+                    summary.humanAuthoredLines
+                  )
                 : []
             }
           >
             <DistributionDonut
               title="Line composition"
-              data={[
-                {
-                  name: 'Copilot-assisted',
-                  value: summary.copilotAssistedLines
-                },
-                { name: 'Human-authored', value: summary.humanAuthoredLines }
-              ]}
+              data={authorshipSlices(
+                summary.copilotAssistedLines,
+                summary.humanAuthoredLines
+              )}
             />
           </ChartFigure>
           <ChartFigure
             number={3}
             title="Commit assist rate by pull request"
             subtitle={`Commit assist rate per pull request for this contributor's commits, percentage, selected period`}
-            description={`This contributor's commits appear in ${plural(prs.length, 'pull request')}; ${prs.filter((p) => p.copilotAssisted > 0).length} of them include Copilot-assisted work.`}
+            description={`This contributor's commits appear in ${pullRequests(prs.length)}; ${prs.filter((p) => p.copilotAssisted > 0).length} of them include Copilot-assisted work.`}
             family="assist"
             icon="bars"
             chip={PERIOD_CHIP}
             className="app-span-6"
             columns={[
-              { id: 'pr', label: 'Pull request' },
+              PR_COLUMN,
               { id: 'rate', label: 'Commit assist rate (%)', numeric: true }
             ]}
             rows={prs.map((p) => [prLabel(p), p.copilotAssistedRate])}
@@ -244,13 +246,13 @@ export function ContributorView({
             number={4}
             title="Commits per PR by Classification"
             subtitle={`Copilot-assisted and human-authored commits per pull request for this contributor, selected period`}
-            description={`${summary.copilotAssisted} Copilot-assisted and ${summary.humanAuthored} human-authored commits across ${plural(prs.length, 'pull request')}.`}
+            description={`${summary.copilotAssisted} Copilot-assisted and ${summary.humanAuthored} human-authored commits across ${pullRequests(prs.length)}.`}
             family="assist"
             icon="bars"
             chip={PERIOD_CHIP}
             className="app-span-6"
             columns={[
-              { id: 'pr', label: 'Pull request' },
+              PR_COLUMN,
               {
                 id: 'copilot',
                 label: 'Copilot-assisted commits',
@@ -270,12 +272,12 @@ export function ContributorView({
               onSelect={(i) => onOpenPR(prs[i].repository, prs[i].prNumber)}
               series={[
                 {
-                  name: 'Copilot-assisted',
+                  name: COPILOT_ASSISTED,
                   colorToken: 'copilot',
                   data: prs.map((p) => p.copilotAssisted)
                 },
                 {
-                  name: 'Human-authored',
+                  name: HUMAN_AUTHORED,
                   colorToken: 'manual',
                   data: prs.map((p) => p.humanAuthored)
                 }
@@ -286,7 +288,7 @@ export function ContributorView({
             number={5}
             title="Lines Added and Deleted per Commit"
             subtitle={`Lines added against lines deleted per counted commit, sized by lines touched, ${contributor}, selected period. Rebase and merge commits are excluded.`}
-            description={`${plural(commitPoints.length, 'counted commit')} in ${plural(prs.length, 'pull request')}. Commits far from the origin are the largest changes.`}
+            description={`${plural(commitPoints.length, 'counted commit')} in ${pullRequests(prs.length)}. Commits far from the origin are the largest changes.`}
             family="risk"
             icon="scatter"
             chip={PERIOD_CHIP}
@@ -336,7 +338,7 @@ export function ContributorView({
             caption={`Pull requests with commits from ${contributor} in the selected period, newest first`}
             captionHidden
             head={[
-              { id: 'pr', label: 'Pull request' },
+              PR_COLUMN,
               { id: 'repo', label: 'Repository' },
               { id: 'commits', label: 'Commits', numeric: true },
               { id: 'assist', label: 'Commit assist rate' },

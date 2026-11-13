@@ -1,0 +1,17 @@
+{
+  "schema": "ai-attribution-file/2",
+  "path": "src/client/hooks/useAuditLogs.js",
+  "added": 24,
+  "counts": {
+    "aiCompletion": 0,
+    "aiChat": 0,
+    "aiAgent": 0,
+    "aiModified": 0,
+    "pasted": 0,
+    "typed": 0,
+    "untracked": 24
+  },
+  "ranges": {
+    "untracked": "34-45,64-66,77-79,83-85,97-99"
+  }
+}

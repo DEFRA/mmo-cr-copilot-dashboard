@@ -22,7 +22,9 @@ export function useProjectSprints(slug, count = 4, revision = null) {
   const [state, setState] = useState({ sprints: [], status: 'idle' })
 
   useEffect(() => {
-    if (!slug) return undefined
+    if (!slug) {
+      return undefined
+    }
     const controller = new AbortController()
     setState({ sprints: [], status: 'loading' })
 
@@ -34,7 +36,9 @@ export function useProjectSprints(slug, count = 4, revision = null) {
       }
     )
       .then((res) => {
-        if (!res.ok) throw new Error(`Request failed (${res.status})`)
+        if (!res.ok) {
+          throw new Error(`Request failed (${res.status})`)
+        }
         return res.json()
       })
       .then((data) => {
@@ -44,7 +48,9 @@ export function useProjectSprints(slug, count = 4, revision = null) {
         setState({ sprints, status: 'success' })
       })
       .catch((err) => {
-        if (err.name === 'AbortError') return
+        if (err.name === 'AbortError') {
+          return
+        }
         setState({ sprints: [], status: 'error' })
       })
 

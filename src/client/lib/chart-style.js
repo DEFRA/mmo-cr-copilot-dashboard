@@ -5,6 +5,16 @@
 
 export const CHART_FONT = 'Arial, Helvetica, sans-serif'
 const FONT_SIZE = 14
+const BYTE = 0xff
+const RED_SHIFT = 16
+const GREEN_SHIFT = 8
+const DECAL_ALPHA = 0.6
+const ZOOM_FILL_ALPHA = 0.15
+const TOOLTIP_PADDING = { y: 8, x: 12 }
+// Dash and gap lengths for the decal patterns, in pixels.
+const DASH = { short: 2, mid: 3, base: 4, long: 5, wide: 6 }
+// π/4: diagonal hatching.
+const EIGHTH_TURN = Math.atan(1)
 
 const HTML_ESCAPES = {
   '&': '&amp;',
@@ -23,8 +33,8 @@ export function escapeHtml(value) {
 export function withAlpha(colour, alpha) {
   const hex = /^#([\da-f]{6})$/i.exec(colour ?? '')
   if (hex) {
-    const n = parseInt(hex[1], 16)
-    return `rgba(${(n >> 16) & 255}, ${(n >> 8) & 255}, ${n & 255}, ${alpha})`
+    const n = Number.parseInt(hex[1], 16)
+    return `rgba(${(n >> RED_SHIFT) & BYTE}, ${(n >> GREEN_SHIFT) & BYTE}, ${n & BYTE}, ${alpha})`
   }
   const rgb = /^rgba?\(([^)]+)\)$/i.exec(colour ?? '')
   if (rgb) {
@@ -36,21 +46,45 @@ export function withAlpha(colour, alpha) {
 
 const DECAL_SHAPES = [
   null,
-  { dashArrayX: [1, 0], dashArrayY: [3, 4], rotation: -Math.PI / 4 },
-  { symbol: 'circle', symbolSize: 0.6, dashArrayX: [4, 4], dashArrayY: [4, 4] },
-  { dashArrayX: [1, 0], dashArrayY: [2, 5], rotation: Math.PI / 4 },
-  { dashArrayX: [1, 0], dashArrayY: [2, 4], rotation: 0 },
-  { dashArrayX: [[6, 3]], dashArrayY: [2, 5], rotation: Math.PI / 2 }
+  {
+    dashArrayX: [1, 0],
+    dashArrayY: [DASH.mid, DASH.base],
+    rotation: -EIGHTH_TURN
+  },
+  {
+    symbol: 'circle',
+    symbolSize: DECAL_ALPHA,
+    dashArrayX: [DASH.base, DASH.base],
+    dashArrayY: [DASH.base, DASH.base]
+  },
+  {
+    dashArrayX: [1, 0],
+    dashArrayY: [DASH.short, DASH.long],
+    rotation: EIGHTH_TURN
+  },
+  { dashArrayX: [1, 0], dashArrayY: [DASH.short, DASH.base], rotation: 0 },
+  {
+    dashArrayX: [[DASH.wide, DASH.mid]],
+    dashArrayY: [DASH.short, DASH.long],
+    rotation: Math.PI / 2
+  }
 ]
 
 /** Pattern for the n-th series; index 0 stays solid. Human work uses the hatch (1). */
 export function decal(p, index = 1) {
   const shape = DECAL_SHAPES[index % DECAL_SHAPES.length]
-  if (!shape) return undefined
-  return { symbol: 'rect', color: withAlpha(p.white, 0.6), ...shape }
+  if (!shape) {
+    return undefined
+  }
+  return { symbol: 'rect', color: withAlpha(p.white, DECAL_ALPHA), ...shape }
 }
 
-export const LINE_TYPES = ['solid', 'dashed', 'dotted', [8, 4, 2, 4]]
+export const LINE_TYPES = [
+  'solid',
+  'dashed',
+  'dotted',
+  [DASH.long + DASH.mid, DASH.base, DASH.short, DASH.base]
+]
 export const SYMBOLS = ['circle', 'diamond', 'triangle', 'rect', 'roundRect']
 
 export function textStyle(p, extra = {}) {
@@ -67,7 +101,7 @@ export function tooltip(p, extra = {}) {
     backgroundColor: p.white,
     borderColor: p.grid,
     borderWidth: 1,
-    padding: [8, 12],
+    padding: [TOOLTIP_PADDING.y, TOOLTIP_PADDING.x],
     textStyle: textStyle(p),
     extraCssText:
       'box-shadow: var(--app-shadow); border-radius: var(--app-radius-s);',
@@ -75,16 +109,20 @@ export function tooltip(p, extra = {}) {
   }
 }
 
+const legendItems = (p) => ({
+  itemWidth: 16,
+  itemHeight: 12,
+  itemGap: 20,
+  textStyle: textStyle(p)
+})
+
 export function legend(p, extra = {}) {
-  return {
-    top: 0,
-    right: 0,
-    itemWidth: 16,
-    itemHeight: 12,
-    itemGap: 20,
-    textStyle: textStyle(p),
-    ...extra
-  }
+  return { top: 0, right: 0, ...legendItems(p), ...extra }
+}
+
+/** Legend centred under the chart, for round charts. */
+export function bottomLegend(p, extra = {}) {
+  return { bottom: 0, left: 'center', ...legendItems(p), ...extra }
 }
 
 export function categoryAxis(p, data, extra = {}) {
@@ -149,12 +187,12 @@ export function categoryZoom(p, count, { axis = 'x', anchor = 'start' } = {}) {
         showDetail: false,
         brushSelect: false,
         borderColor: p.grid,
-        fillerColor: withAlpha(p.brand, 0.15),
+        fillerColor: withAlpha(p.brand, ZOOM_FILL_ALPHA),
         handleStyle: { color: p.white, borderColor: p.muted },
         moveHandleStyle: { color: p.muted },
         dataBackground: {
           lineStyle: { color: p.grid },
-          areaStyle: { color: withAlpha(p.muted, 0.15) }
+          areaStyle: { color: withAlpha(p.muted, ZOOM_FILL_ALPHA) }
         }
       }
     ]

@@ -1,0 +1,26 @@
+{
+  "schema": "ai-attribution-file/2",
+  "path": "src/client/components/views/DeliveryView.jsx",
+  "added": 15,
+  "counts": {
+    "aiCompletion": 0,
+    "aiChat": 0,
+    "aiAgent": 6,
+    "aiModified": 0,
+    "pasted": 0,
+    "typed": 0,
+    "untracked": 9
+  },
+  "ranges": {
+    "ai-agent": "29,31,33-34,130,302",
+    "untracked": "105-107,116-118,170-172"
+  },
+  "ai": [
+    [29, "a", "a4c7da70", 0],
+    [31, "a", "e2ede499", 0],
+    [33, "a", "34f528cf", 0],
+    [34, "a", "81b4eb2c", 0],
+    [130, "a", "ce6e5387", 0],
+    [302, "a", "9a8676cc", 0]
+  ]
+}

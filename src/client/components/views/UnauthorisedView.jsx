@@ -6,10 +6,15 @@ import { usePrefersReducedMotion } from '../../hooks/usePrefersReducedMotion'
 const COPY = {
   'no-access': {
     title: 'You do not have access to this service',
-    body: (name) => [
-      `${name ? `You are signed in as ${name}, but` : 'You are signed in, but'} your account is not in a group for any project.`,
-      'To get access, ask a project admin to add your Microsoft Entra group to their project, or ask the service team.'
-    ]
+    body: (name) => {
+      const who = name
+        ? `You are signed in as ${name}, but`
+        : 'You are signed in, but'
+      return [
+        `${who} your account is not in a group for any project.`,
+        'To get access, ask a project admin to add your Microsoft Entra group to their project, or ask the service team.'
+      ]
+    }
   },
   project: {
     title: 'You do not have access to this project',
@@ -20,17 +25,14 @@ const COPY = {
   }
 }
 
-const WAVE = `M0 0 q40 -14 80 0${' t80 0'.repeat(15)} L1280 120 L0 120 Z`
-const STARS = [
-  [40, 30],
-  [150, 52],
-  [250, 24],
-  [330, 60],
-  [420, 28],
-  [470, 70],
-  [585, 22],
-  [610, 66]
-]
+const WAVE_REPEATS = 15
+const STAR_STAGGER_S = 0.7
+const WAVE = `M0 0 q40 -14 80 0${' t80 0'.repeat(WAVE_REPEATS)} L1280 120 L0 120 Z`
+// Scene coordinates, written like SVG `points`.
+const STARS = '40,30 150,52 250,24 330,60 420,28 470,70 585,22 610,66'
+  .split(' ')
+  .map((pair) => pair.split(','))
+const PLANKS = '344 356 368 392 404 416'.split(' ')
 
 /**
  * A harbour lock with its gates shut: a lighthouse sweeps the water, a boat
@@ -54,7 +56,7 @@ function LockGateScene() {
           cx={x}
           cy={y}
           r="1.6"
-          style={{ '--star-delay': `${(i * 0.7).toFixed(1)}s` }}
+          style={{ '--star-delay': `${(i * STAR_STAGGER_S).toFixed(1)}s` }}
         />
       ))}
       <path
@@ -139,7 +141,7 @@ function LockGateScene() {
           width="48"
           height="110"
         />
-        {[344, 356, 368, 392, 404, 416].map((x) => (
+        {PLANKS.map((x) => (
           <line
             key={x}
             className="app-denied__plank"

@@ -1,0 +1,23 @@
+{
+  "schema": "ai-attribution-file/2",
+  "path": "src/client/lib/classification.js",
+  "added": 4,
+  "counts": {
+    "aiCompletion": 0,
+    "aiChat": 0,
+    "aiAgent": 4,
+    "aiModified": 0,
+    "pasted": 0,
+    "typed": 0,
+    "untracked": 0
+  },
+  "ranges": {
+    "ai-agent": "26-27,31-32"
+  },
+  "ai": [
+    [26, "a", "544d9ebc", 0],
+    [27, "a", "6e7b6b60", 0],
+    [31, "a", "55b635ed", 0],
+    [32, "a", "dcf3a08b", 0]
+  ]
+}

@@ -23,6 +23,9 @@ export function getMotionDuration() {
 }
 
 /** The GOV.UK design tokens (`--app-*`) from docs/design-system.md, for ECharts. */
+// Matches the `--app-chart-1` … `--app-chart-6` tokens.
+const CHART_SERIES_COUNT = 6
+
 export function getAppPalette() {
   return {
     text: read('--app-colour-text'),
@@ -36,7 +39,9 @@ export function getAppPalette() {
     error: read('--app-colour-error'),
     warning: read('--app-size-l'),
     font: 'Arial, Helvetica, sans-serif',
-    categorical: [1, 2, 3, 4, 5, 6].map((n) => read(`--app-chart-${n}`)),
+    categorical: Array.from({ length: CHART_SERIES_COUNT }, (_, i) =>
+      read(`--app-chart-${i + 1}`)
+    ),
     copilot: read('--app-colour-copilot'),
     human: read('--app-colour-human'),
     family: Object.fromEntries(

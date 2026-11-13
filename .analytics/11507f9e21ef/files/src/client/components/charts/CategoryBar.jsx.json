@@ -1,0 +1,37 @@
+{
+  "schema": "ai-attribution-file/2",
+  "path": "src/client/components/charts/CategoryBar.jsx",
+  "added": 18,
+  "counts": {
+    "aiCompletion": 0,
+    "aiChat": 0,
+    "aiAgent": 18,
+    "aiModified": 0,
+    "pasted": 0,
+    "typed": 0,
+    "untracked": 0
+  },
+  "ranges": {
+    "ai-agent": "16-19,21-29,54,75,96-98"
+  },
+  "ai": [
+    [16, "a", "4ea731dd", 0],
+    [17, "a", "6cb0b661", 0],
+    [18, "a", "40b087c1", 0],
+    [19, "a", "7517f8c2", 0],
+    [21, "a", "98a6abcc", 0],
+    [22, "a", "1a7fc8b9", 0],
+    [23, "a", "a71283d3", 0],
+    [24, "a", "9845a6a3", 0],
+    [25, "a", "5b35fc11", 0],
+    [26, "a", "d8f4ab6f", 0],
+    [27, "a", "9845a6a3", 0],
+    [28, "a", "000b7ec3", 0],
+    [29, "a", "9845a6a3", 0],
+    [54, "a", "9ccbc8cf", 0],
+    [75, "a", "f81f14a9", 0],
+    [96, "a", "8d893c02", 0],
+    [97, "a", "2b610441", 0],
+    [98, "a", "a005a581", 0]
+  ]
+}

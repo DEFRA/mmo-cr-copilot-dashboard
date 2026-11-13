@@ -58,7 +58,9 @@ export function CopilotSuperlatives({ superlatives = [], headingLevel = 4 }) {
     <div className="app-kpi-grid app-kpi-grid--3">
       {superlatives.map((item) => {
         const definition = DEFINITIONS[item.id]
-        if (!definition) return null
+        if (!definition) {
+          return null
+        }
         return (
           <KpiCard
             key={item.id}

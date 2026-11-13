@@ -12,7 +12,9 @@ async function getJson(path, signal) {
     signal,
     headers: { Accept: 'application/json' }
   })
-  if (!res.ok) throw new Error(`Request failed (${res.status})`)
+  if (!res.ok) {
+    throw new Error(`Request failed (${res.status})`)
+  }
   return res.json()
 }
 
@@ -35,13 +37,19 @@ export function useDeliveryMetrics(slug, window) {
     const controller = new AbortController()
     const base = `/api/projects/${encodeURIComponent(slug)}`
     const query = new URLSearchParams()
-    if (from) query.set('from', from)
-    if (to) query.set('to', to)
+    if (from) {
+      query.set('from', from)
+    }
+    if (to) {
+      query.set('to', to)
+    }
     let timer = null
     let refreshes = 0
 
     const load = (quiet) => {
-      if (!quiet) setState((s) => ({ ...s, status: 'loading', error: null }))
+      if (!quiet) {
+        setState((s) => ({ ...s, status: 'loading', error: null }))
+      }
 
       Promise.all([
         getJson(`${base}/delivery-metrics?${query}`, controller.signal),
@@ -65,8 +73,12 @@ export function useDeliveryMetrics(slug, window) {
           }
         })
         .catch((err) => {
-          if (controller.signal.aborted || err.name === 'AbortError') return
-          if (quiet) return
+          if (controller.signal.aborted || err.name === 'AbortError') {
+            return
+          }
+          if (quiet) {
+            return
+          }
           setState({ ...IDLE, status: 'error', error: err.message })
         })
     }

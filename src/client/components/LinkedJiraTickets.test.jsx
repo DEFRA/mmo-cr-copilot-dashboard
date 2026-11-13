@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from '@testing-library/react'
+import { render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 
 import { LinkedJiraTickets } from './LinkedJiraTickets.jsx'
@@ -64,7 +64,7 @@ describe('#LinkedJiraTickets', () => {
     await user.type(input, 'mmo-9')
     await user.click(screen.getByRole('button', { name: 'Save links' }))
 
-    await waitFor(() => expect(screen.getByText('MMO-9')).toBeInTheDocument())
+    expect(await screen.findByText('MMO-9')).toBeInTheDocument()
     const put = fetchMock.mock.calls.find(([, init]) => init?.method === 'PUT')
     expect(put[0]).toBe(PATH)
     expect(put[1].headers['x-requested-with']).toBe('XMLHttpRequest')

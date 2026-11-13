@@ -36,7 +36,9 @@ export function useSonarMetrics(path) {
       headers: { Accept: 'application/json' }
     })
       .then(async (res) => {
-        if (!res.ok) throw new Error(`Request failed (${res.status})`)
+        if (!res.ok) {
+          throw new Error(`Request failed (${res.status})`)
+        }
         return res.json()
       })
       .then((data) => {
@@ -45,7 +47,9 @@ export function useSonarMetrics(path) {
         }
       })
       .catch((err) => {
-        if (controller.signal.aborted || err.name === 'AbortError') return
+        if (controller.signal.aborted || err.name === 'AbortError') {
+          return
+        }
         setState({
           data: null,
           status: 'error',

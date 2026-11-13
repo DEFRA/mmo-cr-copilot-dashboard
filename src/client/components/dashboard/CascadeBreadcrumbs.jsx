@@ -63,7 +63,9 @@ export function cascadeItems(nav, projectName) {
 
 export function CascadeBreadcrumbs({ nav, projectName, onNavigate }) {
   const items = cascadeItems(nav, projectName)
-  if (items.length === 0) return null
+  if (items.length === 0) {
+    return null
+  }
 
   return (
     <Breadcrumbs

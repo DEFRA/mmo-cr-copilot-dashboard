@@ -1,0 +1,29 @@
+{
+  "schema": "ai-attribution-file/2",
+  "path": "src/client/lib/http-status.js",
+  "added": 10,
+  "counts": {
+    "aiCompletion": 0,
+    "aiChat": 0,
+    "aiAgent": 10,
+    "aiModified": 0,
+    "pasted": 0,
+    "typed": 0,
+    "untracked": 0
+  },
+  "ranges": {
+    "ai-agent": "1-10"
+  },
+  "ai": [
+    [1, "a", "80519f48", 0],
+    [2, "a", "38884a91", 0],
+    [3, "a", "48d8b154", 0],
+    [4, "a", "57a964af", 0],
+    [5, "a", "a95312a4", 0],
+    [6, "a", "bb7d1353", 0],
+    [7, "a", "1af8fdee", 0],
+    [8, "a", "70eadf89", 0],
+    [9, "a", "f1000652", 0],
+    [10, "a", "ee44a98c", 0]
+  ]
+}

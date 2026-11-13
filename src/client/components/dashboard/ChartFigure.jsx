@@ -86,7 +86,7 @@ export function ChartFigure({
           className="app-panel__details"
           summary={
             <>
-              Data and description
+              {'Data and description'}
               <span className="govuk-visually-hidden">
                 {' '}
                 for figure {number}

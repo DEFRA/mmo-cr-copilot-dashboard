@@ -1,0 +1,23 @@
+{
+  "schema": "ai-attribution-file/2",
+  "path": "src/client/components/charts/CycleTimeScatter.jsx",
+  "added": 6,
+  "counts": {
+    "aiCompletion": 0,
+    "aiChat": 0,
+    "aiAgent": 3,
+    "aiModified": 0,
+    "pasted": 0,
+    "typed": 0,
+    "untracked": 3
+  },
+  "ranges": {
+    "ai-agent": "12-13,78",
+    "untracked": "95-97"
+  },
+  "ai": [
+    [12, "a", "54acebb5", 0],
+    [13, "a", "a14d6519", 0],
+    [78, "a", "3b320942", 0]
+  ]
+}

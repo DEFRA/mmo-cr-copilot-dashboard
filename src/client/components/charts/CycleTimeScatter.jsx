@@ -9,6 +9,9 @@ import {
   valueAxis
 } from '../../lib/chart-style'
 
+const MIN_SYMBOL = 12
+const SYMBOL_RANGE = 40
+
 /**
  * Cycle-time scatter for a single repository. Each point is a pull request:
  * x = merge date/time, y = cycle time (hours), bubble size = average batch
@@ -72,7 +75,7 @@ export function CycleTimeScatter({ points, title, height = 400, onSelect }) {
       series: [
         {
           type: 'scatter',
-          symbolSize: (val) => 12 + (val[2] / maxSize) * 40,
+          symbolSize: (val) => MIN_SYMBOL + (val[2] / maxSize) * SYMBOL_RANGE,
           itemStyle: { borderColor: assist.ink, borderWidth: 1, opacity: 0.9 },
           emphasis: {
             itemStyle: { opacity: 1, borderWidth: 2, borderColor: p.text }
@@ -89,7 +92,9 @@ export function CycleTimeScatter({ points, title, height = 400, onSelect }) {
   const handlers = onSelect
     ? {
         click: (params) => {
-          if (params.data?.meta) onSelect(params.data.meta.prNumber)
+          if (params.data?.meta) {
+            onSelect(params.data.meta.prNumber)
+          }
         }
       }
     : undefined

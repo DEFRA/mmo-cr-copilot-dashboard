@@ -13,7 +13,7 @@
  * The specifier is the bare virtual id, not the served URL: Vite resolves
  * imports before applying `base`, then rewrites the result to `/public/...`.
  */
-import RefreshRuntime from '/@react-refresh'
+import RefreshRuntime from '/@react-refresh' // NOSONAR: a Vite virtual module id, not a file path
 
 RefreshRuntime.injectIntoGlobalHook(window)
 window.$RefreshReg$ = () => {}

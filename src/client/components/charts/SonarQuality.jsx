@@ -51,13 +51,90 @@ const CARD_MEASURES = [
 ]
 
 const panelStateFor = (status, data) => {
-  if (status === 'loading' || status === 'idle') return 'loading'
-  if (status === 'error') return 'error'
+  if (status === 'loading' || status === 'idle') {
+    return 'loading'
+  }
+  if (status === 'error') {
+    return 'error'
+  }
   if (!data || data.configured === false || data.linked === false) {
     return 'empty'
   }
-  if (data.analyzed === false) return 'empty'
+  if (data.analyzed === false) {
+    return 'empty'
+  }
   return 'populated'
+}
+
+const fetchState = (status, loading = ['loading']) => {
+  if (loading.includes(status)) {
+    return 'loading'
+  }
+  return status === 'error' ? 'error' : 'populated'
+}
+
+function gatePath(repository, prNumber, asOf) {
+  const query = `repository=${encodeURIComponent(repository)}`
+  if (typeof prNumber === 'number') {
+    return `/api/sonar/pr?${query}&prNumber=${prNumber}`
+  }
+  const asOfQuery = asOf ? `&asOf=${encodeURIComponent(asOf)}` : ''
+  return `/api/sonar/repo?${query}${asOfQuery}`
+}
+
+function gateEmptyMessage({ notAnalysed, noAnalysisBefore, asOf }) {
+  if (notAnalysed) {
+    return 'This pull request has not been analysed by SonarCloud.'
+  }
+  return noAnalysisBefore
+    ? `No SonarCloud analysis before ${longDate(asOf)}.`
+    : 'This repository is not linked to SonarCloud.'
+}
+
+/** What the gate panel shows, from the fetched SonarCloud metrics. */
+function gateView(data, status, isPr) {
+  const noAnalysisBefore =
+    !isPr && Boolean(data?.asOf) && data?.analysisDate === null
+  const notAnalysed = isPr && data?.analyzed === false
+  return {
+    state: noAnalysisBefore ? 'empty' : panelStateFor(status, data),
+    gate: GATE_TAGS[data?.qualityGate] ?? GATE_TAGS.none,
+    measures: data?.measures ?? {},
+    ratings: data?.ratings ?? {},
+    emptyMessage: gateEmptyMessage({
+      notAnalysed,
+      noAnalysisBefore,
+      asOf: data?.asOf
+    })
+  }
+}
+
+function QualityStats({ isPr, ratings, measures }) {
+  return (
+    <div className="app-quality">
+      <div className="app-quality__body">
+        <div className="app-ratings">
+          <SonarRating rating={ratings.reliability} label="Reliability" />
+          <SonarRating rating={ratings.security} label="Security" />
+          <SonarRating
+            rating={ratings.maintainability}
+            label="Maintainability"
+          />
+        </div>
+        <dl className="app-stat-list app-quality__stats">
+          {(isPr ? NEW_CODE_ROWS : QUALITY_ROWS).map((row) => (
+            <div key={row.key} className="app-stat-list__row">
+              <dt>{row.label}</dt>
+              <dd>{fmt(measures[row.key], { pct: row.pct })}</dd>
+              {row.meter && measures[row.key] != null && (
+                <Meter value={measures[row.key]} />
+              )}
+            </div>
+          ))}
+        </dl>
+      </div>
+    </div>
+  )
 }
 
 /**
@@ -67,30 +144,15 @@ const panelStateFor = (status, data) => {
  */
 export function SonarQualityGatePanel({ repository, prNumber, asOf }) {
   const isPr = typeof prNumber === 'number'
-  const query = `repository=${encodeURIComponent(repository)}`
-  const asOfQuery = asOf ? `&asOf=${encodeURIComponent(asOf)}` : ''
-  const { data, status } = useSonarMetrics(
+  const { data, status } = useSonarMetrics(gatePath(repository, prNumber, asOf))
+  const { state, gate, measures, ratings, emptyMessage } = gateView(
+    data,
+    status,
     isPr
-      ? `/api/sonar/pr?${query}&prNumber=${prNumber}`
-      : `/api/sonar/repo?${query}${asOfQuery}`
   )
-  const noAnalysisBefore =
-    !isPr && Boolean(data?.asOf) && data?.analysisDate === null
-  const state = noAnalysisBefore ? 'empty' : panelStateFor(status, data)
-  const gate = GATE_TAGS[data?.qualityGate] ?? GATE_TAGS.none
-  const measures = data?.measures ?? {}
-  const ratings = data?.ratings ?? {}
   const title = isPr ? 'Code Quality on New Code' : 'Quality Gate'
-  const notAnalysed = isPr && data?.analyzed === false
   const caption = isPr ? null : asAtCaption(data?.asOf)
   const lastAnalysis = isPr ? null : lastAnalysisText(data?.analysisDate)
-
-  let emptyMessage = 'This repository is not linked to SonarCloud.'
-  if (notAnalysed) {
-    emptyMessage = 'This pull request has not been analysed by SonarCloud.'
-  } else if (noAnalysisBefore) {
-    emptyMessage = `No SonarCloud analysis before ${longDate(data.asOf)}.`
-  }
 
   return (
     <SectionPanel
@@ -115,29 +177,7 @@ export function SonarQualityGatePanel({ repository, prNumber, asOf }) {
         emptyMessage={emptyMessage}
         errorMessage="We could not load SonarCloud data. Try again later."
       >
-        <div className="app-quality">
-          <div className="app-quality__body">
-            <div className="app-ratings">
-              <SonarRating rating={ratings.reliability} label="Reliability" />
-              <SonarRating rating={ratings.security} label="Security" />
-              <SonarRating
-                rating={ratings.maintainability}
-                label="Maintainability"
-              />
-            </div>
-            <dl className="app-stat-list app-quality__stats">
-              {(isPr ? NEW_CODE_ROWS : QUALITY_ROWS).map((row) => (
-                <div key={row.key} className="app-stat-list__row">
-                  <dt>{row.label}</dt>
-                  <dd>{fmt(measures[row.key], { pct: row.pct })}</dd>
-                  {row.meter && measures[row.key] != null && (
-                    <Meter value={measures[row.key]} />
-                  )}
-                </div>
-              ))}
-            </dl>
-          </div>
-        </div>
+        <QualityStats isPr={isPr} ratings={ratings} measures={measures} />
         <p className="govuk-body-s app-quality__foot">
           {lastAnalysis && <span className="app-muted">{lastAnalysis}</span>}
           <a
@@ -155,7 +195,9 @@ export function SonarQualityGatePanel({ repository, prNumber, asOf }) {
 }
 
 function fmt(value, { pct = false } = {}) {
-  if (value == null || Number.isNaN(value)) return '–'
+  if (value == null || Number.isNaN(value)) {
+    return '–'
+  }
   const n = pct ? Math.round(value * 10) / 10 : value
   return pct ? `${n}%` : `${n}`
 }
@@ -163,10 +205,14 @@ function fmt(value, { pct = false } = {}) {
 /** The overview for one project's repositories, optionally as at a moment. */
 export function sonarOverviewPath(projectSlug, asOf) {
   const query = new URLSearchParams()
-  if (projectSlug) query.set('project', projectSlug)
-  if (asOf) query.set('asOf', asOf)
+  if (projectSlug) {
+    query.set('project', projectSlug)
+  }
+  if (asOf) {
+    query.set('asOf', asOf)
+  }
   const search = query.toString()
-  return `/api/sonar/overview${search ? `?${search}` : ''}`
+  return search ? `/api/sonar/overview?${search}` : '/api/sonar/overview'
 }
 
 /**
@@ -180,14 +226,14 @@ export function SonarPortfolioPanel({ projectSlug, onOpenRepo, asOf }) {
   )
   const title = 'Code Quality Across Repositories'
 
-  if (!projectSlug) return null
+  if (!projectSlug) {
+    return null
+  }
   if (status === 'success' && (!Array.isArray(data) || data.length === 0)) {
     return null
   }
 
-  let state = 'populated'
-  if (status === 'loading' || status === 'idle') state = 'loading'
-  else if (status === 'error') state = 'error'
+  const state = fetchState(status, ['loading', 'idle'])
 
   const repos = Array.isArray(data) ? data : []
   const caption = asAtCaption(asOf)
@@ -293,13 +339,13 @@ export function SonarSprintTrend({ projectSlug, sprints, number }) {
   )
   const { points, status } = useSonarTrend(projectSlug, ends)
 
-  if (status === 'unconfigured') return null
+  if (status === 'unconfigured') {
+    return null
+  }
 
   const title = 'Repositories passing the quality gate by sprint'
   const rows = points.map((p) => [p.label, p.passed, p.linked])
-  let state = 'populated'
-  if (status === 'loading') state = 'loading'
-  else if (status === 'error') state = 'error'
+  const state = fetchState(status)
 
   return (
     <ChartFigure
@@ -350,7 +396,9 @@ function useSonarTrend(projectSlug, ends) {
           signal: controller.signal,
           headers: { Accept: 'application/json' }
         }).then((res) => {
-          if (!res.ok) throw new Error(`Request failed (${res.status})`)
+          if (!res.ok) {
+            throw new Error(`Request failed (${res.status})`)
+          }
           return res.json()
         })
       )
@@ -370,7 +418,9 @@ function useSonarTrend(projectSlug, ends) {
         })
       })
       .catch((err) => {
-        if (err.name === 'AbortError') return
+        if (err.name === 'AbortError') {
+          return
+        }
         setState({ points: [], status: 'error' })
       })
     return () => controller.abort()
@@ -383,7 +433,7 @@ function latestAnalysis(repos) {
   return repos
     .map((r) => r.analysisDate)
     .filter(Boolean)
-    .sort()
+    .sort((a, b) => a.localeCompare(b))
     .at(-1)
 }
 
@@ -396,7 +446,9 @@ const longDate = (iso) =>
 
 /** Compact panel tag for a past cut-off, for example "As at 14 Oct 2026". */
 export function asAtCaption(asOf) {
-  if (!asOf) return null
+  if (!asOf) {
+    return null
+  }
   return `As at ${new Date(asOf).toLocaleDateString('en-GB', {
     day: 'numeric',
     month: 'short',

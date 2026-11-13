@@ -114,7 +114,7 @@ export function CopilotUsagePanel({
       {hasUsage && insightsHref && (
         <p className="govuk-body-s govuk-!-margin-bottom-0">
           <a className="govuk-link" href={insightsHref}>
-            See Copilot usage insights
+            {'See Copilot usage insights'}
             <span className="govuk-visually-hidden">
               : favourite model, leaderboard and superlatives
             </span>

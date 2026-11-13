@@ -6,6 +6,10 @@ import { cx } from '../govuk/utils.js'
 // The load animations are CSS; omitting the class keeps reduced motion still even without the media query.
 const useAnimate = () => !usePrefersReducedMotion()
 
+const RING_INSET = 6
+const BAR_GAP = 4
+const MIN_BAR_HEIGHT = 3
+
 const svgProps = (width, height, className) => ({
   'aria-hidden': 'true',
   focusable: 'false',
@@ -19,7 +23,9 @@ const svgProps = (width, height, className) => ({
 export function Sparkline({ data, width = 120, height = 44, className }) {
   const animate = useAnimate()
   const gradientId = `spark${useId().replace(/[^\w-]/g, '')}`
-  if (!data?.length) return null
+  if (!data?.length) {
+    return null
+  }
 
   const min = Math.min(...data)
   const max = Math.max(...data)
@@ -61,7 +67,7 @@ export function ProgressRing({ value, size = 64, className }) {
   const animate = useAnimate()
   const percent = Math.min(100, Math.max(0, Number(value) || 0))
   const centre = size / 2
-  const radius = centre - 6
+  const radius = centre - RING_INSET
 
   return (
     <svg {...svgProps(size, size, className)}>
@@ -83,26 +89,36 @@ export function ProgressRing({ value, size = 64, className }) {
 /** Decorative bar series; the latest bar is solid, earlier bars are faded. */
 export function MiniBars({ data, width = 110, height = 44, className }) {
   const animate = useAnimate()
-  if (!data?.length) return null
+  if (!data?.length) {
+    return null
+  }
 
   const max = Math.max(...data, 0) || 1
-  const barWidth = (width - (data.length - 1) * 4) / data.length
+  const barWidth = (width - (data.length - 1) * BAR_GAP) / data.length
+  // Bars are positional, so their position is their identity.
+  const bars = data.map((v, position) => ({
+    v,
+    position,
+    id: `bar-${position}`
+  }))
 
   return (
     <svg {...svgProps(width, height, className)}>
-      {data.map((v, i) => {
-        const barHeight = Math.max(3, (Math.max(0, v) / max) * (height - 2))
+      {bars.map(({ v, position: i, id }) => {
+        const barHeight = Math.max(
+          MIN_BAR_HEIGHT,
+          (Math.max(0, v) / max) * (height - 2)
+        )
         return (
           <rect
-            // Bars are positional; index is the identity.
-            key={i}
+            key={id}
             className={cx(
               'app-mini__bar',
               i === data.length - 1 && 'app-mini__bar--current',
               animate && 'app-anim-grow'
             )}
             style={{ '--i': i }}
-            x={i * (barWidth + 4)}
+            x={i * (barWidth + BAR_GAP)}
             y={height - barHeight}
             width={barWidth}
             height={barHeight}

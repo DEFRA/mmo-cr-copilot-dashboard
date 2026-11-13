@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useRef, useState } from 'react'
 
 import { Panel, PanelState } from '../dashboard'
 import {
@@ -8,12 +8,12 @@ import {
   Hint,
   InsetText,
   NotificationBanner,
-  Table,
-  Tag,
   WarningText
 } from '../govuk'
 import { useJiraStatuses, useJiraWorkflow } from '../../hooks/useJiraWorkflow'
+import { useUnsavedGuard } from '../../hooks/useUnsavedGuard.js'
 import { NO_JIRA_KEY } from '../../lib/api-errors'
+import { HTTP } from '../../lib/http-status.js'
 import { hasJira } from '../../lib/jira'
 import {
   DEFINITION_OF_DONE,
@@ -21,19 +21,13 @@ import {
   addStatusError,
   definitionOfDone,
   isWorkflowDirty,
-  stageOf,
   stageTitle,
   statusOptions,
   tidyStatus,
   validateWorkflow,
   workflowSourceText
 } from '../../lib/jira-workflow'
-
-const CATEGORY_LABEL = {
-  new: 'To Do',
-  indeterminate: 'In Progress',
-  done: 'Done'
-}
+import { StatusesFound } from './JiraStatusesFound.jsx'
 
 const inputId = (stageId) => `stage-${stageId}-input`
 
@@ -50,82 +44,212 @@ function NoJiraKey() {
   )
 }
 
-function StatusesFound({ found, stages }) {
-  const state = () => {
-    if (found.statuses.length > 0) return 'populated'
-    if (found.status === 'error') return 'error'
-    if (found.status === 'success') return 'empty'
-    return 'loading'
-  }
+const workflowErrors = (stages, errors) =>
+  [
+    ...stages
+      .filter((s) => errors[s.id])
+      .map((s) => ({ href: `#${inputId(s.id)}`, text: errors[s.id] })),
+    errors.form && { text: errors.form }
+  ].filter(Boolean)
 
+function WorkflowMessages({ notice, errorList, showSummary, attempt }) {
+  return (
+    <>
+      {notice && (
+        <NotificationBanner key={notice.id} type="success" autoFocus>
+          {notice.text}
+        </NotificationBanner>
+      )}
+      {showSummary && errorList.length > 0 && (
+        <ErrorSummary key={attempt} errors={errorList} />
+      )}
+    </>
+  )
+}
+
+function WorkflowLoading({ status, error, reload }) {
+  const failed = status === 'error'
   return (
     <Panel
-      title="Statuses Found in This Project"
+      title="Jira Workflow"
       family="speed"
       icon="ticket"
       headingLevel={2}
-      busy={found.status === 'loading'}
+      busy={!failed}
     >
-      <p className="govuk-body">
-        The statuses your Jira project uses and those on tickets linked to pull
-        requests, with the stage each one is in.
-      </p>
-      {found.status === 'success' && !found.jiraAvailable && (
-        <InsetText>
-          We could not reach Jira, so this list only shows statuses on tickets
-          already linked to pull requests.
-        </InsetText>
-      )}
-      {found.status === 'error' && found.statuses.length > 0 && (
+      <PanelState
+        state={failed ? 'error' : 'loading'}
+        title="Jira Workflow"
+        icon="ticket"
+        errorMessage={error?.message}
+        onRetry={reload}
+      />
+    </Panel>
+  )
+}
+
+function WorkflowIntro({ status, workflow, doneStage, onChangeDone }) {
+  return (
+    <Panel
+      title="Jira Workflow"
+      family="speed"
+      icon="ticket"
+      headingLevel={2}
+      className="app-span-12"
+    >
+      {status === 'error' && (
         <NotificationBanner headingLevel={3}>
-          We could not refresh the statuses. Showing the last list loaded.
+          We could not refresh the Jira workflow. Showing the last version
+          loaded.
         </NotificationBanner>
       )}
-      <PanelState
-        state={state()}
-        title="Jira statuses"
-        icon="ticket"
-        emptyTag="No statuses found"
-        emptyMessage="Statuses appear here when Jira can be reached or a pull request links to a Jira ticket."
-        errorMessage="We could not load the Jira statuses. Try again later."
-      >
-        <Table
-          caption="Jira Statuses and Their Stages"
-          captionSize="s"
-          head={[
-            { id: 'status', label: 'Status' },
-            { id: 'category', label: 'Jira category' },
-            { id: 'stage', label: 'Stage' },
-            { id: 'tickets', label: 'Tickets now', numeric: true }
-          ]}
-          rows={found.statuses.map((s) => {
-            const stage = stageOf(stages, s.name)
-            return {
-              id: s.name,
-              cells: [
-                s.name,
-                CATEGORY_LABEL[s.categoryKey] ?? 'Unknown',
-                stage ? (
-                  stageTitle(stage)
-                ) : (
-                  <Tag key="stage" colour="grey">
-                    Not mapped
-                  </Tag>
-                ),
-                s.issueCount
-              ]
-            }
-          })}
+      <p className="govuk-body">
+        Put each of your Jira statuses into a stage. A ticket starts when it
+        first moves out of a To Do status and is delivered when it moves into a
+        status in your Definition of Done. Every delivery metric uses these
+        stages.
+      </p>
+      {doneStage && (
+        <p className="govuk-body">
+          {`${DEFINITION_OF_DONE} in use: `}
+          <strong>
+            {definitionOfDone(workflow.stages).join(', ') || 'no statuses yet'}
+          </strong>
+          .{' '}
+          <button
+            type="button"
+            className="app-link-button"
+            onClick={onChangeDone}
+          >
+            {`Change the ${DEFINITION_OF_DONE}`}
+          </button>
+        </p>
+      )}
+      <InsetText className="govuk-!-margin-bottom-0">
+        {workflowSourceText(workflow)}
+      </InsetText>
+    </Panel>
+  )
+}
+
+function StageStatuses({ stage, onRemove }) {
+  if (stage.statuses.length === 0) {
+    return <p className="govuk-body-s">No statuses in this stage.</p>
+  }
+  const title = stageTitle(stage)
+  return (
+    <ul className="app-repo-list" aria-label={`Statuses in ${title}`}>
+      {stage.statuses.map((name) => (
+        <li className="app-repo-list__item" key={name}>
+          {name}
+          <button
+            type="button"
+            className="app-link-button app-repo-list__remove"
+            onClick={() => onRemove(stage, name)}
+          >
+            Remove{' '}
+            <span className="govuk-visually-hidden">
+              {`${name} from ${title}`}
+            </span>
+          </button>
+        </li>
+      ))}
+    </ul>
+  )
+}
+
+function StagePanel({
+  stage,
+  error,
+  query,
+  options,
+  onQuery,
+  onAdd,
+  onRemove,
+  inputRef
+}) {
+  const title = stageTitle(stage)
+  const count = stage.statuses.length
+  const hintId = `stage-${stage.id}-hint`
+  return (
+    <Panel
+      title={title}
+      family="speed"
+      icon="flow"
+      className="app-span-6"
+      aside={
+        <span className="app-mini-tag">
+          {`${count} ${count === 1 ? 'status' : 'statuses'}`}
+        </span>
+      }
+    >
+      <fieldset className="govuk-fieldset" aria-describedby={hintId}>
+        <legend className="govuk-visually-hidden">{title}</legend>
+        <Hint id={hintId}>{STAGE_HINT[stage.kind]}</Hint>
+        <StageStatuses stage={stage} onRemove={onRemove} />
+        <Combobox
+          id={inputId(stage.id)}
+          label={`Add a status to ${title}`}
+          errorMessage={error}
+          value={query}
+          onChange={onQuery}
+          options={options}
+          onSelect={(text) => onAdd(stage, text)}
+          allowCustom
+          addText={(text) => `Add ‘${text}’`}
+          itemName="status"
+          itemNamePlural="statuses"
+          formGroupClassName="govuk-!-margin-bottom-0"
+          inputRef={inputRef}
         />
-      </PanelState>
-      <Button
-        variant="secondary"
-        className="govuk-!-margin-bottom-0"
-        disabled={found.status === 'loading'}
-        onClick={() => found.refresh()}
-      >
-        {found.status === 'loading' ? 'Checking…' : 'Check Jira statuses again'}
-      </Button>
+      </fieldset>
+    </Panel>
+  )
+}
+
+function SaveActions({
+  dirty,
+  pending,
+  conflict,
+  announce,
+  onReload,
+  onCancel,
+  onSuggest
+}) {
+  return (
+    <Panel
+      title="Save Your Changes"
+      family="speed"
+      icon="check"
+      className="app-span-12"
+    >
+      {dirty && (
+        <WarningText>
+          You have unsaved changes. Save the workflow before you leave this
+          page.
+        </WarningText>
+      )}
+      <div className="govuk-button-group govuk-!-margin-bottom-0">
+        <Button type="submit" disabled={pending}>
+          {pending ? 'Saving…' : 'Save workflow'}
+        </Button>
+        {conflict && (
+          <Button variant="secondary" onClick={onReload}>
+            Reload the workflow
+          </Button>
+        )}
+        {dirty && (
+          <Button variant="secondary" onClick={onCancel}>
+            Cancel changes
+          </Button>
+        )}
+        <Button variant="secondary" onClick={onSuggest}>
+          Use suggested statuses
+        </Button>
+      </div>
+      <div className="govuk-visually-hidden" aria-live="polite">
+        {announce}
+      </div>
     </Panel>
   )
 }
@@ -157,42 +281,14 @@ export function JiraWorkflowPanel({ project, onDirtyChange }) {
   const detected = found.statuses.map((s) => s.name)
   const doneStage = stages.find((s) => s.kind === 'done')
 
-  useEffect(() => {
-    if (!dirty) return undefined
-    const warn = (event) => {
-      event.preventDefault()
-      event.returnValue = ''
-    }
-    window.addEventListener('beforeunload', warn)
-    return () => window.removeEventListener('beforeunload', warn)
-  }, [dirty])
+  useUnsavedGuard(dirty, onDirtyChange)
 
-  useEffect(() => {
-    onDirtyChange?.(dirty)
-  }, [dirty, onDirtyChange])
-
-  useEffect(() => () => onDirtyChange?.(false), [onDirtyChange])
-
-  if (!slug || (!workflow && error?.status === 422)) return <NoJiraKey />
+  if (!slug || (!workflow && error?.status === HTTP.unprocessable)) {
+    return <NoJiraKey />
+  }
 
   if (!workflow) {
-    return (
-      <Panel
-        title="Jira Workflow"
-        family="speed"
-        icon="ticket"
-        headingLevel={2}
-        busy={status !== 'error'}
-      >
-        <PanelState
-          state={status === 'error' ? 'error' : 'loading'}
-          title="Jira Workflow"
-          icon="ticket"
-          errorMessage={error?.message}
-          onRetry={reload}
-        />
-      </Panel>
-    )
+    return <WorkflowLoading status={status} error={error} reload={reload} />
   }
 
   const clearError = (key) =>
@@ -205,9 +301,9 @@ export function JiraWorkflowPanel({ project, onDirtyChange }) {
   const focusDone = () => inputs.current.get(doneStage.id)?.focus()
 
   const add = (stage, text) => {
-    const error = addStatusError(stages, stage.id, text)
-    if (error) {
-      setErrors((e) => ({ ...e, [stage.id]: error }))
+    const problem = addStatusError(stages, stage.id, text)
+    if (problem) {
+      setErrors((e) => ({ ...e, [stage.id]: problem }))
       return
     }
     const name = tidyStatus(text)
@@ -283,189 +379,66 @@ export function JiraWorkflowPanel({ project, onDirtyChange }) {
       })
       return
     }
-    setConflict(result.status === 409)
+    setConflict(result.status === HTTP.conflict)
     setErrors({ form: result.message })
     setShowSummary(true)
   }
 
-  const errorList = [
-    ...stages
-      .filter((s) => errors[s.id])
-      .map((s) => ({ href: `#${inputId(s.id)}`, text: errors[s.id] })),
-    errors.form && { text: errors.form }
-  ].filter(Boolean)
-
   return (
     <>
-      {notice && (
-        <NotificationBanner key={notice.id} type="success" autoFocus>
-          {notice.text}
-        </NotificationBanner>
-      )}
-      {showSummary && errorList.length > 0 && (
-        <ErrorSummary key={attempt} errors={errorList} />
-      )}
+      <WorkflowMessages
+        notice={notice}
+        errorList={workflowErrors(stages, errors)}
+        showSummary={showSummary}
+        attempt={attempt}
+      />
 
       <div className="app-grid">
-        <Panel
-          title="Jira Workflow"
-          family="speed"
-          icon="ticket"
-          headingLevel={2}
-          className="app-span-12"
-        >
-          {status === 'error' && (
-            <NotificationBanner headingLevel={3}>
-              We could not refresh the Jira workflow. Showing the last version
-              loaded.
-            </NotificationBanner>
-          )}
-          <p className="govuk-body">
-            Put each of your Jira statuses into a stage. A ticket starts when it
-            first moves out of a To Do status and is delivered when it moves
-            into a status in your Definition of Done. Every delivery metric uses
-            these stages.
-          </p>
-          {doneStage && (
-            <p className="govuk-body">
-              {DEFINITION_OF_DONE} in use:{' '}
-              <strong>
-                {definitionOfDone(workflow.stages).join(', ') ||
-                  'no statuses yet'}
-              </strong>
-              .{' '}
-              <button
-                type="button"
-                className="app-link-button"
-                onClick={focusDone}
-              >
-                Change the {DEFINITION_OF_DONE}
-              </button>
-            </p>
-          )}
-          <InsetText className="govuk-!-margin-bottom-0">
-            {workflowSourceText(workflow)}
-          </InsetText>
-        </Panel>
+        <WorkflowIntro
+          status={status}
+          workflow={workflow}
+          doneStage={doneStage}
+          onChangeDone={focusDone}
+        />
 
         <form className="app-span-12" onSubmit={submit} noValidate>
           <div className="app-grid">
             {stages.map((stage) => (
-              <Panel
+              <StagePanel
                 key={stage.id}
-                title={stageTitle(stage)}
-                family="speed"
-                icon="flow"
-                className="app-span-6"
-                aside={
-                  <span className="app-mini-tag">
-                    {stage.statuses.length}{' '}
-                    {stage.statuses.length === 1 ? 'status' : 'statuses'}
-                  </span>
-                }
-              >
-                <fieldset
-                  className="govuk-fieldset"
-                  aria-describedby={`stage-${stage.id}-hint`}
-                >
-                  <legend className="govuk-visually-hidden">
-                    {stageTitle(stage)}
-                  </legend>
-                  <Hint id={`stage-${stage.id}-hint`}>
-                    {STAGE_HINT[stage.kind]}
-                  </Hint>
-                  {stage.statuses.length === 0 ? (
-                    <p className="govuk-body-s">No statuses in this stage.</p>
-                  ) : (
-                    <ul
-                      className="app-repo-list"
-                      aria-label={`Statuses in ${stageTitle(stage)}`}
-                    >
-                      {stage.statuses.map((name) => (
-                        <li className="app-repo-list__item" key={name}>
-                          {name}
-                          <button
-                            type="button"
-                            className="app-link-button app-repo-list__remove"
-                            onClick={() => remove(stage, name)}
-                          >
-                            Remove{' '}
-                            <span className="govuk-visually-hidden">
-                              {name} from {stageTitle(stage)}
-                            </span>
-                          </button>
-                        </li>
-                      ))}
-                    </ul>
-                  )}
-                  <Combobox
-                    id={inputId(stage.id)}
-                    label={`Add a status to ${stageTitle(stage)}`}
-                    errorMessage={errors[stage.id]}
-                    value={queries[stage.id] ?? ''}
-                    onChange={(text) => {
-                      setQueries((q) => ({ ...q, [stage.id]: text }))
-                    }}
-                    options={statusOptions(
-                      stages,
-                      stage.id,
-                      workflow.suggestions,
-                      detected
-                    )}
-                    onSelect={(text) => add(stage, text)}
-                    allowCustom
-                    addText={(text) => `Add ‘${text}’`}
-                    itemName="status"
-                    itemNamePlural="statuses"
-                    formGroupClassName="govuk-!-margin-bottom-0"
-                    inputRef={(el) => {
-                      if (el) inputs.current.set(stage.id, el)
-                      else inputs.current.delete(stage.id)
-                    }}
-                  />
-                </fieldset>
-              </Panel>
+                stage={stage}
+                error={errors[stage.id]}
+                query={queries[stage.id] ?? ''}
+                options={statusOptions(
+                  stages,
+                  stage.id,
+                  workflow.suggestions,
+                  detected
+                )}
+                onQuery={(text) => {
+                  setQueries((q) => ({ ...q, [stage.id]: text }))
+                }}
+                onAdd={add}
+                onRemove={remove}
+                inputRef={(el) => {
+                  if (el) {
+                    inputs.current.set(stage.id, el)
+                  } else {
+                    inputs.current.delete(stage.id)
+                  }
+                }}
+              />
             ))}
 
-            <Panel
-              title="Save Your Changes"
-              family="speed"
-              icon="check"
-              className="app-span-12"
-            >
-              {dirty && (
-                <WarningText>
-                  You have unsaved changes. Save the workflow before you leave
-                  this page.
-                </WarningText>
-              )}
-              <div className="govuk-button-group govuk-!-margin-bottom-0">
-                <Button type="submit" disabled={pending}>
-                  {pending ? 'Saving…' : 'Save workflow'}
-                </Button>
-                {conflict && (
-                  <Button variant="secondary" onClick={reloadLatest}>
-                    Reload the workflow
-                  </Button>
-                )}
-                {dirty && (
-                  <Button
-                    variant="secondary"
-                    onClick={() =>
-                      resetTo(workflow.stages, 'Changes cancelled')
-                    }
-                  >
-                    Cancel changes
-                  </Button>
-                )}
-                <Button variant="secondary" onClick={applySuggested}>
-                  Use suggested statuses
-                </Button>
-              </div>
-              <div className="govuk-visually-hidden" aria-live="polite">
-                {announce}
-              </div>
-            </Panel>
+            <SaveActions
+              dirty={dirty}
+              pending={pending}
+              conflict={conflict}
+              announce={announce}
+              onReload={reloadLatest}
+              onCancel={() => resetTo(workflow.stages, 'Changes cancelled')}
+              onSuggest={applySuggested}
+            />
           </div>
         </form>
 

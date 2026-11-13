@@ -1,0 +1,27 @@
+{
+  "schema": "ai-attribution-file/2",
+  "path": "src/client/components/settings/SprintPeriodPanel.jsx",
+  "added": 13,
+  "counts": {
+    "aiCompletion": 0,
+    "aiChat": 0,
+    "aiAgent": 7,
+    "aiModified": 0,
+    "pasted": 0,
+    "typed": 0,
+    "untracked": 6
+  },
+  "ranges": {
+    "ai-agent": "1,13,37,67,107-108,140",
+    "untracked": "71-73,78-80"
+  },
+  "ai": [
+    [1, "a", "71ab6d0e", 0],
+    [13, "a", "e11c4ade", 0],
+    [37, "a", "73a0ac35", 0],
+    [67, "a", "616542a6", 0],
+    [107, "a", "6b64d032", 0],
+    [108, "a", "1c1a44a3", 0],
+    [140, "a", "ce6e5387", 0]
+  ]
+}

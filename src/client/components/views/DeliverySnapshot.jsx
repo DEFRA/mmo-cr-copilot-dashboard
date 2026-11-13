@@ -34,7 +34,9 @@ export function DeliverySnapshot({
     [payloads]
   )
   const kpis = useMemo(() => {
-    if (!metrics) return []
+    if (!metrics) {
+      return []
+    }
     const all = buildDeliveryKpis({
       metrics,
       done,

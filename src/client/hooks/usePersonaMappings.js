@@ -14,6 +14,7 @@
 import { useCallback, useEffect, useState } from 'react'
 import { apiFetch, apiUrl, jsonWrite } from '../lib/api'
 import { checkedWrite, readApiError, toApiError } from '../lib/api-errors'
+import { HTTP } from '../lib/http-status'
 
 const endpointFor = (slug) =>
   `/api/projects/${encodeURIComponent(slug)}/persona-mappings`
@@ -25,6 +26,36 @@ async function parseJson(response) {
 
 function byHandle(a, b) {
   return a.githubHandle.localeCompare(b.githubHandle)
+}
+
+const sameHandle = (a, b) => a.toLowerCase() === b.toLowerCase()
+const handlePath = (slug, githubHandle) =>
+  `${endpointFor(slug)}/${encodeURIComponent(githubHandle)}`
+
+async function loadMappings(slug, signal) {
+  const res = await apiFetch(apiUrl(endpointFor(slug)), {
+    signal,
+    headers: { Accept: 'application/json' }
+  })
+  if (!res.ok) {
+    throw new Error(`Request failed (${res.status})`)
+  }
+  const data = await parseJson(res)
+  return Array.isArray(data?.mappings) ? data.mappings : []
+}
+
+// Already gone is the outcome the user asked for.
+async function deleteMapping(slug, githubHandle) {
+  const fallback = 'The mapping could not be removed'
+  let res
+  try {
+    res = await jsonWrite(handlePath(slug, githubHandle), 'DELETE')
+  } catch (err) {
+    throw toApiError(err, fallback)
+  }
+  if (!res.ok && res.status !== HTTP.notFound) {
+    throw await readApiError(res, { fallback })
+  }
 }
 
 export function usePersonaMappings(projectSlug) {
@@ -43,24 +74,16 @@ export function usePersonaMappings(projectSlug) {
     const controller = new AbortController()
     setState({ mappings: [], status: 'loading', error: null })
 
-    apiFetch(apiUrl(endpointFor(projectSlug)), {
-      signal: controller.signal,
-      headers: { Accept: 'application/json' }
-    })
-      .then(async (res) => {
-        if (!res.ok) throw new Error(`Request failed (${res.status})`)
-        return parseJson(res)
-      })
-      .then((data) => {
-        if (controller.signal.aborted) return
-        setState({
-          mappings: Array.isArray(data?.mappings) ? data.mappings : [],
-          status: 'success',
-          error: null
-        })
+    loadMappings(projectSlug, controller.signal)
+      .then((mappings) => {
+        if (!controller.signal.aborted) {
+          setState({ mappings, status: 'success', error: null })
+        }
       })
       .catch((err) => {
-        if (controller.signal.aborted || err.name === 'AbortError') return
+        if (controller.signal.aborted || err.name === 'AbortError') {
+          return
+        }
         setState((s) => ({
           ...s,
           status: 'error',
@@ -76,11 +99,7 @@ export function usePersonaMappings(projectSlug) {
   const upsert = useCallback(
     async (githubHandle, persona) => {
       const res = await checkedWrite(
-        jsonWrite(
-          `${endpointFor(projectSlug)}/${encodeURIComponent(githubHandle)}`,
-          'PUT',
-          { persona }
-        ),
+        jsonWrite(handlePath(projectSlug, githubHandle), 'PUT', { persona }),
         { fallback: 'The mapping could not be saved' }
       )
       const body = await parseJson(res)
@@ -89,7 +108,7 @@ export function usePersonaMappings(projectSlug) {
         ...s,
         mappings: [
           ...s.mappings.filter(
-            (m) => m.githubHandle.toLowerCase() !== githubHandle.toLowerCase()
+            (m) => !sameHandle(m.githubHandle, githubHandle)
           ),
           body
         ].sort(byHandle)
@@ -102,25 +121,11 @@ export function usePersonaMappings(projectSlug) {
 
   const remove = useCallback(
     async (githubHandle) => {
-      const fallback = 'The mapping could not be removed'
-      let res
-      try {
-        res = await jsonWrite(
-          `${endpointFor(projectSlug)}/${encodeURIComponent(githubHandle)}`,
-          'DELETE'
-        )
-      } catch (err) {
-        throw toApiError(err, fallback)
-      }
-      // Already gone is the outcome the user asked for.
-      if (!res.ok && res.status !== 404) {
-        throw await readApiError(res, { fallback })
-      }
-
+      await deleteMapping(projectSlug, githubHandle)
       setState((s) => ({
         ...s,
         mappings: s.mappings.filter(
-          (m) => m.githubHandle.toLowerCase() !== githubHandle.toLowerCase()
+          (m) => !sameHandle(m.githubHandle, githubHandle)
         )
       }))
     },

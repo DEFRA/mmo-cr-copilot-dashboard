@@ -106,7 +106,9 @@ describe('#auth routes with Entra configured', () => {
     { accessToken = 'access-1', refreshToken = 'refresh-1', authorize } = {}
   ) => {
     fetchMock.mockResponse((request) => {
-      if (request.url === KEYS_URL) return JSON.stringify(jwks)
+      if (request.url === KEYS_URL) {
+        return JSON.stringify(jwks)
+      }
       if (request.url === TOKEN_URL) {
         return JSON.stringify({
           id_token: token,

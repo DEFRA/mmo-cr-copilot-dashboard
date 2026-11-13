@@ -14,7 +14,9 @@ export function Breadcrumbs({
   const lastIndex = items.length - 1
 
   const handleClick = (event, item) => {
-    if (!onNavigate || !isPlainClick(event)) return
+    if (!onNavigate || !isPlainClick(event)) {
+      return
+    }
     event.preventDefault()
     onNavigate(item)
   }

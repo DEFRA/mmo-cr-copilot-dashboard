@@ -1,0 +1,28 @@
+{
+  "schema": "ai-attribution-file/2",
+  "path": "src/server/common/helpers/ingest-auth.js",
+  "added": 17,
+  "counts": {
+    "aiCompletion": 0,
+    "aiChat": 0,
+    "aiAgent": 8,
+    "aiModified": 0,
+    "pasted": 0,
+    "typed": 0,
+    "untracked": 9
+  },
+  "ranges": {
+    "ai-agent": "7-9,34,37,70,74,101",
+    "untracked": "32-33,35-36,72-73,110-112"
+  },
+  "ai": [
+    [7, "a", "b35b7951", 0],
+    [8, "a", "48ccfa86", 0],
+    [9, "a", "deaa3300", 0],
+    [34, "a", "9845a6a3", 0],
+    [37, "a", "9845a6a3", 0],
+    [70, "a", "6fb0f192", 0],
+    [74, "a", "9845a6a3", 0],
+    [101, "a", "f6fa0688", 0]
+  ]
+}
