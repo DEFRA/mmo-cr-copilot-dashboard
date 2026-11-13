@@ -31,7 +31,7 @@ export function useRoleMappings(enabled = true) {
         }
         const body = await res.json()
         if (!Array.isArray(body?.roleMappings)) {
-          throw new Error('Malformed')
+          throw new TypeError('Malformed')
         }
         setMappings(body.roleMappings.filter(isMapping))
         setStatus('success')

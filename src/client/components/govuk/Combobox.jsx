@@ -166,43 +166,53 @@ export function Combobox({
   }
 
   // Each handler returns true when it handled the key, so the default is prevented.
-  const keyHandlers = {
-    ArrowDown: () => {
-      move(1)
-      return true
-    },
-    ArrowUp: () => {
-      move(-1)
-      return true
-    },
-    Enter: () => {
-      if (activeItem) {
-        choose(activeItem.value, Boolean(activeItem.custom))
+  const keyHandlers = new Map([
+    [
+      'ArrowDown',
+      () => {
+        move(1)
         return true
       }
-      if (allowCustom && query) {
-        choose(query, true)
+    ],
+    [
+      'ArrowUp',
+      () => {
+        move(-1)
         return true
       }
-      return false
-    },
-    Escape: () => {
-      if (open) {
-        close()
-        return true
+    ],
+    [
+      'Enter',
+      () => {
+        if (activeItem) {
+          choose(activeItem.value, Boolean(activeItem.custom))
+          return true
+        }
+        if (allowCustom && query) {
+          choose(query, true)
+          return true
+        }
+        return false
       }
-      if (value) {
-        onChange('')
-        return true
+    ],
+    [
+      'Escape',
+      () => {
+        if (open) {
+          close()
+          return true
+        }
+        if (value) {
+          onChange('')
+          return true
+        }
+        return false
       }
-      return false
-    }
-  }
+    ]
+  ])
 
   const handleKeyDown = (event) => {
-    const handler = Object.hasOwn(keyHandlers, event.key)
-      ? keyHandlers[event.key]
-      : null
+    const handler = keyHandlers.get(event.key)
     if (handler?.()) {
       event.preventDefault()
     }

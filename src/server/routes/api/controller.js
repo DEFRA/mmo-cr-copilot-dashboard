@@ -1,11 +1,5 @@
 import { projectProxyRoutes } from './project-routes.js'
-import {
-  assertAdmin,
-  auditQuery,
-  forward,
-  forwardWrite,
-  verifyCsrf
-} from './proxy.js'
+import { assertAdmin, auditQuery, forward, forwardWrite } from './proxy.js'
 import {
   auditLogQuery,
   commitClassificationParams,
@@ -25,7 +19,7 @@ import {
   sonarPrQuery
 } from './schemas.js'
 
-export { assertAdmin, verifyCsrf }
+export { assertAdmin, verifyCsrf } from './proxy.js'
 
 const ROLE_MAPPINGS_PATH = '/api/role-mappings'
 const PROJECTS_PATH = '/api/projects'
@@ -33,7 +27,7 @@ const repositoryPath = (request) =>
   `/api/repositories/${encodeURIComponent(request.params.fullName)}`
 const roleMappingPath = (request) =>
   `${ROLE_MAPPINGS_PATH}/${encodeURIComponent(request.params.id)}`
-const isoOrNothing = (date) => date && date.toISOString()
+const isoOrNothing = (date) => date?.toISOString()
 
 const sharedProxyRoutes = [
   {
